@@ -145,6 +145,17 @@ go build -o structoptimizer ./cmd/structoptimizer
     --skip-file *_pb.go \
     ./
 
+# 7.1 跳过 vendor 目录（松散匹配）
+# -skip-dir 会匹配文件路径中的任意目录组件
+./structoptimizer --package writer/config \
+    --skip-dir vendor \
+    ./
+
+# 即使 vendor 在路径的任何位置都会被跳过：
+# - vendor/github.com/lib/lib.go ✓
+# - pkg/vendor/internal/lib.go ✓
+# - a/b/c/vendor/lib.go ✓
+
 # 8. 跳过具有特定方法的结构体
 ./structoptimizer -struct=writer/config.Context \
     --skip-by-methods "Encode_By_KKK,Encode_By_KKK1" \
@@ -206,6 +217,58 @@ go build -o structoptimizer ./cmd/structoptimizer
 
 ## 命令行参数
 
+### -skip-dir 参数说明
+
+`-skip-dir` 参数使用**松散匹配**策略，会检查文件完整路径中的**所有目录组件**，只要任意一级目录匹配即跳过。
+
+**匹配规则**：
+- 遍历文件路径中的每个目录组件
+- 使用 `filepath.Match()` 进行通配符匹配
+- 任意一级目录匹配即跳过该文件
+
+**示例**：
+
+```bash
+# 跳过所有 vendor 目录中的文件
+./structoptimizer --package writer/config --skip-dir vendor ./
+
+# 以下路径都会被跳过：
+# - vendor/github.com/lib/lib.go              ✓ vendor 目录
+# - pkg/vendor/internal/lib.go                ✓ 嵌套的 vendor 目录
+# - a/b/c/vendor/github.com/lib/lib.go        ✓ 深层嵌套的 vendor 目录
+
+# 使用通配符
+./structoptimizer --package writer/config --skip-dir "generated_*" ./
+
+# 以下路径都会被跳过：
+# - generated/proto.go                        ✓ generated_ 开头
+# - pkg/generated_data/api.go                 ✓ generated_ 开头
+# - src/generated/proto/api.go                ✓ generated 目录
+```
+
+**注意事项**：
+
+如果项目中有多个同名目录，使用 `-skip-dir` 会全部跳过：
+
+```bash
+# 项目结构
+project/
+├── vendor/              # 想跳过这个
+│   └── github.com/...
+└── pkg/
+    └── vendor/          # 这个也会被跳过（可能不是你想要的）
+        └── internal/...
+
+# 命令
+./structoptimizer --skip-dir vendor ./
+
+# 结果：两个 vendor 目录都会被跳过
+```
+
+如果只想跳过特定路径下的目录，建议结合 `-skip-file` 使用更精确的模式。
+
+### 完整参数列表
+
 | 参数 | 说明 | 默认值 |
 |------|------|--------|
 | `-struct` | 结构体名称（格式：包路径。结构体名） | - |
@@ -213,11 +276,11 @@ go build -o structoptimizer ./cmd/structoptimizer
 | `-source-file` | 源文件路径（限定在指定文件中查找结构体） | - |
 | `-write` | 直接写入源文件 | false |
 | `-backup` | 修改前备份源文件 | true |
-| `-skip-dir` | 跳过的目录（支持通配符） | - |
+| `-skip-dir` | 跳过的目录（支持通配符，匹配路径中任意目录组件） | - |
 | `-skip-file` | 跳过的文件（支持通配符） | - |
 | `-skip` | 跳过的文件模式 | - |
-| `-skip-by-methods` | 具有这些方法的结构体跳过 | - |
-| `-skip-by-names` | 指定名称的结构体跳过 | - |
+| `-skip-by-methods` | 具有这些方法的结构体跳过（支持通配符） | - |
+| `-skip-by-names` | 指定名称的结构体跳过（支持通配符） | - |
 | `-output` | 报告输出路径 | stdout |
 | `-v`, `-vv`, `-vvv` | 详细程度 | 0 |
 | `-sort-same-size` | 大小相同时按字段大小重排 | false |
