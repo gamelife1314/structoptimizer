@@ -329,12 +329,21 @@ func (a *Analyzer) shouldSkipFile(filePath string) bool {
 	}
 
 	name := filepath.Base(filePath)
-	dir := filepath.Base(filepath.Dir(filePath))
 
-	// 检查目录跳过
+	// 检查目录跳过（检查路径中的所有目录组件）
 	for _, pattern := range a.config.SkipDirs {
-		if matched, _ := filepath.Match(pattern, dir); matched {
-			return true
+		// 遍历文件路径的所有目录组件
+		dir := filePath
+		for dir != "" && dir != "." {
+			base := filepath.Base(dir)
+			if matched, _ := filepath.Match(pattern, base); matched {
+				return true
+			}
+			parent := filepath.Dir(dir)
+			if parent == dir {
+				break
+			}
+			dir = parent
 		}
 	}
 
