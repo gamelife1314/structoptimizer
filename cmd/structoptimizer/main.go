@@ -23,6 +23,7 @@ type Config struct {
 	SkipFiles     stringSlice
 	SkipPatterns  stringSlice
 	SkipByMethods stringSlice
+	SkipByNames   stringSlice
 	Output        string
 	Verbose       int
 	SortSameSize  bool
@@ -63,6 +64,7 @@ func main() {
 		SkipFiles:     cfg.SkipFiles,
 		SkipPatterns:  cfg.SkipPatterns,
 		SkipByMethods: cfg.SkipByMethods,
+		SkipByNames:   cfg.SkipByNames,
 		Verbose:       cfg.Verbose,
 	}
 	anlz := analyzer.NewAnalyzer(analyzerCfg)
@@ -79,6 +81,7 @@ func main() {
 		SkipFiles:     cfg.SkipFiles,
 		SkipPatterns:  cfg.SkipPatterns,
 		SkipByMethods: cfg.SkipByMethods,
+		SkipByNames:   cfg.SkipByNames,
 		Verbose:       cfg.Verbose,
 		SortSameSize:  cfg.SortSameSize,
 		Output:        cfg.Output,
@@ -130,6 +133,7 @@ func parseFlags() *Config {
 	flag.Var(&cfg.SkipFiles, "skip-file", "跳过的文件（支持通配符，可多次指定）")
 	flag.Var(&cfg.SkipPatterns, "skip", "跳过的文件模式（支持通配符，可多次指定）")
 	flag.Var(&cfg.SkipByMethods, "skip-by-methods", "具有这些方法的结构体跳过（逗号分隔）")
+	flag.Var(&cfg.SkipByNames, "skip-by-names", "指定名称的结构体跳过（逗号分隔）")
 	flag.StringVar(&cfg.Output, "output", "", "报告输出路径")
 	flag.StringVar(&cfg.ReportFormat, "format", "md", "报告格式（txt/md/html）")
 	flag.BoolVar(&cfg.SortSameSize, "sort-same-size", false, "大小相同时按字段大小重排")

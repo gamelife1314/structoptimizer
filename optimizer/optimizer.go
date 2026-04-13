@@ -30,6 +30,7 @@ type Config struct {
 	SkipFiles     []string
 	SkipPatterns  []string
 	SkipByMethods []string
+	SkipByNames   []string
 	Verbose       int
 	SortSameSize  bool
 	Output        string
@@ -165,7 +166,7 @@ func (o *Optimizer) optimizeStruct(pkgPath, structName, filePath string, depth i
 	info := o.fieldAnalyzer.AnalyzeStruct(st, structName, pkgPath, filePath)
 
 	// 检查是否应该跳过
-	if skipReason := o.shouldSkip(info, st); skipReason != "" {
+	if skipReason := o.shouldSkip(info, st, key); skipReason != "" {
 		o.Log(2, "跳过结构体：%s, 原因：%s", key, skipReason)
 		info.Skipped = true
 		info.SkipReason = skipReason
@@ -232,7 +233,7 @@ func (o *Optimizer) optimizeStruct(pkgPath, structName, filePath string, depth i
 }
 
 // shouldSkip 检查是否应该跳过
-func (o *Optimizer) shouldSkip(info *StructInfo, st *types.Struct) string {
+func (o *Optimizer) shouldSkip(info *StructInfo, st *types.Struct, key string) string {
 	// 空结构体
 	if len(info.Fields) == 0 {
 		return "空结构体"
@@ -246,6 +247,16 @@ func (o *Optimizer) shouldSkip(info *StructInfo, st *types.Struct) string {
 	// 检查是否是 vendor 中的第三方包结构体
 	if isVendorPackage(info.PkgPath) {
 		return "vendor 中的第三方包结构体"
+	}
+
+	// 检查是否通过名字指定跳过
+	if len(o.config.SkipByNames) > 0 {
+		for _, name := range o.config.SkipByNames {
+			// 支持全名匹配（包路径。结构体名）和简单名称匹配
+			if strings.HasSuffix(key, "."+name) || key == name {
+				return "通过名字指定跳过：" + name
+			}
+		}
 	}
 
 	// 检查是否有指定方法（需要具名类型）
