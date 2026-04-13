@@ -150,15 +150,20 @@ go build -o structoptimizer ./cmd/structoptimizer
     --skip-by-methods "Encode_By_KKK,Encode_By_KKK1" \
     ./
 
-# 9. 生成报告到指定文件
+# 9. 跳过指定名称的结构体
+./structoptimizer --package writer/config \
+    --skip-by-names "BadStruct,UnusedStruct" \
+    ./
+
+# 10. 生成报告到指定文件
 ./structoptimizer -struct=writer/config.Context \
     --output report.md \
     ./
 
-# 10. 显示详细执行过程
+# 11. 显示详细执行过程
 ./structoptimizer -struct=writer/config.Context -vvv ./
 
-# 11. 优化前后大小相同时按字段大小重排
+# 12. 优化前后大小相同时按字段大小重排
 ./structoptimizer -struct=writer/config.Context --sort-same-size ./
 ```
 
@@ -212,6 +217,7 @@ go build -o structoptimizer ./cmd/structoptimizer
 | `-skip-file` | 跳过的文件（支持通配符） | - |
 | `-skip` | 跳过的文件模式 | - |
 | `-skip-by-methods` | 具有这些方法的结构体跳过 | - |
+| `-skip-by-names` | 指定名称的结构体跳过 | - |
 | `-output` | 报告输出路径 | stdout |
 | `-v`, `-vv`, `-vvv` | 详细程度 | 0 |
 | `-sort-same-size` | 大小相同时按字段大小重排 | false |
