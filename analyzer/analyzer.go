@@ -33,6 +33,7 @@ type Config struct {
 	SkipFiles     []string
 	SkipPatterns  []string
 	SkipByMethods []string
+	SkipByNames   []string
 	Verbose       int
 }
 
