@@ -253,7 +253,8 @@ func (o *Optimizer) shouldSkip(info *StructInfo, st *types.Struct, key string) s
 	if len(o.config.SkipByNames) > 0 {
 		for _, name := range o.config.SkipByNames {
 			// 支持全名匹配（包路径。结构体名）和简单名称匹配
-			if strings.HasSuffix(key, "."+name) || key == name {
+			// 支持通配符匹配
+			if o.matchStructName(key, name) {
 				return "通过名字指定跳过：" + name
 			}
 		}
@@ -280,6 +281,46 @@ func (o *Optimizer) shouldSkip(info *StructInfo, st *types.Struct, key string) s
 	}
 
 	return ""
+}
+
+// matchStructName 匹配结构体名称（支持通配符）
+func (o *Optimizer) matchStructName(fullName, pattern string) bool {
+	// 完整匹配
+	if strings.HasSuffix(fullName, "."+pattern) || fullName == pattern {
+		return true
+	}
+	
+	// 通配符匹配
+	if matched, err := filepath.Match(pattern, fullName); err == nil && matched {
+		return true
+	}
+	
+	// 提取结构体名进行匹配
+	structName := fullName
+	if idx := strings.LastIndex(fullName, "."); idx != -1 {
+		structName = fullName[idx+1:]
+	}
+	
+	if matched, err := filepath.Match(pattern, structName); err == nil && matched {
+		return true
+	}
+	
+	return false
+}
+
+// matchMethod 匹配方法名（支持通配符）
+func (o *Optimizer) matchMethod(methodName, pattern string) bool {
+	// 完全匹配
+	if methodName == pattern {
+		return true
+	}
+	
+	// 通配符匹配
+	if matched, err := filepath.Match(pattern, methodName); err == nil && matched {
+		return true
+	}
+	
+	return false
 }
 
 // isVendorPackage 判断是否是 vendor 中的包
@@ -310,15 +351,15 @@ func (o *Optimizer) findNamedType(pkgPath, structName string) *types.Named {
 	return nil
 }
 
-// hasMethod 检查类型是否有指定方法
-func (o *Optimizer) hasMethod(named *types.Named, methodName string) bool {
+// hasMethod 检查类型是否有指定方法（支持通配符）
+func (o *Optimizer) hasMethod(named *types.Named, methodPattern string) bool {
 	if named == nil {
 		return false
 	}
 
 	for i := 0; i < named.NumMethods(); i++ {
 		method := named.Method(i)
-		if method.Name() == methodName {
+		if o.matchMethod(method.Name(), methodPattern) {
 			return true
 		}
 	}
