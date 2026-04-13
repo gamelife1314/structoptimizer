@@ -66,7 +66,7 @@ export GO111MODULE=off
 cd /path/to/gopath/src/example.com/myproject
 
 # 优化整个包
-./structoptimizer --package example.com/myproject/pkg ./
+./structoptimizer -package example.com/myproject/pkg ./
 
 # 优化指定结构体
 ./structoptimizer -struct=example.com/myproject/pkg.MyStruct ./
@@ -82,7 +82,7 @@ GOPATH=/path/to/gopath GO111MODULE=off \
 
 # 优化整个包
 GOPATH=/path/to/gopath GO111MODULE=off \
-    ./structoptimizer --package example.com/myproject/pkg \
+    ./structoptimizer -package example.com/myproject/pkg \
     /path/to/gopath/src/example.com/myproject/
 ```
 
@@ -123,32 +123,32 @@ go build -o structoptimizer ./cmd/structoptimizer
 ./structoptimizer -struct=writer/config.Context ./
 
 # 2. 优化并直接写入源文件（默认备份）
-./structoptimizer -struct=writer/config.Context --write ./
+./structoptimizer -struct=writer/config.Context -write ./
 
 # 3. 优化并备份源文件
-./structoptimizer -struct=writer/config.Context --write --backup ./
+./structoptimizer -struct=writer/config.Context -write -backup ./
 
 # 4. 优化并写入源文件，不备份
-./structoptimizer -struct=writer/config.Context --write --backup=false ./
+./structoptimizer -struct=writer/config.Context -write -backup=false ./
 
 # 5. 优化指定包中的所有结构体
-./structoptimizer --package writer/config ./
+./structoptimizer -package writer/config ./
 
 # 6. 优化指定包并写入源文件
-./structoptimizer --package writer/config --write --backup ./
+./structoptimizer -package writer/config -write -backup ./
 
 # 7. 跳过某些目录和文件
 ./structoptimizer -struct=writer/config.Context \
-    --skip-dir alpha \
-    --skip-dir generated_* \
-    --skip-file *_test.go \
-    --skip-file *_pb.go \
+    -skip-dir alpha \
+    -skip-dir generated_* \
+    -skip-file *_test.go \
+    -skip-file *_pb.go \
     ./
 
 # 7.1 跳过 vendor 目录（松散匹配）
 # -skip-dir 会匹配文件路径中的任意目录组件
-./structoptimizer --package writer/config \
-    --skip-dir vendor \
+./structoptimizer -package writer/config \
+    -skip-dir vendor \
     ./
 
 # 即使 vendor 在路径的任何位置都会被跳过：
@@ -158,24 +158,24 @@ go build -o structoptimizer ./cmd/structoptimizer
 
 # 8. 跳过具有特定方法的结构体
 ./structoptimizer -struct=writer/config.Context \
-    --skip-by-methods "Encode_By_KKK,Encode_By_KKK1" \
+    -skip-by-methods "Encode_By_KKK,Encode_By_KKK1" \
     ./
 
 # 9. 跳过指定名称的结构体
-./structoptimizer --package writer/config \
-    --skip-by-names "BadStruct,UnusedStruct" \
+./structoptimizer -package writer/config \
+    -skip-by-names "BadStruct,UnusedStruct" \
     ./
 
 # 10. 生成报告到指定文件
 ./structoptimizer -struct=writer/config.Context \
-    --output report.md \
+    -output report.md \
     ./
 
 # 11. 显示详细执行过程
 ./structoptimizer -struct=writer/config.Context -vvv ./
 
 # 12. 优化前后大小相同时按字段大小重排
-./structoptimizer -struct=writer/config.Context --sort-same-size ./
+./structoptimizer -struct=writer/config.Context -sort-same-size ./
 ```
 
 ### 原地修改和备份
@@ -184,14 +184,14 @@ go build -o structoptimizer ./cmd/structoptimizer
 
 ```bash
 # 优化并写入源文件，同时创建备份
-./structoptimizer --package writer/config --write --backup ./
+./structoptimizer -package writer/config -write -backup ./
 
 # 备份文件示例：
 #   原文件：writer/config/context.go
 #   备份文件：writer/config/context.backup.go
 
 # 优化并写入源文件，不创建备份
-./structoptimizer --package writer/config --write --backup=false ./
+./structoptimizer -package writer/config -write -backup=false ./
 ```
 
 **注意**：
@@ -205,7 +205,7 @@ go build -o structoptimizer ./cmd/structoptimizer
 
 ```bash
 # 只在指定的源文件中查找结构体
-./structoptimizer --package writer/config -source-file=context.go ./
+./structoptimizer -package writer/config -source-file=context.go ./
 
 # 结合 -struct 使用，优化特定文件中的特定结构体
 ./structoptimizer -struct=writer/config.Context -source-file=context.go ./
@@ -230,7 +230,7 @@ go build -o structoptimizer ./cmd/structoptimizer
 
 ```bash
 # 跳过所有 vendor 目录中的文件
-./structoptimizer --package writer/config --skip-dir vendor ./
+./structoptimizer -package writer/config -skip-dir vendor ./
 
 # 以下路径都会被跳过：
 # - vendor/github.com/lib/lib.go              ✓ vendor 目录
@@ -238,7 +238,7 @@ go build -o structoptimizer ./cmd/structoptimizer
 # - a/b/c/vendor/github.com/lib/lib.go        ✓ 深层嵌套的 vendor 目录
 
 # 使用通配符
-./structoptimizer --package writer/config --skip-dir "generated_*" ./
+./structoptimizer -package writer/config -skip-dir "generated_*" ./
 
 # 以下路径都会被跳过：
 # - generated/proto.go                        ✓ generated_ 开头
@@ -260,7 +260,7 @@ project/
         └── internal/...
 
 # 命令
-./structoptimizer --skip-dir vendor ./
+./structoptimizer -skip-dir vendor ./
 
 # 结果：两个 vendor 目录都会被跳过
 ```
