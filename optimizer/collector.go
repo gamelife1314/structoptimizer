@@ -76,7 +76,10 @@ func (o *Optimizer) collectStructs(pkgPath, structName, filePath string, depth, 
 	// 只解析文件，不加载包
 	nestedFields, filePath, err := o.parseStructFromFileOnly(pkgPath, structName, filePath)
 	if err != nil {
-		o.Log(2, "解析文件失败：%s.%s: %v", pkgPath, structName, err)
+		// 只有真正的错误才记录（不是基本类型）
+		if !strings.Contains(err.Error(), "struct ") {
+			o.Log(2, "解析文件失败：%s.%s: %v", pkgPath, structName, err)
+		}
 		return
 	}
 
