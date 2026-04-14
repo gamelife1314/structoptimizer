@@ -2,6 +2,8 @@ package optimizer
 
 import (
 	"fmt"
+	"go/ast"
+	"go/token"
 	"go/types"
 	"os"
 	"path/filepath"
@@ -238,9 +240,17 @@ func (o *Optimizer) collectStructs(pkgPath, structName, filePath string, depth, 
 		return
 	}
 
-	// 查找结构体（使用缓存）
-	st, filePath, err := o.findStructWithCache(pkgPath, structName)
+	// 加载包并查找结构体（需要完整类型信息来收集嵌套依赖）
+	pkg, err := o.analyzer.LoadPackage(pkgPath)
 	if err != nil {
+		o.Log(3, "加载包失败：%s: %v", pkgPath, err)
+		return
+	}
+
+	// 在包中查找结构体
+	st, filePath, err := o.findStructInPackage(pkg, structName)
+	if err != nil {
+		o.Log(3, "查找结构体失败：%s.%s: %v", pkgPath, structName, err)
 		return
 	}
 
@@ -257,8 +267,48 @@ func (o *Optimizer) collectStructs(pkgPath, structName, filePath string, depth, 
 	o.structQueue = append(o.structQueue, task)
 	o.mu.Unlock()
 
-	// 分析字段，收集嵌套结构体（使用快速分析）
+	// 分析字段，收集嵌套结构体
 	o.collectNestedStructs(st, structName, pkgPath, filePath, depth, level)
+}
+
+// findStructInPackage 在已加载的包中查找结构体
+func (o *Optimizer) findStructInPackage(pkg *packages.Package, structName string) (*types.Struct, string, error) {
+	for _, syntax := range pkg.Syntax {
+		filePath := pkg.Fset.File(syntax.Pos()).Name()
+
+		// 在文件中查找结构体定义
+		for _, decl := range syntax.Decls {
+			genDecl, ok := decl.(*ast.GenDecl)
+			if !ok || genDecl.Tok != token.TYPE {
+				continue
+			}
+
+			for _, spec := range genDecl.Specs {
+				typeSpec, ok := spec.(*ast.TypeSpec)
+				if !ok {
+					continue
+				}
+
+				if typeSpec.Name.Name != structName {
+					continue
+				}
+
+				// 获取类型信息
+				obj := pkg.TypesInfo.ObjectOf(typeSpec.Name)
+				if obj == nil {
+					continue
+				}
+
+				if named, ok := obj.Type().(*types.Named); ok {
+					if st, ok := named.Underlying().(*types.Struct); ok {
+						return st, filePath, nil
+					}
+				}
+			}
+		}
+	}
+
+	return nil, "", fmt.Errorf("struct %s not found in package", structName)
 }
 
 // findStructWithCache 带缓存的结构体查找
