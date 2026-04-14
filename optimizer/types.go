@@ -61,6 +61,7 @@ type Config struct {
 	GOPATH        string
 	MaxDepth      int
 	Timeout       int
+	PkgScope      string // 包范围限制（只分析此包内的结构体）
 }
 
 // StructInfo 结构体信息
