@@ -61,7 +61,7 @@ func NewOptimizer(cfg *Config, analyzer *analyzer.Analyzer) *Optimizer {
 
 	timeout := cfg.Timeout
 	if timeout <= 0 {
-		timeout = 300 // 默认 300 秒
+		timeout = 1200 // 默认 20 分钟
 	}
 
 	pkgWorkerLimit := cfg.PkgWorkerLimit

@@ -154,7 +154,7 @@ func parseFlags() *Config {
 	flag.StringVar(&cfg.ProjectType, "prj-type", "gomod", "项目类型（gomod/gopath）")
 	flag.StringVar(&cfg.GOPATH, "gopath", "", "GOPATH 路径（GOPATH 项目可选）")
 	flag.IntVar(&cfg.MaxDepth, "max-depth", 50, "最大递归深度（默认 50）")
-	flag.IntVar(&cfg.Timeout, "timeout", 300, "超时时间（秒，默认 300）")
+	flag.IntVar(&cfg.Timeout, "timeout", 1200, "超时时间（秒，默认 20 分钟）")
 	flag.StringVar(&cfg.PkgScope, "pkg-scope", "", "包范围限制（GOPATH 模式必填，只分析此包内的结构体）")
 	flag.IntVar(&cfg.PkgWorkerLimit, "pkg-limit", 4, "包并发限制（默认 4，降低可防止 OOM）")
 
