@@ -10,8 +10,6 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-
-	"golang.org/x/tools/go/packages"
 )
 
 // isInterfaceType 快速判断是否是接口类型
@@ -48,7 +46,7 @@ func isStructType(typ types.Type) bool {
 	}
 }
 
-// collectStructs 收集所有需要处理的结构体（两阶段：快速扫描 + 按需加载）
+// collectStructs 收集所有需要处理的结构体（只解析文件，不加载包）
 func (o *Optimizer) collectStructs(pkgPath, structName, filePath string, depth, level int) {
 	key := pkgPath + "." + structName
 
@@ -75,15 +73,11 @@ func (o *Optimizer) collectStructs(pkgPath, structName, filePath string, depth, 
 		return
 	}
 
-	// 阶段 1: 快速扫描文件查找结构体（不加载包）
-	nestedFields, filePath, err := o.scanStructFields(pkgPath, structName, filePath)
+	// 只解析文件，不加载包
+	nestedFields, filePath, err := o.parseStructFromFileOnly(pkgPath, structName, filePath)
 	if err != nil {
-		// 阶段 2: 加载包查找（慢速但准确）
-		nestedFields, filePath, err = o.collectFromPackage(pkgPath, structName)
-		if err != nil {
-			o.Log(3, "查找结构体失败：%s.%s: %v", pkgPath, structName, err)
-			return
-		}
+		o.Log(2, "解析文件失败：%s.%s: %v", pkgPath, structName, err)
+		return
 	}
 
 	// 添加到队列
@@ -99,12 +93,12 @@ func (o *Optimizer) collectStructs(pkgPath, structName, filePath string, depth, 
 	o.structQueue = append(o.structQueue, task)
 	o.mu.Unlock()
 
-	// 递归收集嵌套结构体
+	// 递归收集嵌套结构体（只解析文件）
 	o.collectNestedFromFields(nestedFields, pkgPath, filePath, depth, level)
 }
 
-// scanStructFields 快速扫描文件中的结构体字段（不加载包）
-func (o *Optimizer) scanStructFields(pkgPath, structName, filePath string) ([]nestedField, string, error) {
+// parseStructFromFileOnly 只解析文件获取结构体信息（不加载包）
+func (o *Optimizer) parseStructFromFileOnly(pkgPath, structName, filePath string) ([]nestedField, string, error) {
 	// 确定搜索目录
 	searchDir := o.getPackageDir(pkgPath)
 	if searchDir == "" {
@@ -125,54 +119,6 @@ func (o *Optimizer) scanStructFields(pkgPath, structName, filePath string) ([]ne
 
 	// 解析文件获取结构体字段
 	return o.parseStructFields(filePath, structName, pkgPath)
-}
-
-// collectFromPackage 从包中收集结构体信息（加载包，慢速但准确）
-func (o *Optimizer) collectFromPackage(pkgPath, structName string) ([]nestedField, string, error) {
-	pkg, err := o.analyzer.LoadPackage(pkgPath)
-	if err != nil {
-		return nil, "", err
-	}
-
-	st, filePath, err := o.findStructInPackage(pkg, structName)
-	if err != nil {
-		return nil, "", err
-	}
-
-	// 提取嵌套字段信息
-	var nestedFields []nestedField
-	for i := 0; i < st.NumFields(); i++ {
-		field := st.Field(i)
-		fieldType := field.Type()
-
-		if isInterfaceType(fieldType) {
-			continue
-		}
-
-		pkg := o.getTypePkg(fieldType)
-		typeName := o.getTypeName(fieldType)
-
-		if isStructType(fieldType) && !isStandardLibraryPkg(pkg) && !isVendorPackage(pkg) {
-			fieldPkg := pkg
-			if fieldPkg == "" {
-				fieldPkg = pkgPath
-			}
-			nestedFields = append(nestedFields, nestedField{
-				Name:     typeName,
-				PkgPath:  fieldPkg,
-				IsStruct: true,
-			})
-		}
-	}
-
-	return nestedFields, filePath, nil
-}
-
-// nestedField 嵌套字段信息
-type nestedField struct {
-	Name     string
-	PkgPath  string
-	IsStruct bool
 }
 
 // parseStructFields 解析文件中的结构体字段
@@ -335,85 +281,9 @@ func (o *Optimizer) fileContainsStruct(filePath, structName string) bool {
 	return bytes.Contains(data, pattern)
 }
 
-// findStructInPackage 在已加载的包中查找结构体
-func (o *Optimizer) findStructInPackage(pkg *packages.Package, structName string) (*types.Struct, string, error) {
-	for _, syntax := range pkg.Syntax {
-		filePath := pkg.Fset.File(syntax.Pos()).Name()
-
-		for _, decl := range syntax.Decls {
-			genDecl, ok := decl.(*ast.GenDecl)
-			if !ok || genDecl.Tok != token.TYPE {
-				continue
-			}
-
-			for _, spec := range genDecl.Specs {
-				typeSpec, ok := spec.(*ast.TypeSpec)
-				if !ok {
-					continue
-				}
-
-				if typeSpec.Name.Name != structName {
-					continue
-				}
-
-				obj := pkg.TypesInfo.ObjectOf(typeSpec.Name)
-				if obj == nil {
-					continue
-				}
-
-				if named, ok := obj.Type().(*types.Named); ok {
-					if st, ok := named.Underlying().(*types.Struct); ok {
-						return st, filePath, nil
-					}
-				}
-			}
-		}
-	}
-
-	return nil, "", fmt.Errorf("struct %s not found in package", structName)
-}
-
-// getTypePkg 获取类型的包路径
-func (o *Optimizer) getTypePkg(typ types.Type) string {
-	if typ == nil {
-		return ""
-	}
-	switch t := typ.(type) {
-	case *types.Named:
-		if obj := t.Obj(); obj != nil {
-			if pkg := obj.Pkg(); pkg != nil {
-				return pkg.Path()
-			}
-		}
-		return ""
-	case *types.Pointer:
-		return o.getTypePkg(t.Elem())
-	case *types.Slice:
-		return o.getTypePkg(t.Elem())
-	case *types.Array:
-		return o.getTypePkg(t.Elem())
-	case *types.Map:
-		return ""
-	default:
-		return ""
-	}
-}
-
-// getTypeName 获取类型名称
-func (o *Optimizer) getTypeName(typ types.Type) string {
-	if typ == nil {
-		return ""
-	}
-	switch t := typ.(type) {
-	case *types.Named:
-		return t.Obj().Name()
-	case *types.Pointer:
-		return o.getTypeName(t.Elem())
-	case *types.Slice:
-		return o.getTypeName(t.Elem())
-	case *types.Array:
-		return o.getTypeName(t.Elem())
-	default:
-		return typ.String()
-	}
+// nestedField 嵌套字段信息
+type nestedField struct {
+	Name     string
+	PkgPath  string
+	IsStruct bool
 }

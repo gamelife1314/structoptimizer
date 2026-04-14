@@ -2,14 +2,54 @@ package optimizer
 
 import (
 	"fmt"
+	"go/ast"
+	"go/token"
+	"go/types"
 	"path/filepath"
 	"time"
 
 	"golang.org/x/tools/go/packages"
-	"go/types"
 
 	"github.com/gamelife1314/structoptimizer/analyzer"
 )
+
+// findStructInPackage 在已加载的包中查找结构体（优化阶段使用）
+func (o *Optimizer) findStructInPackage(pkg *packages.Package, structName string) (*types.Struct, string, error) {
+	for _, syntax := range pkg.Syntax {
+		filePath := pkg.Fset.File(syntax.Pos()).Name()
+
+		for _, decl := range syntax.Decls {
+			genDecl, ok := decl.(*ast.GenDecl)
+			if !ok || genDecl.Tok != token.TYPE {
+				continue
+			}
+
+			for _, spec := range genDecl.Specs {
+				typeSpec, ok := spec.(*ast.TypeSpec)
+				if !ok {
+					continue
+				}
+
+				if typeSpec.Name.Name != structName {
+					continue
+				}
+
+				obj := pkg.TypesInfo.ObjectOf(typeSpec.Name)
+				if obj == nil {
+					continue
+				}
+
+				if named, ok := obj.Type().(*types.Named); ok {
+					if st, ok := named.Underlying().(*types.Struct); ok {
+						return st, filePath, nil
+					}
+				}
+			}
+		}
+	}
+
+	return nil, "", fmt.Errorf("struct %s not found in package", structName)
+}
 
 // NewOptimizer 创建优化器
 func NewOptimizer(cfg *Config, analyzer *analyzer.Analyzer) *Optimizer {
