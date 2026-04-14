@@ -265,7 +265,7 @@ func (o *Optimizer) collectNestedFromFields(fields []nestedField, pkgPath, fileP
 	}
 }
 
-// findFilesWithStruct 查找可能包含指定结构体的文件（检查跳过目录）
+// findFilesWithStruct 查找可能包含指定结构体的文件（检查跳过目录和文件）
 func (o *Optimizer) findFilesWithStruct(dir, structName string) ([]string, error) {
 	var result []string
 
@@ -293,6 +293,11 @@ func (o *Optimizer) findFilesWithStruct(dir, structName string) ([]string, error
 			continue
 		}
 
+		// 检查是否应该跳过该文件
+		if o.shouldSkipFile(name) {
+			continue
+		}
+
 		filePath := filepath.Join(dir, name)
 
 		// 快速检查文件是否包含结构体名称
@@ -308,6 +313,16 @@ func (o *Optimizer) findFilesWithStruct(dir, structName string) ([]string, error
 func (o *Optimizer) shouldSkipDir(dirName string) bool {
 	for _, pattern := range o.config.SkipDirs {
 		if matched, _ := filepath.Match(pattern, dirName); matched {
+			return true
+		}
+	}
+	return false
+}
+
+// shouldSkipFile 检查是否应该跳过该文件
+func (o *Optimizer) shouldSkipFile(fileName string) bool {
+	for _, pattern := range o.config.SkipFiles {
+		if matched, _ := filepath.Match(pattern, fileName); matched {
 			return true
 		}
 	}
