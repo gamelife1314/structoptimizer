@@ -40,12 +40,8 @@ func (w *SourceWriter) BackupFile(filePath string) (string, error) {
 		return "", nil
 	}
 
-	// 创建备份文件名
-	dir := filepath.Dir(filePath)
-	base := filepath.Base(filePath)
-	ext := filepath.Ext(base)
-	name := base[:len(base)-len(ext)]
-	backupName := fmt.Sprintf("%s/%s.backup%s", dir, name, ext)
+	// 创建备份文件名：xxx.go -> xxx.go.bak
+	backupName := filePath + ".bak"
 
 	// 读取原文件
 	content, err := os.ReadFile(filePath)
@@ -186,6 +182,18 @@ func (w *SourceWriter) RewriteFile(filePath string, optimizedStructs map[string]
 		return fmt.Errorf("解析文件失败：%v", err)
 	}
 
+	// 收集该文件中所有需要修改的结构体（按结构体名索引）
+	fileStructs := make(map[string]*optimizer.StructInfo)
+	for _, info := range optimizedStructs {
+		if info.File == filePath && info.Optimized {
+			fileStructs[info.Name] = info
+		}
+	}
+
+	if len(fileStructs) == 0 {
+		return nil // 没有需要修改的结构体
+	}
+
 	// 修改所有匹配的结构体
 	modified := false
 	ast.Inspect(f, func(n ast.Node) bool {
@@ -200,7 +208,7 @@ func (w *SourceWriter) RewriteFile(filePath string, optimizedStructs map[string]
 				continue
 			}
 
-			info, exists := optimizedStructs[typeSpec.Name.Name]
+			info, exists := fileStructs[typeSpec.Name.Name]
 			if !exists {
 				continue
 			}
