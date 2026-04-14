@@ -104,7 +104,14 @@ func (o *Optimizer) collectStructs(pkgPath, structName, filePath string, depth, 
 		}
 
 		if o.isProjectPackage(field.PkgPath) {
-			o.collectStructs(field.PkgPath, field.Name, filePath, depth+1, level+1)
+			// 跨包时不传递 filePath，让 parseStructFromFileOnly 自己查找
+			var nextFilePath string
+			if field.PkgPath != pkgPath {
+				nextFilePath = "" // 跨包时清空 filePath
+			} else {
+				nextFilePath = filePath
+			}
+			o.collectStructs(field.PkgPath, field.Name, nextFilePath, depth+1, level+1)
 		}
 	}
 }
