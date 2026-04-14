@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/gamelife1314/structoptimizer/analyzer"
@@ -20,6 +21,21 @@ type Optimizer struct {
 	fieldAnalyzer *FieldAnalyzer
 	processing  map[string]bool // 正在处理中的结构体（用于检测循环引用）
 	maxDepth    int             // 最大递归深度
+	
+	// 并行处理相关
+	structQueue   []*StructTask  // 待处理的结构体队列
+	structByLevel map[int][]*StructTask // 按层级分组的结构体
+	mu            sync.Mutex     // 保护并发访问
+	workerLimit   int            // 并发工作协程数量限制
+}
+
+// StructTask 结构体处理任务
+type StructTask struct {
+	PkgPath  string
+	StructName string
+	FilePath string
+	Depth    int
+	Level    int // 层级（叶子节点为 0，向上递增）
 }
 
 // Config 优化器配置
@@ -40,6 +56,8 @@ type Config struct {
 	Output        string
 	ProjectType   string // 项目类型：gomod 或 gopath
 	GOPATH        string // GOPATH 路径（可选）
+	MaxDepth      int    // 最大递归深度
+	Timeout       int    // 超时时间（秒）
 }
 
 // Report 优化报告
@@ -68,12 +86,26 @@ type StructReport struct {
 
 // NewOptimizer 创建优化器
 func NewOptimizer(cfg *Config, analyzer *analyzer.Analyzer) *Optimizer {
+	// 设置默认值
+	maxDepth := cfg.MaxDepth
+	if maxDepth <= 0 {
+		maxDepth = 50 // 默认 50 层
+	}
+
+	timeout := cfg.Timeout
+	if timeout <= 0 {
+		timeout = 300 // 默认 300 秒
+	}
+
 	return &Optimizer{
 		config:   cfg,
 		analyzer: analyzer,
 		optimized: make(map[string]*StructInfo),
 		processing: make(map[string]bool),
-		maxDepth: 50, // 最大递归深度 50 层
+		maxDepth: maxDepth,
+		structQueue: make([]*StructTask, 0),
+		structByLevel: make(map[int][]*StructTask),
+		workerLimit: 10, // 最多 10 个并发协程
 		report: &Report{
 			StructReports: make([]*StructReport, 0),
 		},
@@ -81,9 +113,36 @@ func NewOptimizer(cfg *Config, analyzer *analyzer.Analyzer) *Optimizer {
 }
 
 // Optimize 执行优化（入口函数）
+// 两阶段处理：1) 收集所有需要处理的结构体；2) 并行处理
 func (o *Optimizer) Optimize() (*Report, error) {
 	o.Log(1, "开始优化...")
+	o.Log(1, "配置：最大深度=%d, 超时=%d秒", o.maxDepth, o.config.Timeout)
 
+	// 设置超时
+	done := make(chan struct{})
+	var result *Report
+	var err error
+
+	go func() {
+		defer close(done)
+		result, err = o.optimizeInternal()
+	}()
+
+	// 等待完成或超时
+	select {
+	case <-done:
+		return result, err
+	case <-time.After(time.Duration(o.config.Timeout) * time.Second):
+		o.Log(0, "错误：优化超时（%d 秒）", o.config.Timeout)
+		return nil, fmt.Errorf("optimization timeout after %d seconds", o.config.Timeout)
+	}
+}
+
+// optimizeInternal 实际优化逻辑
+func (o *Optimizer) optimizeInternal() (*Report, error) {
+
+	// 阶段 1: 收集所有需要处理的结构体
+	o.Log(1, "阶段 1/2: 收集结构体依赖...")
 	if o.config.StructName != "" {
 		// 优化指定结构体
 		pkgPath, structName := analyzer.ParseStructName(o.config.StructName)
@@ -91,27 +150,33 @@ func (o *Optimizer) Optimize() (*Report, error) {
 			return nil, fmt.Errorf("invalid struct name format: %s", o.config.StructName)
 		}
 
-		o.Log(1, "优化结构体：%s.%s", pkgPath, structName)
-		_, err := o.optimizeStruct(pkgPath, structName, "", 0)
-		if err != nil {
-			return nil, err
-		}
+		o.Log(1, "收集结构体：%s.%s", pkgPath, structName)
+		o.collectStructs(pkgPath, structName, "", 0, 0)
 	} else if o.config.Package != "" {
 		// 优化包中所有结构体
-		o.Log(1, "优化包：%s", o.config.Package)
+		o.Log(1, "收集包：%s", o.config.Package)
 		structs, err := o.analyzer.FindAllStructs(o.config.Package)
 		if err != nil {
 			return nil, err
 		}
 
 		for _, st := range structs {
-			o.Log(2, "处理结构体：%s", st.Name)
-			_, err := o.optimizeStruct(st.PkgPath, st.Name, st.File, 0)
-			if err != nil {
-				o.Log(1, "优化 %s 失败：%v", st.Name, err)
-			}
+			o.collectStructs(st.PkgPath, st.Name, st.File, 0, 0)
 		}
 	}
+
+	o.Log(1, "共收集到 %d 个结构体任务", len(o.structQueue))
+
+	// 打印收集到的结构体列表
+	o.Log(2, "收集到的结构体列表:")
+	for i, task := range o.structQueue {
+		o.Log(3, "  [%d] %s.%s (层级:%d, 文件:%s)", 
+			i+1, task.PkgPath, task.StructName, task.Level, filepath.Base(task.FilePath))
+	}
+
+	// 阶段 2: 按层级并行处理结构体优化
+	o.Log(1, "阶段 2/2: 并行优化结构体...")
+	o.processStructsParallel()
 
 	o.report.TotalStructs = len(o.optimized)
 	o.report.OptimizedCount = 0
@@ -130,6 +195,135 @@ func (o *Optimizer) Optimize() (*Report, error) {
 		o.report.TotalStructs, o.report.OptimizedCount, o.report.SkippedCount, o.report.TotalSaved)
 
 	return o.report, nil
+}
+
+// collectStructs 收集所有需要处理的结构体（不执行优化，只收集依赖）
+func (o *Optimizer) collectStructs(pkgPath, structName, filePath string, depth, level int) {
+	key := pkgPath + "." + structName
+
+	// 检查是否已收集（去重）
+	o.mu.Lock()
+	if _, ok := o.optimized[key]; ok {
+		o.mu.Unlock()
+		return
+	}
+	// 检查是否已在队列中（去重）
+	for _, t := range o.structQueue {
+		if t.PkgPath == pkgPath && t.StructName == structName {
+			o.mu.Unlock()
+			return
+		}
+	}
+	o.mu.Unlock()
+
+	// 检查递归深度
+	if depth > o.maxDepth {
+		return
+	}
+
+	// 检查是否是第三方包
+	if isVendorPackage(pkgPath) || !o.isProjectPackage(pkgPath) {
+		return
+	}
+
+	// 添加到队列
+	task := &StructTask{
+		PkgPath:    pkgPath,
+		StructName: structName,
+		FilePath:   filePath,
+		Depth:      depth,
+		Level:      level,
+	}
+
+	o.mu.Lock()
+	o.structQueue = append(o.structQueue, task)
+	o.mu.Unlock()
+
+	// 查找结构体并收集嵌套依赖
+	st, filePath, err := o.analyzer.FindStructByName(pkgPath, structName)
+	if err != nil {
+		return
+	}
+
+	// 更新任务文件路径
+	o.mu.Lock()
+	task.FilePath = filePath
+	o.mu.Unlock()
+
+	// 分析字段，收集嵌套结构体
+	fieldAnalyzer := NewFieldAnalyzer(o.analyzer.GetTypesInfo(), o.analyzer.GetFset())
+	info := fieldAnalyzer.AnalyzeStruct(st, structName, pkgPath, filePath)
+
+	// 收集嵌套的结构体（深度优先，层级递增）
+	for _, field := range info.Fields {
+		if field.IsInterface || field.IsStdLib || field.IsThirdParty {
+			continue
+		}
+
+		if field.TypeName != "" && isStructType(field.Type) {
+			fieldPkg := field.PkgPath
+			if fieldPkg == "" {
+				fieldPkg = pkgPath
+			}
+
+			if fieldPkg != "" && o.isProjectPackage(fieldPkg) {
+				// 递归收集，层级 +1（去重在函数开头处理）
+				o.collectStructs(fieldPkg, field.TypeName, filePath, depth+1, level+1)
+			}
+		}
+	}
+}
+
+// processStructsParallel 按层级并行处理结构体优化
+// 从叶子节点（最底层）开始，逐层向上处理
+func (o *Optimizer) processStructsParallel() {
+	if len(o.structQueue) == 0 {
+		return
+	}
+
+	// 按层级分组
+	for _, task := range o.structQueue {
+		o.structByLevel[task.Level] = append(o.structByLevel[task.Level], task)
+	}
+
+	// 找出最大层级
+	maxLevel := 0
+	for level := range o.structByLevel {
+		if level > maxLevel {
+			maxLevel = level
+		}
+	}
+
+	o.Log(2, "结构体层级分布：共 %d 层", maxLevel+1)
+
+	// 从叶子节点（最大层级）开始，逐层向上处理
+	for level := maxLevel; level >= 0; level-- {
+		tasks := o.structByLevel[level]
+		o.Log(2, "处理第 %d 层，共 %d 个结构体", level, len(tasks))
+		o.processLevelParallel(tasks)
+	}
+}
+
+// processLevelParallel 并行处理同一层级的结构体
+func (o *Optimizer) processLevelParallel(tasks []*StructTask) {
+	var wg sync.WaitGroup
+	sem := make(chan struct{}, o.workerLimit) // 信号量限制并发数
+
+	for _, task := range tasks {
+		wg.Add(1)
+		sem <- struct{}{} // 获取信号量
+
+		go func(t *StructTask) {
+			defer wg.Done()
+			defer func() { <-sem }() // 释放信号量
+
+			key := t.PkgPath + "." + t.StructName
+			o.Log(3, "优化结构体：%s (层级:%d)", key, t.Level)
+			o.optimizeStruct(t.PkgPath, t.StructName, t.FilePath, t.Depth)
+		}(task)
+	}
+
+	wg.Wait()
 }
 
 // optimizeStruct 优化单个结构体（递归）
@@ -219,7 +413,10 @@ func (o *Optimizer) optimizeStruct(pkgPath, structName, filePath string, depth i
 		return info, nil
 	}
 
-	o.Log(2, "[%d] 处理结构体：%s (文件：%s)", depth, key, filePath)
+	o.Log(2, "[%d] 处理结构体：%s", depth, key)
+	if filePath != "" {
+		o.Log(3, "    文件路径：%s", filepath.Base(filePath))
+	}
 
 	// 查找结构体
 	st, filePath, err := o.analyzer.FindStructByName(pkgPath, structName)
@@ -245,47 +442,7 @@ func (o *Optimizer) optimizeStruct(pkgPath, structName, filePath string, depth i
 		return info, nil
 	}
 
-	// 优化嵌套字段（深度优先）- 只优化项目内部的结构体
-	for _, field := range info.Fields {
-		// 跳过接口类型（大小固定，不需要优化）
-		if field.IsInterface {
-			o.Log(3, "跳过接口类型字段：%s (大小固定)", field.TypeName)
-			continue
-		}
-
-		// 跳过标准库类型字段（不需要优化）
-		if field.IsStdLib {
-			o.Log(3, "跳过标准库字段：%s", field.TypeName)
-			continue
-		}
-
-		// 跳过第三方包字段（不需要优化）
-		if field.IsThirdParty {
-			o.Log(3, "跳过第三方包字段：%s", field.TypeName)
-			continue
-		}
-
-		// 检查是否是结构体类型
-		if field.TypeName != "" && isStructType(field.Type) {
-			// 获取字段类型的包路径
-			fieldPkg := field.PkgPath
-			// 如果是同包结构体，使用当前包路径
-			if fieldPkg == "" {
-				fieldPkg = pkgPath
-			}
-
-			// 只优化项目内部的结构体
-			if fieldPkg != "" && o.isProjectPackage(fieldPkg) {
-				o.Log(3, "优化嵌套结构体：%s.%s (深度:%d)", fieldPkg, field.TypeName, depth+1)
-				_, err := o.optimizeStruct(fieldPkg, field.TypeName, "", depth+1)
-				if err != nil {
-					o.Log(2, "优化嵌套结构体失败：%v", err)
-				}
-			}
-		}
-	}
-
-	// 重排字段
+	// 重排字段（嵌套结构体已在收集阶段处理）
 	optimizedFields := ReorderFields(info.Fields, o.config.SortSameSize)
 	info.Fields = optimizedFields
 
@@ -659,17 +816,17 @@ func (o *Optimizer) GetReport() *Report {
 // Log 日志输出
 func (o *Optimizer) Log(level int, format string, args ...interface{}) {
 	if level <= o.config.Verbose {
-		timestamp := time.Now().Format("15:04:05.000")
+		timestamp := time.Now().Format("2006-01-02 15:04:05.000")
 		levelPrefix := ""
 		switch level {
 		case 1:
 			levelPrefix = "[INFO] "
 		case 2:
-			levelPrefix = "[DEBUG] "
+			levelPrefix = "[DEBUG]"
 		case 3:
-			levelPrefix = "[TRACE] "
+			levelPrefix = "[TRACE]"
 		}
-		fmt.Printf("%s%s "+format+"\n", append([]interface{}{timestamp, levelPrefix}, args...)...)
+		fmt.Printf("%s %s "+format+"\n", append([]interface{}{timestamp, levelPrefix}, args...)...)
 	}
 }
 

@@ -31,6 +31,8 @@ type Config struct {
 	ProjectType   string // 项目类型：gomod 或 gopath
 	GOPATH        string // GOPATH 路径（可选）
 	TargetDir     string // 项目目录（位置参数）
+	MaxDepth      int    // 最大递归深度
+	Timeout       int    // 超时时间（秒）
 }
 
 // stringSlice 自定义字符串切片类型
@@ -91,6 +93,8 @@ func main() {
 		Output:        cfg.Output,
 		ProjectType:   cfg.ProjectType,
 		GOPATH:        cfg.GOPATH,
+		MaxDepth:      cfg.MaxDepth,
+		Timeout:       cfg.Timeout,
 	}
 	opt := optimizer.NewOptimizer(optimizerCfg, anlz)
 
@@ -145,6 +149,8 @@ func parseFlags() *Config {
 	flag.BoolVar(&cfg.SortSameSize, "sort-same-size", false, "大小相同时按字段大小重排")
 	flag.StringVar(&cfg.ProjectType, "prj-type", "gomod", "项目类型（gomod/gopath）")
 	flag.StringVar(&cfg.GOPATH, "gopath", "", "GOPATH 路径（GOPATH 项目可选）")
+	flag.IntVar(&cfg.MaxDepth, "max-depth", 50, "最大递归深度（默认 50）")
+	flag.IntVar(&cfg.Timeout, "timeout", 300, "超时时间（秒，默认 300）")
 
 	// 详细程度
 	v := flag.Bool("v", false, "显示详细信息")
@@ -163,6 +169,8 @@ func parseFlags() *Config {
 		fmt.Fprintf(os.Stderr, "  %s -struct=pkg.Context /path/to/project\n", os.Args[0])
 		fmt.Fprintf(os.Stderr, "  # GOPATH 项目\n")
 		fmt.Fprintf(os.Stderr, "  %s -prj-type=gopath -struct=example.com/pkg.MyStruct\n", os.Args[0])
+		fmt.Fprintf(os.Stderr, "  # 自定义最大深度和超时时间\n")
+		fmt.Fprintf(os.Stderr, "  %s -struct=pkg.Context -max-depth=100 -timeout=600 /path/to/project\n", os.Args[0])
 	}
 
 	flag.Parse()

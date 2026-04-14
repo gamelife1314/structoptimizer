@@ -405,17 +405,17 @@ func (a *Analyzer) LoadAndParseFile(filePath string) (*ast.File, *types.Info, er
 // Log 日志输出
 func (a *Analyzer) Log(level int, format string, args ...interface{}) {
 	if level <= a.config.Verbose {
-		timestamp := time.Now().Format("15:04:05.000")
+		timestamp := time.Now().Format("2006-01-02 15:04:05.000")
 		levelPrefix := ""
 		switch level {
 		case 1:
 			levelPrefix = "[INFO] "
 		case 2:
-			levelPrefix = "[DEBUG] "
+			levelPrefix = "[DEBUG]"
 		case 3:
-			levelPrefix = "[TRACE] "
+			levelPrefix = "[TRACE]"
 		}
-		fmt.Printf("%s%s "+format+"\n", append([]interface{}{timestamp, levelPrefix}, args...)...)
+		fmt.Printf("%s %s "+format+"\n", append([]interface{}{timestamp, levelPrefix}, args...)...)
 	}
 }
 
