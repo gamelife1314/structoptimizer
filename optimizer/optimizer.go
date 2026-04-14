@@ -64,6 +64,11 @@ func NewOptimizer(cfg *Config, analyzer *analyzer.Analyzer) *Optimizer {
 		timeout = 300 // 默认 300 秒
 	}
 
+	pkgWorkerLimit := cfg.PkgWorkerLimit
+	if pkgWorkerLimit <= 0 {
+		pkgWorkerLimit = 4 // 默认 4 个并发包，防止 OOM
+	}
+
 	return &Optimizer{
 		config:           cfg,
 		analyzer:         analyzer,
@@ -74,7 +79,8 @@ func NewOptimizer(cfg *Config, analyzer *analyzer.Analyzer) *Optimizer {
 		structQueue:      make([]*StructTask, 0),
 		structByLevel:    make(map[int][]*StructTask),
 		structByPkgLevel: make(map[int]map[string][]*StructTask),
-		workerLimit:      10, // 最多 10 个并发协程
+		workerLimit:      10,  // 结构体并发限制
+		pkgWorkerLimit:   pkgWorkerLimit,  // 包并发限制（防止 OOM）
 		pkgCache:         make(map[string]*packages.Package),
 		structCache:      make(map[string]*types.Struct),
 		filePathCache:    make(map[string]string),
