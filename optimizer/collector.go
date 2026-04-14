@@ -157,7 +157,7 @@ func (o *Optimizer) parseStructFields(filePath, structName, pkgPath string) ([]n
 	// 解析 import 映射
 	importMap := o.parseImports(f, pkgPath)
 
-	// 查找结构体
+	// 查找结构体（支持 type xxx struct 和 type ( ... ) 两种形式）
 	for _, decl := range f.Decls {
 		genDecl, ok := decl.(*ast.GenDecl)
 		if !ok || genDecl.Tok != token.TYPE {
@@ -329,15 +329,37 @@ func (o *Optimizer) shouldSkipFile(fileName string) bool {
 	return false
 }
 
-// fileContainsStruct 快速检查文件是否包含结构体定义
+// fileContainsStruct 快速检查文件是否包含结构体定义（支持 type xxx struct 和 type ( ... ) 两种形式）
 func (o *Optimizer) fileContainsStruct(filePath, structName string) bool {
 	data, err := os.ReadFile(filePath)
 	if err != nil {
 		return false
 	}
 
-	pattern := []byte("type " + structName + " struct")
-	return bytes.Contains(data, pattern)
+	// 匹配 type StructName struct 形式
+	pattern1 := []byte("type " + structName + " struct")
+	if bytes.Contains(data, pattern1) {
+		return true
+	}
+	
+	// 匹配 type ( ... StructName struct ... ) 形式
+	// 查找 structName 后面紧跟 struct 关键字（中间只有空白字符）
+	lines := bytes.Split(data, []byte("\n"))
+	for _, line := range lines {
+		// 查找 structName
+		idx := bytes.Index(line, []byte(structName))
+		if idx >= 0 {
+			// 检查后面是否有 struct 关键字
+			remaining := line[idx+len(structName):]
+			// 跳过空白字符
+			trimmed := bytes.TrimLeft(remaining, " \t\r")
+			if bytes.HasPrefix(trimmed, []byte("struct")) {
+				return true
+			}
+		}
+	}
+	
+	return false
 }
 
 // nestedField 嵌套字段信息
