@@ -73,6 +73,12 @@ func (o *Optimizer) collectStructs(pkgPath, structName, filePath string, depth, 
 		return
 	}
 
+	// 检查文件路径是否包含应该跳过的目录
+	if filePath != "" && o.shouldSkipDir(filePath) {
+		o.Log(3, "跳过目录中的结构体：%s (文件：%s)", key, filePath)
+		return
+	}
+
 	// 只解析文件，不加载包
 	nestedFields, filePath, err := o.parseStructFromFileOnly(pkgPath, structName, filePath)
 	if err != nil {
@@ -80,6 +86,12 @@ func (o *Optimizer) collectStructs(pkgPath, structName, filePath string, depth, 
 		if !strings.Contains(err.Error(), "struct ") {
 			o.Log(2, "解析文件失败：%s.%s: %v", pkgPath, structName, err)
 		}
+		return
+	}
+
+	// 检查解析后的文件路径是否包含应该跳过的目录
+	if filePath != "" && o.shouldSkipDir(filePath) {
+		o.Log(3, "跳过目录中的结构体：%s (文件：%s)", key, filePath)
 		return
 	}
 
@@ -315,17 +327,20 @@ func (o *Optimizer) shouldSkipDir(dirPath string) bool {
 	// 提取目录的 basename
 	baseName := filepath.Base(dirPath)
 	
+	// 规范化路径分隔符（Windows 和 Unix 统一）
+	normalizedPath := filepath.ToSlash(dirPath)
+	
 	for _, pattern := range o.config.SkipDirs {
 		// 匹配 basename（向后兼容）
 		if matched, _ := filepath.Match(pattern, baseName); matched {
 			return true
 		}
-		// 匹配完整路径
-		if matched, _ := filepath.Match(pattern, dirPath); matched {
-			return true
-		}
-		// 检查路径中是否包含该目录名
-		if strings.Contains(dirPath, pattern) || strings.Contains(baseName, pattern) {
+		// 检查路径中是否包含该目录名（作为路径组件）
+		// 例如：pattern="datas" 匹配 "/do/datas/ele/" 或 "/do/datas"
+		normalizedPattern := filepath.ToSlash(pattern)
+		if strings.Contains(normalizedPath, "/"+normalizedPattern+"/") ||
+		   strings.Contains(normalizedPath, "/"+normalizedPattern) ||
+		   strings.HasSuffix(normalizedPath, "/"+normalizedPattern) {
 			return true
 		}
 	}
