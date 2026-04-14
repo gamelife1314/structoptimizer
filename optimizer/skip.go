@@ -45,15 +45,7 @@ func (o *Optimizer) shouldSkip(info *StructInfo, st *types.Struct, key string) s
 	}
 
 	// 检查是否通过方法指定跳过
-	// 注意：-skip-by-methods 需要加载包来检查方法，性能较差
 	if len(o.config.SkipByMethods) > 0 {
-		// 只在第一次检查时打印警告
-		if !o.methodCheckWarned {
-			o.methodCheckWarned = true
-			o.Log(0, "⚠️  警告：-skip-by-methods 需要加载包检查方法，性能较慢")
-			o.Log(0, "   建议：使用 -skip-by-names 跳过结构体名（极快）")
-		}
-		
 		// 加载包检查方法
 		for _, methodName := range o.config.SkipByMethods {
 			if o.hasMethodByName(info, methodName) {
