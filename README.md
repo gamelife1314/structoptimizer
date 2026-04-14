@@ -202,55 +202,116 @@ cd /path/to/project
 
 ## 命令行参数
 
-### -skip-dir 参数说明
+### -skip-dirs 参数说明
 
-`-skip-dir` 参数使用**松散匹配**策略，会检查文件完整路径中的**所有目录组件**，只要任意一级目录匹配即跳过。
+`-skip-dirs` 参数用于跳过指定目录中的结构体，支持**双重匹配机制**。
 
-**匹配规则**：
-- 遍历文件路径中的每个目录组件
-- 使用 `filepath.Match()` 进行通配符匹配
-- 任意一级目录匹配即跳过该文件
+#### 匹配规则
 
-**示例**：
+`-skip-dirs` 使用**双重匹配机制**：
+
+1. **basename 匹配**：匹配目录的 basename（最后一部分）
+2. **路径包含匹配**：匹配完整路径中是否包含该目录名（作为完整路径组件）
+
+**匹配逻辑**：
+```go
+func shouldSkipDir(dirPath string) bool {
+    baseName := filepath.Base(dirPath)
+    normalizedPath := filepath.ToSlash(dirPath)
+    
+    for _, pattern := range SkipDirs {
+        // 1. basename 匹配
+        if matched, _ := filepath.Match(pattern, baseName); matched {
+            return true
+        }
+        // 2. 路径包含匹配（要求完整路径组件）
+        if strings.Contains(normalizedPath, "/"+pattern+"/") ||
+           strings.Contains(normalizedPath, "/"+pattern) ||
+           strings.HasSuffix(normalizedPath, "/"+pattern) {
+            return true
+        }
+    }
+    return false
+}
+```
+
+#### 使用示例
 
 ```bash
-# 跳过所有 vendor 目录中的文件
-./structoptimizer -package writer/config -skip-dir vendor ./
+# 跳过所有 vendor 目录
+./structoptimizer -package writer/config -skip-dirs vendor ./
 
 # 以下路径都会被跳过：
-# - vendor/github.com/lib/lib.go              ✓ vendor 目录
-# - pkg/vendor/internal/lib.go                ✓ 嵌套的 vendor 目录
-# - a/b/c/vendor/github.com/lib/lib.go        ✓ 深层嵌套的 vendor 目录
+# ✓ /project/vendor/lib.go                  # basename 匹配
+# ✓ /project/pkg/vendor/lib.go              # basename 匹配
+# ✓ /a/b/c/vendor/github.com/lib/lib.go     # 路径包含匹配
 
 # 使用通配符
-./structoptimizer -package writer/config -skip-dir "generated_*" ./
+./structoptimizer -package writer/config -skip-dirs "generated_*" ./
 
 # 以下路径都会被跳过：
-# - generated/proto.go                        ✓ generated_ 开头
-# - pkg/generated_data/api.go                 ✓ generated_ 开头
-# - src/generated/proto/api.go                ✓ generated 目录
+# ✓ /project/generated/proto.go             # basename 匹配 generated
+# ✓ /project/generated_proto/api.go         # basename 匹配 generated_*
+# ✓ /src/generated/proto/api.go             # 路径包含匹配
+
+# 跳过多个目录（逗号分隔）
+./structoptimizer -package writer/config -skip-dirs "vendor,generated_*,datas" ./
 ```
 
-**注意事项**：
+#### 匹配示例详解
 
-如果项目中有多个同名目录，使用 `-skip-dir` 会全部跳过：
+**示例 1：basename 匹配**
+```bash
+# 命令
+./structoptimizer -skip-dirs datas ./
+
+# 文件路径                                    # 是否跳过  # 匹配方式
+/project/datas/config.go                      ✓         basename 匹配
+/project/pkg/datas/config.go                  ✓         basename 匹配
+/project/do/datas/ele/config.go               ✓         路径包含匹配
+/project/datas_backup/config.go               ✗         不匹配
+```
+
+**示例 2：路径包含匹配**
+```bash
+# 命令
+./structoptimizer -skip-dirs vendor ./
+
+# 文件路径                                    # 是否跳过  # 说明
+/vendor/lib.go                                ✓         包含 /vendor
+/pkg/vendor/lib.go                            ✓         包含 /vendor
+/vendor_backup/lib.go                         ✗         不包含 /vendor
+/pkg/vendor_lib.go                            ✗         文件名不匹配
+```
+
+**示例 3：通配符匹配**
+```bash
+# 命令
+./structoptimizer -skip-dirs "test_*" ./
+
+# 文件路径                                    # 是否跳过  # 说明
+/project/test_unit/api.go                     ✓         test_* 匹配 test_unit
+/project/test/api.go                          ✗         test 不匹配 test_*
+/project/testing/api.go                       ✗         testing 不匹配 test_*
+```
+
+#### 注意事项
+
+1. **路径分隔符**：自动处理 Windows (`\`) 和 Unix (`/`) 路径分隔符
+2. **部分匹配**：`-skip-dirs datas` 会匹配 `datas` 但不匹配 `database`
+3. **完整路径组件**：匹配时要求是完整的目录名，`/vendor` 不会匹配 `/vendor_backup`
+4. **多个目录**：使用逗号分隔多个目录模式
+5. **参数名称**：使用复数形式 `-skip-dirs`（不是 `-skip-dir`）
+
+#### 与 -skip-files 配合使用
 
 ```bash
-# 项目结构
-project/
-├── vendor/              # 想跳过这个
-│   └── github.com/...
-└── pkg/
-    └── vendor/          # 这个也会被跳过（可能不是你想要的）
-        └── internal/...
-
-# 命令
-./structoptimizer -skip-dir vendor ./
-
-# 结果：两个 vendor 目录都会被跳过
+# 跳过 vendor 目录和所有测试文件
+./structoptimizer -package writer/config \
+    -skip-dirs "vendor" \
+    -skip-files "*_test.go" \
+    ./
 ```
-
-如果只想跳过特定路径下的目录，建议结合 `-skip-file` 使用更精确的模式。
 
 ### 完整参数列表
 
