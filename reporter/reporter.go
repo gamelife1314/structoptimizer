@@ -9,6 +9,15 @@ import (
 	"github.com/gamelife1314/structoptimizer/optimizer"
 )
 
+// ReportLevel 报告详细程度
+type ReportLevel int
+
+const (
+	ReportLevelSummary ReportLevel = iota // 只显示优化总览
+	ReportLevelChanged                     // 显示优化总览 + 变化的结构体
+	ReportLevelFull                        // 显示所有结构体
+)
+
 // getFieldSize 根据类型名称估算字段大小
 func getFieldSize(typeName string) int64 {
 	switch typeName {
@@ -38,12 +47,13 @@ func getFieldSize(typeName string) int64 {
 
 // Reporter 报告生成器
 type Reporter struct {
-	format string // txt, md, html
-	output string // 输出路径
+	format  string      // txt, md, html
+	output  string      // 输出路径
+	level   ReportLevel // 详细程度
 }
 
 // NewReporter 创建报告生成器
-func NewReporter(format, output string) *Reporter {
+func NewReporter(format, output string, level ReportLevel) *Reporter {
 	// 验证格式，无效则使用默认值
 	validFormats := map[string]bool{"txt": true, "md": true, "html": true}
 	if format == "" || !validFormats[format] {
@@ -52,6 +62,7 @@ func NewReporter(format, output string) *Reporter {
 	return &Reporter{
 		format: format,
 		output: output,
+		level:  level,
 	}
 }
 
@@ -94,9 +105,9 @@ func (r *Reporter) GenerateTXT(report *optimizer.Report) (string, error) {
 	sb.WriteString("╚════════════════════════════════════════════════════════════════════════════════╝\n")
 	sb.WriteString(fmt.Sprintf("生成时间：%s\n\n", time.Now().Format("2006-01-02 15:04:05")))
 
-	// 摘要 - 突出显示优化结果
+	// 1. 优化总览
 	sb.WriteString("┌────────────────────────────────────────────────────────────────────────────────┐\n")
-	sb.WriteString("│  📊 优化结果摘要                                                               │\n")
+	sb.WriteString("│  📊 优化总览                                                                   │\n")
 	sb.WriteString("├────────────────────────────────────────────────────────────────────────────────┤\n")
 	sb.WriteString(fmt.Sprintf("│  处理结构体总数：%-61d│\n", report.TotalStructs))
 	sb.WriteString(fmt.Sprintf("│  ✅ 优化的结构体：%-61d│\n", report.OptimizedCount))
@@ -104,92 +115,91 @@ func (r *Reporter) GenerateTXT(report *optimizer.Report) (string, error) {
 	sb.WriteString(fmt.Sprintf("│  💾 节省内存：     %-61d 字节│\n", report.TotalSaved))
 	sb.WriteString("└────────────────────────────────────────────────────────────────────────────────┘\n\n")
 
-	// 只呈现优化的结构体
-	optimizedCount := 0
-	for _, sr := range report.StructReports {
-		if sr.Skipped || sr.Saved <= 0 {
-			continue
-		}
-		optimizedCount++
-	}
-
-	if optimizedCount == 0 {
-		sb.WriteString("┌────────────────────────────────────────────────────────────────────────────────┐\n")
-		sb.WriteString("│  ℹ️  暂无优化的结构体（所有结构体都已最优或跳过）                             │\n")
-		sb.WriteString("└────────────────────────────────────────────────────────────────────────────────┘\n")
-		return sb.String(), nil
-	}
-
-	sb.WriteString("┌────────────────────────────────────────────────────────────────────────────────┐\n")
-	sb.WriteString(fmt.Sprintf("│  🔧 优化的结构体详情 (共 %d 个)                                    │\n", optimizedCount))
-	sb.WriteString("└────────────────────────────────────────────────────────────────────────────────┘\n\n")
-
-	// 呈现优化的结构体
-	for _, sr := range report.StructReports {
-		if sr.Skipped || sr.Saved <= 0 {
-			continue
-		}
-
-		sb.WriteString(fmt.Sprintf("📦 %s.%s\n", sr.PkgPath, sr.Name))
-		sb.WriteString(strings.Repeat("─", 80) + "\n")
-		sb.WriteString(fmt.Sprintf("   📁 文件：%s\n", sr.File))
-		sb.WriteString(fmt.Sprintf("   📏 优化前：%d 字节  →  📏 优化后：%d 字节  →  💰 节省：%d 字节 (%.1f%%)\n",
-			sr.OrigSize, sr.OptSize, sr.Saved, float64(sr.Saved)/float64(sr.OrigSize)*100))
-		sb.WriteString("\n")
-
-		sb.WriteString("   优化前字段顺序:\n")
-		for i, field := range sr.OrigFields {
-			typeInfo := ""
-			sizeInfo := ""
-			if sr.FieldTypes != nil {
-				if t, ok := sr.FieldTypes[field]; ok {
-					typeInfo = t
-				}
-			}
-			// 获取字段大小（需要从 FieldInfo 获取，但报告中没有，暂时留空）
-			if typeInfo != "" {
-				sizeInfo = fmt.Sprintf(" [%d 字节]", getFieldSize(typeInfo))
-			}
-			sb.WriteString(fmt.Sprintf("      %2d. %-20s %-15s%s\n", i+1, field, typeInfo, sizeInfo))
-		}
-
-		sb.WriteString("\n   优化后字段顺序:\n")
-		for i, field := range sr.OptFields {
-			typeInfo := ""
-			sizeInfo := ""
-			if sr.FieldTypes != nil {
-				if t, ok := sr.FieldTypes[field]; ok {
-					typeInfo = t
-				}
-			}
-			if typeInfo != "" {
-				sizeInfo = fmt.Sprintf(" [%d 字节]", getFieldSize(typeInfo))
-			}
-			arrow := ""
-			if i < len(sr.OrigFields) && sr.OrigFields[i] != field {
-				arrow = " ⬆️"
-			}
-			sb.WriteString(fmt.Sprintf("      %2d. %-20s %-15s%s%s\n", i+1, field, typeInfo, sizeInfo, arrow))
-		}
-		sb.WriteString("\n\n")
-	}
-
-	// 跳过的结构体
-	sb.WriteString("┌────────────────────────────────────────────────────────────────────────────────┐\n")
-	sb.WriteString("│  ⏭️  跳过的结构体                                                               │\n")
-	sb.WriteString("└────────────────────────────────────────────────────────────────────────────────┘\n\n")
-
-	hasSkipped := false
+	// 分类结构体
+	var optimized, skipped, unchanged []*optimizer.StructReport
 	for _, sr := range report.StructReports {
 		if sr.Skipped {
-			hasSkipped = true
-			sb.WriteString(fmt.Sprintf("   ⏭️  %s.%s\n", sr.PkgPath, sr.Name))
-			sb.WriteString(fmt.Sprintf("      原因：%s\n\n", sr.SkipReason))
+			skipped = append(skipped, sr)
+		} else if sr.Saved > 0 {
+			optimized = append(optimized, sr)
+		} else {
+			unchanged = append(unchanged, sr)
 		}
 	}
 
-	if !hasSkipped {
-		sb.WriteString("   无跳过的结构体\n\n")
+	// 2. 调整的结构体（优先显示）
+	if len(optimized) > 0 {
+		sb.WriteString("┌────────────────────────────────────────────────────────────────────────────────┐\n")
+		sb.WriteString(fmt.Sprintf("│  ✏️  调整的结构体 (共 %d 个)                                       │\n", len(optimized)))
+		sb.WriteString("└────────────────────────────────────────────────────────────────────────────────┘\n\n")
+
+		for _, sr := range optimized {
+			sb.WriteString(fmt.Sprintf("📦 %s.%s\n", sr.PkgPath, sr.Name))
+			sb.WriteString(strings.Repeat("─", 80) + "\n")
+			sb.WriteString(fmt.Sprintf("   📁 文件：%s\n", sr.File))
+			sb.WriteString(fmt.Sprintf("   📏 优化前：%d 字节  →  📏 优化后：%d 字节  →  💰 节省：%d 字节 (%.1f%%)\n",
+				sr.OrigSize, sr.OptSize, sr.Saved, float64(sr.Saved)/float64(sr.OrigSize)*100))
+			sb.WriteString("\n")
+
+			sb.WriteString("   优化前字段顺序:\n")
+			for i, field := range sr.OrigFields {
+				typeInfo := ""
+				sizeInfo := ""
+				if sr.FieldTypes != nil {
+					if t, ok := sr.FieldTypes[field]; ok {
+						typeInfo = t
+					}
+					if typeInfo != "" {
+						sizeInfo = fmt.Sprintf(" [%d 字节]", getFieldSize(typeInfo))
+					}
+				}
+				sb.WriteString(fmt.Sprintf("      %2d. %-20s %-15s%s\n", i+1, field, typeInfo, sizeInfo))
+			}
+
+			sb.WriteString("\n   优化后字段顺序:\n")
+			for i, field := range sr.OptFields {
+				typeInfo := ""
+				sizeInfo := ""
+				if sr.FieldTypes != nil {
+					if t, ok := sr.FieldTypes[field]; ok {
+						typeInfo = t
+					}
+					if typeInfo != "" {
+						sizeInfo = fmt.Sprintf(" [%d 字节]", getFieldSize(typeInfo))
+					}
+				}
+				arrow := ""
+				if i < len(sr.OrigFields) && sr.OrigFields[i] != field {
+					arrow = " ⬆️"
+				}
+				sb.WriteString(fmt.Sprintf("      %2d. %-20s %-15s%s%s\n", i+1, field, typeInfo, sizeInfo, arrow))
+			}
+			sb.WriteString("\n\n")
+		}
+	}
+
+	// 3. 异常跳过的结构体
+	if len(skipped) > 0 {
+		sb.WriteString("┌────────────────────────────────────────────────────────────────────────────────┐\n")
+		sb.WriteString(fmt.Sprintf("│  ⚠️  异常跳过的结构体 (共 %d 个)                                   │\n", len(skipped)))
+		sb.WriteString("└────────────────────────────────────────────────────────────────────────────────┘\n\n")
+
+		for _, sr := range skipped {
+			sb.WriteString(fmt.Sprintf("⏭️  %s.%s\n", sr.PkgPath, sr.Name))
+			sb.WriteString(fmt.Sprintf("   原因：%s\n\n", sr.SkipReason))
+		}
+	}
+
+	// 4. 未变化的结构体（详细模式下显示）
+	if r.level >= ReportLevelFull && len(unchanged) > 0 {
+		sb.WriteString("┌────────────────────────────────────────────────────────────────────────────────┐\n")
+		sb.WriteString(fmt.Sprintf("│  ✔️  未变化的结构体 (共 %d 个)                                     │\n", len(unchanged)))
+		sb.WriteString("└────────────────────────────────────────────────────────────────────────────────┘\n\n")
+
+		for _, sr := range unchanged {
+			sb.WriteString(fmt.Sprintf("✓ %s.%s [%d 字节]\n", sr.PkgPath, sr.Name, sr.OrigSize))
+		}
+		sb.WriteString("\n")
 	}
 
 	sb.WriteString("╔════════════════════════════════════════════════════════════════════════════════╗\n")
