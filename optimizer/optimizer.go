@@ -229,16 +229,22 @@ func (o *Optimizer) optimizeStruct(pkgPath, structName, filePath string, depth i
 		o.Log(3, "    文件路径：%s", filepath.Base(filePath))
 	}
 
-	// 查找结构体
-	st, filePath, err := o.analyzer.FindStructByName(pkgPath, structName)
+	// 加载包获取完整类型信息（用于优化阶段）
+	pkg, err := o.analyzer.LoadPackage(pkgPath)
+	if err != nil {
+		o.Log(2, "加载包失败：%v", err)
+		return o.createSkippedInfo(key, filePath, "加载包失败："+err.Error()), nil
+	}
 
+	// 在包中查找结构体
+	st, filePath, err := o.findStructInPackage(pkg, structName)
 	if err != nil {
 		o.Log(2, "查找结构体失败：%v", err)
 		return o.createSkippedInfo(key, filePath, "查找失败："+err.Error()), nil
 	}
 
-	// 创建字段分析器
-	o.fieldAnalyzer = NewFieldAnalyzer(o.analyzer.GetTypesInfo(), o.analyzer.GetFset())
+	// 创建字段分析器（使用完整的类型信息）
+	o.fieldAnalyzer = NewFieldAnalyzer(pkg.TypesInfo, pkg.Fset)
 
 	// 分析结构体
 	info := o.fieldAnalyzer.AnalyzeStruct(st, structName, pkgPath, filePath)
@@ -304,6 +310,16 @@ func (o *Optimizer) createSkippedInfo(key, filePath, reason string) *StructInfo 
 
 // addReport 添加报告
 func (o *Optimizer) addReport(info *StructInfo, skipReason string, depth int) {
+	// 构建字段类型映射
+	fieldTypes := make(map[string]string)
+	for _, f := range info.Fields {
+		key := f.Name
+		if key == "" {
+			key = f.TypeName // 匿名字段使用类型名
+		}
+		fieldTypes[key] = f.TypeName
+	}
+
 	report := &StructReport{
 		Name:       info.Name,
 		PkgPath:    info.PkgPath,
@@ -313,6 +329,7 @@ func (o *Optimizer) addReport(info *StructInfo, skipReason string, depth int) {
 		Saved:      info.OrigSize - info.OptSize,
 		OrigFields: info.OrigOrder,
 		OptFields:  info.OptOrder,
+		FieldTypes: fieldTypes,
 		Skipped:    info.Skipped,
 		SkipReason: skipReason,
 		Depth:      depth,

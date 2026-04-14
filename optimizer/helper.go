@@ -155,3 +155,49 @@ func (o *Optimizer) fieldOrderSame(orig, opt []string) bool {
 	}
 	return true
 }
+
+// getPackageDir 获取包所在的目录
+func (o *Optimizer) getPackageDir(pkgPath string) string {
+	if o.config.TargetDir != "" {
+		// Go Module 模式
+		relPath := strings.TrimPrefix(pkgPath, o.getModulePath())
+		relPath = strings.TrimPrefix(relPath, "/")
+		if relPath != "" {
+			return filepath.Join(o.config.TargetDir, relPath)
+		}
+		return o.config.TargetDir
+	}
+
+	// GOPATH 模式
+	gopath := o.config.GOPATH
+	if gopath == "" {
+		gopath = os.Getenv("GOPATH")
+	}
+	if gopath != "" {
+		return filepath.Join(gopath, "src", pkgPath)
+	}
+
+	return ""
+}
+
+// getModulePath 获取模块路径（从 go.mod）
+func (o *Optimizer) getModulePath() string {
+	if o.config.TargetDir == "" {
+		return ""
+	}
+
+	goModPath := filepath.Join(o.config.TargetDir, "go.mod")
+	data, err := os.ReadFile(goModPath)
+	if err != nil {
+		return ""
+	}
+
+	for _, line := range strings.Split(string(data), "\n") {
+		line = strings.TrimSpace(line)
+		if strings.HasPrefix(line, "module ") {
+			return strings.TrimSpace(strings.TrimPrefix(line, "module "))
+		}
+	}
+
+	return ""
+}
