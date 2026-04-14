@@ -276,12 +276,13 @@ func (o *Optimizer) findFilesWithStruct(dir, structName string) ([]string, error
 
 	for _, entry := range entries {
 		if entry.IsDir() {
-			// 检查是否应该跳过该目录
-			if o.shouldSkipDir(entry.Name()) {
+			// 检查是否应该跳过该目录（传递完整路径）
+			dirPath := filepath.Join(dir, entry.Name())
+			if o.shouldSkipDir(dirPath) {
 				continue
 			}
 			// 递归搜索子目录
-			subFiles, err := o.findFilesWithStruct(filepath.Join(dir, entry.Name()), structName)
+			subFiles, err := o.findFilesWithStruct(dirPath, structName)
 			if err == nil {
 				result = append(result, subFiles...)
 			}
@@ -309,10 +310,22 @@ func (o *Optimizer) findFilesWithStruct(dir, structName string) ([]string, error
 	return result, nil
 }
 
-// shouldSkipDir 检查是否应该跳过该目录
-func (o *Optimizer) shouldSkipDir(dirName string) bool {
+// shouldSkipDir 检查是否应该跳过该目录（支持路径匹配）
+func (o *Optimizer) shouldSkipDir(dirPath string) bool {
+	// 提取目录的 basename
+	baseName := filepath.Base(dirPath)
+	
 	for _, pattern := range o.config.SkipDirs {
-		if matched, _ := filepath.Match(pattern, dirName); matched {
+		// 匹配 basename（向后兼容）
+		if matched, _ := filepath.Match(pattern, baseName); matched {
+			return true
+		}
+		// 匹配完整路径
+		if matched, _ := filepath.Match(pattern, dirPath); matched {
+			return true
+		}
+		// 检查路径中是否包含该目录名
+		if strings.Contains(dirPath, pattern) || strings.Contains(baseName, pattern) {
 			return true
 		}
 	}
