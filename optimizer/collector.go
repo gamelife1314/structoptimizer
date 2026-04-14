@@ -326,22 +326,24 @@ func (o *Optimizer) findFilesWithStruct(dir, structName string) ([]string, error
 func (o *Optimizer) shouldSkipDir(dirPath string) bool {
 	// 提取目录的 basename
 	baseName := filepath.Base(dirPath)
-	
+
 	// 规范化路径分隔符（Windows 和 Unix 统一）
 	normalizedPath := filepath.ToSlash(dirPath)
-	
+
 	for _, pattern := range o.config.SkipDirs {
 		// 匹配 basename（向后兼容）
 		if matched, _ := filepath.Match(pattern, baseName); matched {
 			return true
 		}
-		// 检查路径中是否包含该目录名（作为路径组件）
+		// 检查路径中是否包含该目录名（作为完整路径组件）
 		// 例如：pattern="datas" 匹配 "/do/datas/ele/" 或 "/do/datas"
+		// 使用路径分割来确保匹配完整的目录名
 		normalizedPattern := filepath.ToSlash(pattern)
-		if strings.Contains(normalizedPath, "/"+normalizedPattern+"/") ||
-		   strings.Contains(normalizedPath, "/"+normalizedPattern) ||
-		   strings.HasSuffix(normalizedPath, "/"+normalizedPattern) {
-			return true
+		parts := strings.Split(normalizedPath, "/")
+		for _, part := range parts {
+			if matched, _ := filepath.Match(normalizedPattern, part); matched {
+				return true
+			}
 		}
 	}
 	return false

@@ -107,7 +107,6 @@ func TestShouldSkipFile(t *testing.T) {
 	cfg := &Config{
 		SkipDirs:   []string{"vendor", "generated_*"},
 		SkipFiles:  []string{"*_test.go", "*.pb.go"},
-		SkipPatterns: []string{"*_mock.go"},
 	}
 	_ = NewAnalyzer(cfg)
 
