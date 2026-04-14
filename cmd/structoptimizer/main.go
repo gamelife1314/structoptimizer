@@ -27,8 +27,10 @@ type Config struct {
 	Output        string
 	Verbose       int
 	SortSameSize  bool
-	TargetDir     string
 	ReportFormat  string
+	ProjectType   string // 项目类型：gomod 或 gopath
+	GOPATH        string // GOPATH 路径（可选）
+	TargetDir     string // 项目目录（位置参数）
 }
 
 // stringSlice 自定义字符串切片类型
@@ -66,6 +68,8 @@ func main() {
 		SkipByMethods: cfg.SkipByMethods,
 		SkipByNames:   cfg.SkipByNames,
 		Verbose:       cfg.Verbose,
+		ProjectType:   cfg.ProjectType,
+		GOPATH:        cfg.GOPATH,
 	}
 	anlz := analyzer.NewAnalyzer(analyzerCfg)
 
@@ -85,6 +89,8 @@ func main() {
 		Verbose:       cfg.Verbose,
 		SortSameSize:  cfg.SortSameSize,
 		Output:        cfg.Output,
+		ProjectType:   cfg.ProjectType,
+		GOPATH:        cfg.GOPATH,
 	}
 	opt := optimizer.NewOptimizer(optimizerCfg, anlz)
 
@@ -137,6 +143,8 @@ func parseFlags() *Config {
 	flag.StringVar(&cfg.Output, "output", "", "报告输出路径")
 	flag.StringVar(&cfg.ReportFormat, "format", "md", "报告格式（txt/md/html）")
 	flag.BoolVar(&cfg.SortSameSize, "sort-same-size", false, "大小相同时按字段大小重排")
+	flag.StringVar(&cfg.ProjectType, "prj-type", "gomod", "项目类型（gomod/gopath）")
+	flag.StringVar(&cfg.GOPATH, "gopath", "", "GOPATH 路径（GOPATH 项目可选）")
 
 	// 详细程度
 	v := flag.Bool("v", false, "显示详细信息")
@@ -144,14 +152,17 @@ func parseFlags() *Config {
 	vvv := flag.Bool("vvv", false, "显示跟踪信息")
 
 	flag.Usage = func() {
-		fmt.Fprintf(os.Stderr, "用法：%s [选项] [目录]\n\n", os.Args[0])
+		fmt.Fprintf(os.Stderr, "用法：%s [选项] <项目目录>\n\n", os.Args[0])
 		fmt.Fprintf(os.Stderr, "Golang 结构体对齐优化工具\n\n")
+		fmt.Fprintf(os.Stderr, "参数:\n")
+		fmt.Fprintf(os.Stderr, "  <项目目录>  Go Module 项目的根目录（包含 go.mod），GOPATH 项目可省略\n\n")
 		fmt.Fprintf(os.Stderr, "选项:\n")
 		flag.PrintDefaults()
 		fmt.Fprintf(os.Stderr, "\n示例:\n")
-		fmt.Fprintf(os.Stderr, "  %s -struct=writer/config.Context ./\n", os.Args[0])
-		fmt.Fprintf(os.Stderr, "  %s --package writer/config ./\n", os.Args[0])
-		fmt.Fprintf(os.Stderr, "  %s -struct=writer/config.Context --write --backup ./\n", os.Args[0])
+		fmt.Fprintf(os.Stderr, "  # Go Module 项目\n")
+		fmt.Fprintf(os.Stderr, "  %s -struct=pkg.Context /path/to/project\n", os.Args[0])
+		fmt.Fprintf(os.Stderr, "  # GOPATH 项目\n")
+		fmt.Fprintf(os.Stderr, "  %s -prj-type=gopath -struct=example.com/pkg.MyStruct\n", os.Args[0])
 	}
 
 	flag.Parse()
@@ -178,12 +189,15 @@ func parseFlags() *Config {
 	}
 	cfg.SkipByMethods = methods
 
-	// 目标目录
+	// 获取项目目录（位置参数）
 	if flag.NArg() > 0 {
 		cfg.TargetDir = flag.Arg(0)
-	} else {
+	}
+	// Go Module 项目如果未指定目录，使用当前目录
+	if cfg.ProjectType == "gomod" && cfg.TargetDir == "" {
 		cfg.TargetDir = "."
 	}
+	// GOPATH 项目不需要指定目录
 
 	return cfg
 }
@@ -205,6 +219,11 @@ func validateFlags(cfg *Config) error {
 		if !strings.Contains(cfg.Struct, ".") {
 			return fmt.Errorf("结构体名称格式错误，应为：包路径。结构体名")
 		}
+	}
+
+	// Go Module 项目需要指定目录
+	if cfg.ProjectType == "gomod" && cfg.TargetDir == "" {
+		return fmt.Errorf("Go Module 项目需要指定项目目录")
 	}
 
 	// 验证报告格式
