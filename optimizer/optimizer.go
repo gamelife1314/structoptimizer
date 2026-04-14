@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/gamelife1314/structoptimizer/analyzer"
 )
@@ -17,6 +18,8 @@ type Optimizer struct {
 	optimized   map[string]*StructInfo // 已优化的结构体（key: pkgPath.structName）
 	report      *Report
 	fieldAnalyzer *FieldAnalyzer
+	processing  map[string]bool // 正在处理中的结构体（用于检测循环引用）
+	maxDepth    int             // 最大递归深度
 }
 
 // Config 优化器配置
@@ -69,6 +72,8 @@ func NewOptimizer(cfg *Config, analyzer *analyzer.Analyzer) *Optimizer {
 		config:   cfg,
 		analyzer: analyzer,
 		optimized: make(map[string]*StructInfo),
+		processing: make(map[string]bool),
+		maxDepth: 50, // 最大递归深度 50 层
 		report: &Report{
 			StructReports: make([]*StructReport, 0),
 		},
@@ -131,11 +136,48 @@ func (o *Optimizer) Optimize() (*Report, error) {
 func (o *Optimizer) optimizeStruct(pkgPath, structName, filePath string, depth int) (*StructInfo, error) {
 	key := pkgPath + "." + structName
 
+	// 检查递归深度限制
+	if depth > o.maxDepth {
+		o.Log(2, "跳过结构体（超过最大深度 %d）：%s", o.maxDepth, key)
+		info := &StructInfo{
+			Name:       structName,
+			PkgPath:    pkgPath,
+			File:       filePath,
+			Skipped:    true,
+			SkipReason: fmt.Sprintf("超过最大递归深度 (%d)", o.maxDepth),
+		}
+		o.optimized[key] = info
+		o.addReport(info, info.SkipReason, depth)
+		return info, nil
+	}
+
 	// 检查是否已优化
 	if info, ok := o.optimized[key]; ok {
 		o.Log(3, "结构体已处理：%s", key)
 		return info, nil
 	}
+
+	// 检测循环引用：如果正在处理中，说明有循环引用
+	if o.processing[key] {
+		o.Log(2, "检测到循环引用，跳过：%s", key)
+		info := &StructInfo{
+			Name:       structName,
+			PkgPath:    pkgPath,
+			File:       filePath,
+			Skipped:    true,
+			SkipReason: "循环引用",
+		}
+		o.optimized[key] = info
+		o.addReport(info, "循环引用", depth)
+		return info, nil
+	}
+
+	// 标记为正在处理
+	o.processing[key] = true
+	defer func() {
+		// 处理完成后，移除标记
+		delete(o.processing, key)
+	}()
 
 	// 检查是否是 vendor 中的包或第三方包，如果是则跳过
 	if isVendorPackage(pkgPath) {
@@ -617,16 +659,17 @@ func (o *Optimizer) GetReport() *Report {
 // Log 日志输出
 func (o *Optimizer) Log(level int, format string, args ...interface{}) {
 	if level <= o.config.Verbose {
-		prefix := ""
+		timestamp := time.Now().Format("15:04:05.000")
+		levelPrefix := ""
 		switch level {
 		case 1:
-			prefix = "[INFO] "
+			levelPrefix = "[INFO] "
 		case 2:
-			prefix = "[DEBUG] "
+			levelPrefix = "[DEBUG] "
 		case 3:
-			prefix = "[TRACE] "
+			levelPrefix = "[TRACE] "
 		}
-		fmt.Printf(prefix+format+"\n", args...)
+		fmt.Printf("%s%s "+format+"\n", append([]interface{}{timestamp, levelPrefix}, args...)...)
 	}
 }
 
