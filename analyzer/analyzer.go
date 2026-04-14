@@ -1,6 +1,7 @@
 package analyzer
 
 import (
+	"bytes"
 	"fmt"
 	"go/ast"
 	"go/parser"
@@ -125,7 +126,21 @@ func (a *Analyzer) LoadPackage(pkgPath string) (*packages.Package, error) {
 }
 
 // FindStructByName 查找指定名称的结构体
+// 优化：先尝试快速查找（不加载包），失败后再加载包
 func (a *Analyzer) FindStructByName(pkgPath, structName string) (*types.Struct, string, error) {
+	// 快速路径：如果包已加载，直接从缓存查找
+	if pkg, ok := a.pkgMap[pkgPath]; ok {
+		return a.findStructInLoadedPackage(pkg, structName)
+	}
+
+	// 快速路径：直接解析文件查找结构体（不加载包）
+	st, filePath, err := a.findStructFast(pkgPath, structName)
+	if err == nil {
+		return st, filePath, nil
+	}
+
+	// 慢速路径：加载整个包再查找
+	a.Log(3, "快速查找失败，加载包：%s", pkgPath)
 	pkg, err := a.LoadPackage(pkgPath)
 	if err != nil {
 		return nil, "", err
@@ -134,23 +149,39 @@ func (a *Analyzer) FindStructByName(pkgPath, structName string) (*types.Struct, 
 	a.pkg = pkg
 	a.info = pkg.TypesInfo
 
+	return a.findStructInLoadedPackage(pkg, structName)
+}
+
+// findStructFast 快速查找结构体（不加载包，只解析文件）
+func (a *Analyzer) findStructFast(pkgPath, structName string) (*types.Struct, string, error) {
+	// 确定搜索目录
+	searchDir := a.getPackageDir(pkgPath)
+	if searchDir == "" {
+		return nil, "", fmt.Errorf("无法确定包目录：%s", pkgPath)
+	}
+
+	// 查找包含结构体的文件
+	files, err := a.findFilesWithStruct(searchDir, structName)
+	if err != nil {
+		return nil, "", err
+	}
+
+	// 解析找到的文件
+	for _, filePath := range files {
+		st, err := a.parseStructFromFile(filePath, structName)
+		if err == nil && st != nil {
+			return st, filePath, nil
+		}
+	}
+
+	return nil, "", fmt.Errorf("struct %s not found", structName)
+}
+
+// findStructInLoadedPackage 在已加载的包中查找结构体
+func (a *Analyzer) findStructInLoadedPackage(pkg *packages.Package, structName string) (*types.Struct, string, error) {
 	// 遍历包中的所有文件
 	for _, syntax := range pkg.Syntax {
 		filePath := pkg.Fset.File(syntax.Pos()).Name()
-
-		// 如果指定了源文件，只在该文件中查找
-		if a.config.SourceFile != "" {
-			// 检查文件路径是否匹配（使用 basename 匹配）
-			baseName := filepath.Base(filePath)
-			if baseName != a.config.SourceFile {
-				continue
-			}
-		}
-
-		// 检查是否应该跳过
-		if a.shouldSkipFile(filePath) {
-			continue
-		}
 
 		// 在文件中查找结构体
 		for _, decl := range syntax.Decls {
@@ -169,28 +200,191 @@ func (a *Analyzer) FindStructByName(pkgPath, structName string) (*types.Struct, 
 					continue
 				}
 
-				_, ok = typeSpec.Type.(*ast.StructType)
-				if !ok {
-					return nil, "", fmt.Errorf("%s is not a struct", structName)
+				// 查找对应的类型信息
+				obj := pkg.TypesInfo.ObjectOf(typeSpec.Name)
+				if obj == nil {
+					continue
 				}
 
-				// 获取类型信息
-				typ := pkg.TypesInfo.TypeOf(typeSpec.Type)
-				if typ == nil {
-					return nil, "", fmt.Errorf("failed to get type info for %s", structName)
+				if named, ok := obj.Type().(*types.Named); ok {
+					if st, ok := named.Underlying().(*types.Struct); ok {
+						return st, filePath, nil
+					}
 				}
-
-				st, ok := typ.Underlying().(*types.Struct)
-				if !ok {
-					return nil, "", fmt.Errorf("%s is not a struct", structName)
-				}
-
-				return st, filePath, nil
 			}
 		}
 	}
 
-	return nil, "", fmt.Errorf("struct %s not found in package %s", structName, pkgPath)
+	return nil, "", fmt.Errorf("struct %s not found in package", structName)
+}
+
+// getPackageDir 获取包所在的目录
+func (a *Analyzer) getPackageDir(pkgPath string) string {
+	if a.config.TargetDir != "" {
+		// Go Module 模式
+		relPath := strings.TrimPrefix(pkgPath, a.getModulePath())
+		relPath = strings.TrimPrefix(relPath, "/")
+		if relPath != "" {
+			return filepath.Join(a.config.TargetDir, relPath)
+		}
+		return a.config.TargetDir
+	}
+
+	// GOPATH 模式
+	gopath := a.config.GOPATH
+	if gopath == "" {
+		gopath = os.Getenv("GOPATH")
+	}
+	if gopath != "" {
+		return filepath.Join(gopath, "src", pkgPath)
+	}
+
+	return ""
+}
+
+// getModulePath 获取模块路径（从 go.mod）
+func (a *Analyzer) getModulePath() string {
+	if a.config.TargetDir == "" {
+		return ""
+	}
+
+	goModPath := filepath.Join(a.config.TargetDir, "go.mod")
+	data, err := os.ReadFile(goModPath)
+	if err != nil {
+		return ""
+	}
+
+	for _, line := range strings.Split(string(data), "\n") {
+		line = strings.TrimSpace(line)
+		if strings.HasPrefix(line, "module ") {
+			return strings.TrimSpace(strings.TrimPrefix(line, "module "))
+		}
+	}
+
+	return ""
+}
+
+// findFilesWithStruct 查找可能包含指定结构体的文件
+func (a *Analyzer) findFilesWithStruct(dir, structName string) ([]string, error) {
+	var result []string
+
+	// 读取目录
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return nil, err
+	}
+
+	for _, entry := range entries {
+		if entry.IsDir() {
+			continue
+		}
+
+		name := entry.Name()
+		if !strings.HasSuffix(name, ".go") {
+			continue
+		}
+
+		filePath := filepath.Join(dir, name)
+
+		// 快速检查文件是否包含结构体名称
+		if a.fileContainsStruct(filePath, structName) {
+			result = append(result, filePath)
+		}
+	}
+
+	return result, nil
+}
+
+// fileContainsStruct 快速检查文件是否包含结构体定义（不解析）
+func (a *Analyzer) fileContainsStruct(filePath, structName string) bool {
+	data, err := os.ReadFile(filePath)
+	if err != nil {
+		return false
+	}
+
+	// 简单字符串匹配：查找 "type StructName struct"
+	pattern := []byte("type " + structName + " struct")
+	return bytes.Contains(data, pattern)
+}
+
+// parseStructFromFile 从文件中解析结构体
+func (a *Analyzer) parseStructFromFile(filePath, structName string) (*types.Struct, error) {
+	// 解析文件
+	fset := token.NewFileSet()
+	f, err := parser.ParseFile(fset, filePath, nil, parser.ParseComments)
+	if err != nil {
+		return nil, err
+	}
+
+	// 查找结构体定义
+	for _, decl := range f.Decls {
+		genDecl, ok := decl.(*ast.GenDecl)
+		if !ok || genDecl.Tok != token.TYPE {
+			continue
+		}
+
+		for _, spec := range genDecl.Specs {
+			ts, ok := spec.(*ast.TypeSpec)
+			if !ok {
+				continue
+			}
+
+			if ts.Name.Name == structName {
+				if st, ok := ts.Type.(*ast.StructType); ok {
+					// 创建简化的结构体（用于收集依赖）
+					result, _ := a.createSimpleStruct(st, fset)
+					return result, nil
+				}
+			}
+		}
+	}
+
+	return nil, fmt.Errorf("struct %s not found in file %s", structName, filePath)
+}
+
+// createSimpleStruct 创建简化的结构体（用于快速收集依赖）
+func (a *Analyzer) createSimpleStruct(astStruct *ast.StructType, fset *token.FileSet) (*types.Struct, error) {
+	var fields []*types.Var
+
+	for _, field := range astStruct.Fields.List {
+		var fieldNames []*ast.Ident
+		if field.Names != nil {
+			fieldNames = field.Names
+		}
+
+		// 创建占位符类型
+		fieldType := types.Typ[types.Invalid]
+
+		for _, name := range fieldNames {
+			fieldVar := types.NewField(name.Pos(), nil, name.Name, fieldType, false)
+			fields = append(fields, fieldVar)
+		}
+
+		// 匿名字段
+		if len(fieldNames) == 0 {
+			typeName := a.extractTypeName(field.Type)
+			if typeName != "" {
+				fieldVar := types.NewField(field.Pos(), nil, typeName, fieldType, true)
+				fields = append(fields, fieldVar)
+			}
+		}
+	}
+
+	return types.NewStruct(fields, nil), nil
+}
+
+// extractTypeName 从 AST 类型表达式中提取类型名称
+func (a *Analyzer) extractTypeName(expr ast.Expr) string {
+	switch t := expr.(type) {
+	case *ast.Ident:
+		return t.Name
+	case *ast.StarExpr:
+		return a.extractTypeName(t.X)
+	case *ast.SelectorExpr:
+		return t.Sel.Name
+	default:
+		return ""
+	}
 }
 
 // FindAllStructs 查找包中的所有结构体
