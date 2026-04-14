@@ -84,7 +84,9 @@ func NewOptimizer(cfg *Config, analyzer *analyzer.Analyzer) *Optimizer {
 }
 
 // Optimize 执行优化（入口函数）
-// 两阶段处理：1) 收集所有需要处理的结构体；2) 并行处理
+// 两阶段处理：
+//   阶段 1: 只收集结构体位置信息（不加载包，不分析字段）
+//   阶段 2: 并行优化所有收集的结构体（按需加载包）
 func (o *Optimizer) Optimize() (*Report, error) {
 	o.Log(1, "开始优化...")
 	o.Log(1, "配置：最大深度=%d, 超时=%d 秒", o.maxDepth, o.config.Timeout)
@@ -109,9 +111,10 @@ func (o *Optimizer) Optimize() (*Report, error) {
 	}
 }
 
-// optimizeInternal 实际优化逻辑
+// optimizeInternal 实际优化逻辑（两阶段）
 func (o *Optimizer) optimizeInternal() (*Report, error) {
-	o.Log(1, "阶段 1/2: 收集结构体依赖...")
+	// ==================== 阶段 1: 收集结构体 ====================
+	o.Log(1, "阶段 1/2: 收集结构体（只解析文件，不加载包）...")
 	if o.config.StructName != "" {
 		// 优化指定结构体
 		pkgPath, structName := analyzer.ParseStructName(o.config.StructName)
@@ -134,7 +137,7 @@ func (o *Optimizer) optimizeInternal() (*Report, error) {
 		}
 	}
 
-	o.Log(1, "共收集到 %d 个结构体任务", len(o.structQueue))
+	o.Log(1, "阶段 1 完成：共收集到 %d 个结构体任务", len(o.structQueue))
 
 	// 打印收集到的结构体列表
 	o.Log(2, "收集到的结构体列表:")
@@ -143,10 +146,11 @@ func (o *Optimizer) optimizeInternal() (*Report, error) {
 			i+1, task.PkgPath, task.StructName, task.Level, filepath.Base(task.FilePath))
 	}
 
-	// 阶段 2: 按层级并行处理结构体优化
-	o.Log(1, "阶段 2/2: 并行优化结构体...")
+	// ==================== 阶段 2: 并行优化 ====================
+	o.Log(1, "阶段 2/2: 并行优化结构体（按需加载包）...")
 	o.processStructsParallel()
 
+	// 生成报告
 	o.report.TotalStructs = len(o.optimized)
 	o.report.OptimizedCount = 0
 	o.report.SkippedCount = 0
