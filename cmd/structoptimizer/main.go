@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bufio"
 	"flag"
 	"fmt"
 	"os"
@@ -52,6 +53,14 @@ func main() {
 	skipFiles := parseCommaList(cfg.SkipFiles)
 	skipByMethods := parseCommaList(cfg.SkipByMethods)
 	skipByNames := parseCommaList(cfg.SkipByNames)
+
+	// 如果使用了 -skip-by-methods，需要用户确认
+	if len(skipByMethods) > 0 {
+		if !confirmSkipByMethods() {
+			fmt.Println("已取消执行")
+			os.Exit(0)
+		}
+	}
 
 	// 创建分析器
 	analyzerCfg := &analyzer.Config{
@@ -257,4 +266,25 @@ func parseCommaList(s string) []string {
 		}
 	}
 	return result
+}
+
+// confirmSkipByMethods 确认是否使用 -skip-by-methods
+func confirmSkipByMethods() bool {
+	fmt.Println("⚠️  警告：-skip-by-methods 需要加载包并检查每个结构体的方法")
+	fmt.Println("   这会导致运行速度显著变慢，尤其是大型项目或嵌套层次深的结构体")
+	fmt.Println()
+	fmt.Println("   建议：")
+	fmt.Println("   - 小型项目（<100 个结构体）可以使用")
+	fmt.Println("   - 大型项目建议使用 -skip-by-names 代替（极快）")
+	fmt.Println()
+	fmt.Print("是否继续执行？[y/N]: ")
+	
+	reader := bufio.NewReader(os.Stdin)
+	input, err := reader.ReadString('\n')
+	if err != nil {
+		return false
+	}
+	
+	input = strings.TrimSpace(strings.ToLower(input))
+	return input == "y" || input == "yes"
 }
