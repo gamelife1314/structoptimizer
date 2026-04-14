@@ -10,19 +10,29 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 
 	"golang.org/x/tools/go/packages"
 )
 
-// Analyzer 分析器
+// Analyzer 分析器（参考 gopls 设计）
 type Analyzer struct {
 	config     *Config
 	fset       *token.FileSet
 	info       *types.Info
 	pkg        *packages.Package
-	pkgMap     map[string]*packages.Package // 已加载的包缓存
+	pkgMap     map[string]*packages.Package // 已加载的包缓存（线程安全）
 	loadedPkgs map[string]bool
+	mu         sync.RWMutex                 // 保护包缓存
+	structIndex map[string]*StructLocation // 结构体位置索引（包路径。结构体名 -> 文件路径）
+}
+
+// StructLocation 结构体位置信息
+type StructLocation struct {
+	PkgPath  string
+	FileName string
+	Loaded   bool // 是否已加载包
 }
 
 // Config 分析器配置
@@ -44,11 +54,163 @@ type Config struct {
 // NewAnalyzer 创建分析器
 func NewAnalyzer(cfg *Config) *Analyzer {
 	return &Analyzer{
-		config:     cfg,
-		fset:       token.NewFileSet(),
-		pkgMap:     make(map[string]*packages.Package),
-		loadedPkgs: make(map[string]bool),
+		config:      cfg,
+		fset:        token.NewFileSet(),
+		pkgMap:      make(map[string]*packages.Package),
+		loadedPkgs:  make(map[string]bool),
+		structIndex: make(map[string]*StructLocation),
 	}
+}
+
+// BuildStructIndex 构建结构体索引（参考 gopls 的文件扫描）
+// 快速扫描所有文件，建立结构体位置索引，不加载包
+func (a *Analyzer) BuildStructIndex() error {
+	a.Log(1, "构建结构体索引...")
+	start := time.Now()
+
+	// 确定搜索目录
+	searchDir := a.config.TargetDir
+	if searchDir == "" {
+		searchDir = "."
+	}
+
+	// 扫描所有 Go 文件
+	err := a.scanDirectory(searchDir)
+	if err != nil {
+		return err
+	}
+
+	a.Log(1, "索引构建完成：共 %d 个结构体，耗时 %v", len(a.structIndex), time.Since(start))
+	return nil
+}
+
+// scanDirectory 递归扫描目录
+func (a *Analyzer) scanDirectory(dir string) error {
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return err
+	}
+
+	for _, entry := range entries {
+		if entry.IsDir() {
+			// 跳过 vendor 和.git 等目录
+			name := entry.Name()
+			if name == "vendor" || name == ".git" || name == "node_modules" {
+				continue
+			}
+			if err := a.scanDirectory(filepath.Join(dir, name)); err != nil {
+				return err
+			}
+			continue
+		}
+
+		// 只处理.go 文件
+		name := entry.Name()
+		if !strings.HasSuffix(name, ".go") {
+			continue
+		}
+
+		filePath := filepath.Join(dir, name)
+		if err := a.scanFile(filePath); err != nil {
+			a.Log(2, "扫描文件失败：%v", err)
+			continue // 继续处理其他文件
+		}
+	}
+
+	return nil
+}
+
+// scanFile 扫描单个文件，提取结构体定义
+func (a *Analyzer) scanFile(filePath string) error {
+	// 快速检查：文件是否包含 "type.*struct"
+	data, err := os.ReadFile(filePath)
+	if err != nil {
+		return err
+	}
+
+	if !bytes.Contains(data, []byte("type ")) || !bytes.Contains(data, []byte(" struct")) {
+		return nil // 文件不包含结构体定义
+	}
+
+	// 解析文件
+	fset := token.NewFileSet()
+	f, err := parser.ParseFile(fset, filePath, nil, parser.ParseComments)
+	if err != nil {
+		return err
+	}
+
+	// 提取包路径
+	pkgPath := a.extractPkgPath(f, filePath)
+
+	// 提取结构体
+	for _, decl := range f.Decls {
+		genDecl, ok := decl.(*ast.GenDecl)
+		if !ok || genDecl.Tok != token.TYPE {
+			continue
+		}
+
+		for _, spec := range genDecl.Specs {
+			ts, ok := spec.(*ast.TypeSpec)
+			if !ok {
+				continue
+			}
+
+			if _, ok := ts.Type.(*ast.StructType); ok {
+				key := pkgPath + "." + ts.Name.Name
+				a.structIndex[key] = &StructLocation{
+					PkgPath:  pkgPath,
+					FileName: filePath,
+					Loaded:   false,
+				}
+			}
+		}
+	}
+
+	return nil
+}
+
+// extractPkgPath 从文件中提取包路径
+func (a *Analyzer) extractPkgPath(f *ast.File, filePath string) string {
+	// 尝试从 import 推断完整包路径
+	if a.config.TargetDir != "" {
+		// Go Module 模式：从文件路径推断
+		relPath, err := filepath.Rel(a.config.TargetDir, filepath.Dir(filePath))
+		if err == nil && relPath != "." {
+			modulePath := a.getModulePath()
+			if modulePath != "" {
+				return modulePath + "/" + filepath.ToSlash(relPath)
+			}
+		}
+	}
+
+	// 使用包名作为后备
+	if f.Name != nil {
+		return f.Name.Name
+	}
+
+	return "unknown"
+}
+
+// getModulePath 获取模块路径
+func (a *Analyzer) getModulePath() string {
+	if a.config.TargetDir == "" {
+		return ""
+	}
+
+	goModPath := filepath.Join(a.config.TargetDir, "go.mod")
+	data, err := os.ReadFile(goModPath)
+	if err != nil {
+		return ""
+	}
+
+	for _, line := range strings.Split(string(data), "\n") {
+		line = strings.TrimSpace(line)
+		if strings.HasPrefix(line, "module ") {
+			return strings.TrimSpace(strings.TrimPrefix(line, "module "))
+		}
+	}
+
+	return ""
 }
 
 // LoadPackage 加载包
@@ -237,28 +399,6 @@ func (a *Analyzer) getPackageDir(pkgPath string) string {
 	}
 	if gopath != "" {
 		return filepath.Join(gopath, "src", pkgPath)
-	}
-
-	return ""
-}
-
-// getModulePath 获取模块路径（从 go.mod）
-func (a *Analyzer) getModulePath() string {
-	if a.config.TargetDir == "" {
-		return ""
-	}
-
-	goModPath := filepath.Join(a.config.TargetDir, "go.mod")
-	data, err := os.ReadFile(goModPath)
-	if err != nil {
-		return ""
-	}
-
-	for _, line := range strings.Split(string(data), "\n") {
-		line = strings.TrimSpace(line)
-		if strings.HasPrefix(line, "module ") {
-			return strings.TrimSpace(strings.TrimPrefix(line, "module "))
-		}
 	}
 
 	return ""
@@ -621,4 +761,97 @@ func (a *Analyzer) GetTypesInfo() *types.Info {
 // GetFset 获取文件集
 func (a *Analyzer) GetFset() *token.FileSet {
 	return a.fset
+}
+
+// LoadPackages 批量加载包（参考 gopls 的批量加载优化）
+func (a *Analyzer) LoadPackages(pkgPaths []string) error {
+	if len(pkgPaths) == 0 {
+		return nil
+	}
+
+	a.Log(1, "批量加载 %d 个包...", len(pkgPaths))
+	start := time.Now()
+
+	// 过滤已加载的包
+	var toLoad []string
+	for _, pkgPath := range pkgPaths {
+		a.mu.RLock()
+		_, cached := a.pkgMap[pkgPath]
+		loaded := a.loadedPkgs[pkgPath]
+		a.mu.RUnlock()
+
+		if !cached && !loaded {
+			toLoad = append(toLoad, pkgPath)
+		}
+	}
+
+	if len(toLoad) == 0 {
+		a.Log(2, "所有包已缓存")
+		return nil
+	}
+
+	// 根据项目类型构建环境
+	isGoMod := a.config.ProjectType != "gopath"
+	env := os.Environ()
+	var loadDir string
+	if !isGoMod {
+		env = append(env, "GO111MODULE=off")
+		gopath := a.config.GOPATH
+		if gopath == "" {
+			gopath = os.Getenv("GOPATH")
+		}
+		if gopath != "" {
+			env = append(env, "GOPATH="+gopath)
+		}
+		loadDir = ""
+	} else {
+		loadDir = a.config.TargetDir
+	}
+
+	// 构建配置
+	cfg := &packages.Config{
+		Mode: packages.NeedName | packages.NeedFiles | packages.NeedCompiledGoFiles |
+			packages.NeedImports | packages.NeedTypes | packages.NeedTypesInfo | packages.NeedSyntax,
+		Env:  env,
+		Dir:  loadDir,
+	}
+
+	// 批量加载
+	pkgs, err := packages.Load(cfg, toLoad...)
+	if err != nil {
+		return err
+	}
+
+	// 缓存结果
+	a.mu.Lock()
+	for _, pkg := range pkgs {
+		if len(pkg.Errors) > 0 {
+			a.Log(2, "包 %s 有错误：%v", pkg.PkgPath, pkg.Errors)
+		}
+		a.pkgMap[pkg.PkgPath] = pkg
+		a.loadedPkgs[pkg.PkgPath] = true
+	}
+	a.mu.Unlock()
+
+	a.Log(1, "批量加载完成：加载 %d 个包，耗时 %v", len(pkgs), time.Since(start))
+	return nil
+}
+
+// GetStructIndex 获取结构体索引
+func (a *Analyzer) GetStructIndex() map[string]*StructLocation {
+	return a.structIndex
+}
+
+// FindStructByIndex 通过索引查找结构体（不需要加载包）
+func (a *Analyzer) FindStructByIndex(pkgPath, structName string) (*StructLocation, error) {
+	key := pkgPath + "." + structName
+	a.mu.RLock()
+	loc, ok := a.structIndex[key]
+	a.mu.RUnlock()
+
+	if !ok {
+		return nil, fmt.Errorf("struct %s not found in index", key)
+	}
+
+	return loc, nil
 }
