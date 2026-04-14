@@ -9,6 +9,9 @@ import (
 	"github.com/gamelife1314/structoptimizer/optimizer"
 )
 
+// 版本信息
+const Version = "1.2.0"
+
 // Generate 生成报告
 func (r *Reporter) Generate(report *optimizer.Report) error {
 	var content string
@@ -45,6 +48,7 @@ func (r *Reporter) GenerateTXT(report *optimizer.Report) (string, error) {
 	sb.WriteString("\n")
 	sb.WriteString("╔════════════════════════════════════════════════════════════════════════════════╗\n")
 	sb.WriteString("║                     StructOptimizer 优化报告                                   ║\n")
+	sb.WriteString(fmt.Sprintf("║  版本 %-75s║\n", "v"+Version))
 	sb.WriteString("╚════════════════════════════════════════════════════════════════════════════════╝\n")
 	sb.WriteString(fmt.Sprintf("生成时间：%s\n\n", time.Now().Format("2006-01-02 15:04:05")))
 

@@ -18,7 +18,7 @@ func (r *Reporter) GenerateHTML(report *optimizer.Report) (string, error) {
 	sb.WriteString("<head>\n")
 	sb.WriteString("    <meta charset=\"UTF-8\">\n")
 	sb.WriteString("    <meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\">\n")
-	sb.WriteString("    <title>StructOptimizer 优化报告</title>\n")
+	sb.WriteString(fmt.Sprintf("    <title>StructOptimizer 优化报告 v%s</title>\n", Version))
 	sb.WriteString("    <style>\n")
 	sb.WriteString("        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 1200px; margin: 0 auto; padding: 20px; background: #f5f5f5; }\n")
 	sb.WriteString("        .container { background: white; border-radius: 8px; padding: 30px; box-shadow: 0 2px 8px rgba(0,0,0,0.1); }\n")
@@ -46,7 +46,7 @@ func (r *Reporter) GenerateHTML(report *optimizer.Report) (string, error) {
 	sb.WriteString("<body>\n")
 	sb.WriteString("    <div class=\"container\">\n")
 
-	sb.WriteString(fmt.Sprintf("        <h1>🚀 StructOptimizer 优化报告</h1>\n"))
+	sb.WriteString(fmt.Sprintf("        <h1>🚀 StructOptimizer 优化报告 <small>v%s</small></h1>\n", Version))
 	sb.WriteString(fmt.Sprintf("        <p>生成时间：%s</p>\n\n", time.Now().Format("2006-01-02 15:04:05")))
 
 	// 1. 优化总览
