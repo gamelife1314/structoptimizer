@@ -42,31 +42,13 @@ func (o *Optimizer) shouldSkip(info *StructInfo, st *types.Struct, key string) s
 		}
 	}
 
-	// 检查是否通过方法指定跳过（不常用，性能较差）
-	// 注意：-skip-by-methods 需要加载包来检查方法，性能较差
-	// 建议优先使用 -skip-by-names
-	if len(o.config.SkipByMethods) > 0 && o.config.Verbose >= 3 {
-		// 只在详细模式下检查方法，避免性能问题
-		for _, methodName := range o.config.SkipByMethods {
-			if o.hasMethodSimple(info, methodName) {
-				return "通过方法指定跳过：" + methodName
-			}
-		}
-	}
+	// 检查是否通过方法指定跳过
+	// 注意：-skip-by-methods 功能已弃用
+	// 原因：检查方法需要加载包，性能极差
+	// 建议：使用 -skip-by-names 直接跳过结构体名
+	// 例如：-skip-by-names='BadStruct,DeprecatedStruct'
 
 	return ""
-}
-
-// hasMethodSimple 简单检查方法名（不加载包，只检查字段类型）
-func (o *Optimizer) hasMethodSimple(info *StructInfo, methodName string) bool {
-	// 简化实现：只检查方法名是否匹配字段类型名
-	// 完整检查需要加载包，性能较差
-	for _, field := range info.Fields {
-		if field.TypeName == methodName {
-			return true
-		}
-	}
-	return false
 }
 
 // matchStructName 匹配结构体名称（支持通配符）
