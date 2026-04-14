@@ -153,7 +153,7 @@ func parseFlags() *Config {
 	flag.StringVar(&cfg.GOPATH, "gopath", "", "GOPATH 路径（GOPATH 项目可选）")
 	flag.IntVar(&cfg.MaxDepth, "max-depth", 50, "最大递归深度（默认 50）")
 	flag.IntVar(&cfg.Timeout, "timeout", 300, "超时时间（秒，默认 300）")
-	flag.StringVar(&cfg.PkgScope, "pkg-scope", "", "包范围限制（只分析此包内的结构体，跨包引用不分析）")
+	flag.StringVar(&cfg.PkgScope, "pkg-scope", "", "包范围限制（GOPATH 模式必填，只分析此包内的结构体）")
 
 	// 详细程度
 	v := flag.Bool("v", false, "显示详细信息")
@@ -235,6 +235,11 @@ func validateFlags(cfg *Config) error {
 	// Go Module 项目需要指定目录
 	if cfg.ProjectType == "gomod" && cfg.TargetDir == "" {
 		return fmt.Errorf("Go Module 项目需要指定项目目录")
+	}
+
+	// GOPATH 模式下必须指定包范围
+	if cfg.ProjectType == "gopath" && cfg.PkgScope == "" {
+		return fmt.Errorf("GOPATH 模式下必须指定 -pkg-scope 参数，用于限制分析范围")
 	}
 
 	// 验证报告格式
