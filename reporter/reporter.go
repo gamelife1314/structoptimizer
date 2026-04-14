@@ -10,7 +10,7 @@ import (
 )
 
 // 版本信息
-const Version = "1.2.0"
+const Version = "1.3.0"
 
 // Generate 生成报告
 func (r *Reporter) Generate(report *optimizer.Report) error {
