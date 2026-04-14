@@ -20,11 +20,12 @@ type Optimizer struct {
 	maxDepth      int
 
 	// 并行处理相关
-	structQueue     []*StructTask
-	structByLevel   map[int][]*StructTask
-	collecting      map[string]bool
-	mu              sync.Mutex
-	workerLimit     int
+	structQueue      []*StructTask
+	structByLevel    map[int][]*StructTask
+	structByPkgLevel map[int]map[string][]*StructTask // 按层级和包分组
+	collecting       map[string]bool
+	mu               sync.Mutex
+	workerLimit      int
 
 	// 缓存优化
 	pkgCache      map[string]*packages.Package
