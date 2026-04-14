@@ -107,7 +107,16 @@ func main() {
 	}
 
 	// 生成报告
-	rep := reporter.NewReporter(cfg.ReportFormat, cfg.Output)
+	var reportLevel reporter.ReportLevel
+	if cfg.Verbose >= 3 {
+		reportLevel = reporter.ReportLevelFull
+	} else if cfg.Verbose >= 2 {
+		reportLevel = reporter.ReportLevelChanged
+	} else {
+		reportLevel = reporter.ReportLevelSummary
+	}
+
+	rep := reporter.NewReporter(cfg.ReportFormat, cfg.Output, reportLevel)
 	if err := rep.Generate(report); err != nil {
 		fmt.Fprintf(os.Stderr, "生成报告失败：%v\n", err)
 		os.Exit(1)
