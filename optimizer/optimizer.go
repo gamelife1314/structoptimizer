@@ -280,47 +280,64 @@ func (o *Optimizer) optimizeStruct(pkgPath, structName, filePath string, depth i
 		o.Log(3, "    文件路径：%s", filepath.Base(filePath))
 	}
 
-	// 加载包获取完整类型信息（用于优化阶段）
-	pkg, err := o.analyzer.LoadPackage(pkgPath)
-	if err != nil {
-		o.Log(1, "警告：加载包失败，跳过：%s (%v)", key, err)
-		info := &StructInfo{
-			Name:       structName,
-			PkgPath:    pkgPath,
-			File:       filePath,
-			Skipped:    true,
-			SkipReason: "加载包失败：" + err.Error(),
+	// 优化阶段：优先解析文件，不加载包
+	// 只有文件解析失败时才加载包
+	var info *StructInfo
+	var err error
+	var st *types.Struct
+
+	// 尝试只解析文件（快速路径）
+	if filePath != "" {
+		info, st, err = analyzeStructFromFile(filePath, structName, pkgPath)
+		if err != nil {
+			o.Log(3, "文件解析失败，加载包：%v", err)
 		}
-		o.mu.Lock()
-		o.optimized[key] = info
-		o.mu.Unlock()
-		o.addReport(info, info.SkipReason, depth)
-		return info, nil
 	}
 
-	// 在包中查找结构体
-	st, filePath, err := o.findStructInPackage(pkg, structName)
-	if err != nil {
-		o.Log(1, "警告：查找结构体失败，跳过：%s (%v)", key, err)
-		info := &StructInfo{
-			Name:       structName,
-			PkgPath:    pkgPath,
-			File:       filePath,
-			Skipped:    true,
-			SkipReason: "查找失败：" + err.Error(),
+	// 文件解析失败，加载包（慢速路径）
+	if info == nil {
+		o.Log(2, "加载包获取类型信息：%s", pkgPath)
+		pkg, err := o.analyzer.LoadPackage(pkgPath)
+		if err != nil {
+			o.Log(1, "警告：加载包失败，跳过：%s (%v)", key, err)
+			info = &StructInfo{
+				Name:       structName,
+				PkgPath:    pkgPath,
+				File:       filePath,
+				Skipped:    true,
+				SkipReason: "加载包失败：" + err.Error(),
+			}
+			o.mu.Lock()
+			o.optimized[key] = info
+			o.mu.Unlock()
+			o.addReport(info, info.SkipReason, depth)
+			return info, nil
 		}
-		o.mu.Lock()
-		o.optimized[key] = info
-		o.mu.Unlock()
-		o.addReport(info, info.SkipReason, depth)
-		return info, nil
+
+		// 在包中查找结构体
+		st, filePath, err = o.findStructInPackage(pkg, structName)
+		if err != nil {
+			o.Log(1, "警告：查找结构体失败，跳过：%s (%v)", key, err)
+			info = &StructInfo{
+				Name:       structName,
+				PkgPath:    pkgPath,
+				File:       filePath,
+				Skipped:    true,
+				SkipReason: "查找失败：" + err.Error(),
+			}
+			o.mu.Lock()
+			o.optimized[key] = info
+			o.mu.Unlock()
+			o.addReport(info, info.SkipReason, depth)
+			return info, nil
+		}
+
+		// 创建字段分析器（使用完整的类型信息）
+		o.fieldAnalyzer = NewFieldAnalyzer(pkg.TypesInfo, pkg.Fset)
+
+		// 分析结构体
+		info = o.fieldAnalyzer.AnalyzeStruct(st, structName, pkgPath, filePath)
 	}
-
-	// 创建字段分析器（使用完整的类型信息）
-	o.fieldAnalyzer = NewFieldAnalyzer(pkg.TypesInfo, pkg.Fset)
-
-	// 分析结构体
-	info := o.fieldAnalyzer.AnalyzeStruct(st, structName, pkgPath, filePath)
 
 	// 检查是否应该跳过
 	if skipReason := o.shouldSkip(info, st, key); skipReason != "" {

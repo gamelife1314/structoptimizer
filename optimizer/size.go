@@ -4,6 +4,35 @@ import (
 	"go/types"
 )
 
+// CalcStructSizeFromFields 从字段信息计算结构体大小
+func CalcStructSizeFromFields(fields []FieldInfo) int64 {
+	if len(fields) == 0 {
+		return 0
+	}
+
+	var offset int64 = 0
+	var maxAlign int64 = 1
+
+	for _, field := range fields {
+		// 对齐
+		if offset%field.Align != 0 {
+			offset += field.Align - (offset % field.Align)
+		}
+
+		offset += field.Size
+		if field.Align > maxAlign {
+			maxAlign = field.Align
+		}
+	}
+
+	// 末尾填充
+	if offset%maxAlign != 0 {
+		offset += maxAlign - (offset % maxAlign)
+	}
+
+	return offset
+}
+
 // CalcStructSize 计算结构体大小
 func CalcStructSize(st *types.Struct) int64 {
 	if st == nil {
