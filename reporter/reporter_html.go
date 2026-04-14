@@ -62,6 +62,9 @@ func (r *Reporter) GenerateHTML(report *optimizer.Report) (string, error) {
 	} else {
 		sb.WriteString("                <tr><td>💾 节省内存</td><td><strong>0 字节</strong></td></tr>\n")
 	}
+	if report.RootStruct != "" {
+		sb.WriteString(fmt.Sprintf("                <tr><td>🎯 主结构体</td><td><code>%s</code></td></tr>\n", html.EscapeString(report.RootStruct)))
+	}
 	sb.WriteString("            </table>\n")
 	sb.WriteString("        </div>\n\n")
 

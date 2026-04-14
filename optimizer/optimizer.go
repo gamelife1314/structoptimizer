@@ -129,6 +129,9 @@ func (o *Optimizer) optimizeInternal() (*Report, error) {
 			return nil, fmt.Errorf("invalid struct name format: %s", o.config.StructName)
 		}
 
+		// 设置主结构体
+		o.report.RootStruct = o.config.StructName
+
 		o.Log(1, "收集结构体：%s.%s", pkgPath, structName)
 		o.collectStructs(pkgPath, structName, "", 0, 0)
 	} else if o.config.Package != "" {

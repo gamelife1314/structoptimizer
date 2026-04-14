@@ -104,4 +104,5 @@ type Report struct {
 	SkippedCount   int
 	TotalSaved     int64
 	StructReports  []*StructReport
+	RootStruct     string // 主结构体名称（-struct 模式）
 }

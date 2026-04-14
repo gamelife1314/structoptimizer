@@ -56,6 +56,9 @@ func (r *Reporter) GenerateTXT(report *optimizer.Report) (string, error) {
 	sb.WriteString(fmt.Sprintf("│  ✅ 优化的结构体：%-61d│\n", report.OptimizedCount))
 	sb.WriteString(fmt.Sprintf("│  ⏭️  跳过的结构体：%-61d│\n", report.SkippedCount))
 	sb.WriteString(fmt.Sprintf("│  💾 节省内存：     %-61d 字节│\n", report.TotalSaved))
+	if report.RootStruct != "" {
+		sb.WriteString(fmt.Sprintf("│  🎯 主结构体：     %-61s│\n", report.RootStruct))
+	}
 	sb.WriteString("└────────────────────────────────────────────────────────────────────────────────┘\n\n")
 
 	// 分类结构体

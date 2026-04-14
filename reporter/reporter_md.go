@@ -28,6 +28,9 @@ func (r *Reporter) GenerateMD(report *optimizer.Report) (string, error) {
 	} else {
 		sb.WriteString("| 💾 节省内存 | 0 字节 |\n")
 	}
+	if report.RootStruct != "" {
+		sb.WriteString(fmt.Sprintf("| 🎯 主结构体 | `%s` |\n", report.RootStruct))
+	}
 	sb.WriteString("\n")
 
 	// 分类结构体
