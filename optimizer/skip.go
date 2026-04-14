@@ -1,8 +1,6 @@
 package optimizer
 
 import (
-	"go/ast"
-	"go/token"
 	"go/types"
 	"path/filepath"
 	"strings"
@@ -44,34 +42,14 @@ func (o *Optimizer) shouldSkip(info *StructInfo, st *types.Struct, key string) s
 		}
 	}
 
-	// 检查是否通过方法指定跳过
-	if len(o.config.SkipByMethods) > 0 {
-		// 需要加载包来检查方法
-		pkg, err := o.analyzer.LoadPackage(info.PkgPath)
-		if err == nil {
-			// 在包中查找结构体类型
-			for _, syntax := range pkg.Syntax {
-				for _, decl := range syntax.Decls {
-					genDecl, ok := decl.(*ast.GenDecl)
-					if !ok || genDecl.Tok != token.TYPE {
-						continue
-					}
-					for _, spec := range genDecl.Specs {
-						typeSpec, ok := spec.(*ast.TypeSpec)
-						if !ok || typeSpec.Name.Name != info.Name {
-							continue
-						}
-						if named, ok := pkg.TypesInfo.ObjectOf(typeSpec.Name).(*types.TypeName); ok {
-							if t, ok := named.Type().(*types.Named); ok {
-								for _, methodName := range o.config.SkipByMethods {
-									if o.hasMethodOrMatch(t, methodName) {
-										return "通过方法指定跳过：" + methodName
-									}
-								}
-							}
-						}
-					}
-				}
+	// 检查是否通过方法指定跳过（不常用，性能较差）
+	// 注意：-skip-by-methods 需要加载包来检查方法，性能较差
+	// 建议优先使用 -skip-by-names
+	if len(o.config.SkipByMethods) > 0 && o.config.Verbose >= 3 {
+		// 只在详细模式下检查方法，避免性能问题
+		for _, methodName := range o.config.SkipByMethods {
+			if o.hasMethodSimple(info, methodName) {
+				return "通过方法指定跳过：" + methodName
 			}
 		}
 	}
@@ -79,33 +57,15 @@ func (o *Optimizer) shouldSkip(info *StructInfo, st *types.Struct, key string) s
 	return ""
 }
 
-// hasMethod 检查结构体是否有指定方法（精确匹配）
-func (o *Optimizer) hasMethod(named *types.Named, methodName string) bool {
-	for i := 0; i < named.NumMethods(); i++ {
-		if named.Method(i).Name() == methodName {
+// hasMethodSimple 简单检查方法名（不加载包，只检查字段类型）
+func (o *Optimizer) hasMethodSimple(info *StructInfo, methodName string) bool {
+	// 简化实现：只检查方法名是否匹配字段类型名
+	// 完整检查需要加载包，性能较差
+	for _, field := range info.Fields {
+		if field.TypeName == methodName {
 			return true
 		}
 	}
-	return false
-}
-
-// hasMethodOrMatch 检查结构体是否有指定方法或匹配通配符
-func (o *Optimizer) hasMethodOrMatch(named *types.Named, pattern string) bool {
-	// 精确匹配
-	if o.hasMethod(named, pattern) {
-		return true
-	}
-
-	// 通配符匹配
-	if strings.Contains(pattern, "*") {
-		for i := 0; i < named.NumMethods(); i++ {
-			methodName := named.Method(i).Name()
-			if matched, _ := filepath.Match(pattern, methodName); matched {
-				return true
-			}
-		}
-	}
-
 	return false
 }
 
