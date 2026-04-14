@@ -33,6 +33,7 @@ type Config struct {
 	TargetDir     string // 项目目录（位置参数）
 	MaxDepth      int    // 最大递归深度
 	Timeout       int    // 超时时间（秒）
+	PkgScope      string // 包范围限制
 }
 
 // stringSlice 自定义字符串切片类型
@@ -95,6 +96,7 @@ func main() {
 		GOPATH:        cfg.GOPATH,
 		MaxDepth:      cfg.MaxDepth,
 		Timeout:       cfg.Timeout,
+		PkgScope:      cfg.PkgScope,
 	}
 	opt := optimizer.NewOptimizer(optimizerCfg, anlz)
 
@@ -151,6 +153,7 @@ func parseFlags() *Config {
 	flag.StringVar(&cfg.GOPATH, "gopath", "", "GOPATH 路径（GOPATH 项目可选）")
 	flag.IntVar(&cfg.MaxDepth, "max-depth", 50, "最大递归深度（默认 50）")
 	flag.IntVar(&cfg.Timeout, "timeout", 300, "超时时间（秒，默认 300）")
+	flag.StringVar(&cfg.PkgScope, "pkg-scope", "", "包范围限制（只分析此包内的结构体，跨包引用不分析）")
 
 	// 详细程度
 	v := flag.Bool("v", false, "显示详细信息")

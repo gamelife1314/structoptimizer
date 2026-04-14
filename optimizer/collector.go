@@ -103,6 +103,12 @@ func (o *Optimizer) collectStructs(pkgPath, structName, filePath string, depth, 
 			continue
 		}
 
+		// 检查包范围限制
+		if o.config.PkgScope != "" && field.PkgPath != o.config.PkgScope {
+			o.Log(3, "跳过跨包字段：%s (包：%s, 范围：%s)", field.Name, field.PkgPath, o.config.PkgScope)
+			continue
+		}
+
 		if o.isProjectPackage(field.PkgPath) {
 			// 跨包时不传递 filePath，让 parseStructFromFileOnly 自己查找
 			var nextFilePath string
