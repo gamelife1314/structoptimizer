@@ -9,6 +9,33 @@ import (
 	"github.com/gamelife1314/structoptimizer/optimizer"
 )
 
+// getFieldSize 根据类型名称估算字段大小
+func getFieldSize(typeName string) int64 {
+	switch typeName {
+	case "bool", "byte", "int8", "uint8":
+		return 1
+	case "int16", "uint16":
+		return 2
+	case "int32", "uint32", "rune", "float32":
+		return 4
+	case "int64", "uint64", "float64", "int", "uint", "uintptr":
+		return 8
+	case "string":
+		return 16
+	default:
+		if strings.HasPrefix(typeName, "[]") {
+			return 24 // slice 头
+		}
+		if strings.HasPrefix(typeName, "map[") {
+			return 8 // map 头
+		}
+		if strings.HasPrefix(typeName, "*") {
+			return 8 // 指针
+		}
+		return 8 // 默认
+	}
+}
+
 // Reporter 报告生成器
 type Reporter struct {
 	format string // txt, md, html
@@ -67,72 +94,84 @@ func (r *Reporter) GenerateTXT(report *optimizer.Report) (string, error) {
 	sb.WriteString("╚════════════════════════════════════════════════════════════════════════════════╝\n")
 	sb.WriteString(fmt.Sprintf("生成时间：%s\n\n", time.Now().Format("2006-01-02 15:04:05")))
 
-	// 摘要
+	// 摘要 - 突出显示优化结果
 	sb.WriteString("┌────────────────────────────────────────────────────────────────────────────────┐\n")
-	sb.WriteString("│  📊 摘要                                                                       │\n")
+	sb.WriteString("│  📊 优化结果摘要                                                               │\n")
 	sb.WriteString("├────────────────────────────────────────────────────────────────────────────────┤\n")
-	sb.WriteString(fmt.Sprintf("│  总结构体数：   %-64d│\n", report.TotalStructs))
-	sb.WriteString(fmt.Sprintf("│  ✅ 已优化：     %-64d│\n", report.OptimizedCount))
-	sb.WriteString(fmt.Sprintf("│  ⏭️  跳过：       %-64d│\n", report.SkippedCount))
-	sb.WriteString(fmt.Sprintf("│  💾 节省内存：   %-64d│\n", report.TotalSaved))
+	sb.WriteString(fmt.Sprintf("│  处理结构体总数：%-61d│\n", report.TotalStructs))
+	sb.WriteString(fmt.Sprintf("│  ✅ 优化的结构体：%-61d│\n", report.OptimizedCount))
+	sb.WriteString(fmt.Sprintf("│  ⏭️  跳过的结构体：%-61d│\n", report.SkippedCount))
+	sb.WriteString(fmt.Sprintf("│  💾 节省内存：     %-61d 字节│\n", report.TotalSaved))
 	sb.WriteString("└────────────────────────────────────────────────────────────────────────────────┘\n\n")
 
-	// 优化详情
-	sb.WriteString("┌────────────────────────────────────────────────────────────────────────────────┐\n")
-	sb.WriteString("│  🔧 优化详情                                                                   │\n")
-	sb.WriteString("└────────────────────────────────────────────────────────────────────────────────┘\n\n")
-
+	// 只呈现优化的结构体
 	optimizedCount := 0
 	for _, sr := range report.StructReports {
-		if sr.Skipped {
+		if sr.Skipped || sr.Saved <= 0 {
 			continue
 		}
 		optimizedCount++
+	}
+
+	if optimizedCount == 0 {
+		sb.WriteString("┌────────────────────────────────────────────────────────────────────────────────┐\n")
+		sb.WriteString("│  ℹ️  暂无优化的结构体（所有结构体都已最优或跳过）                             │\n")
+		sb.WriteString("└────────────────────────────────────────────────────────────────────────────────┘\n")
+		return sb.String(), nil
+	}
+
+	sb.WriteString("┌────────────────────────────────────────────────────────────────────────────────┐\n")
+	sb.WriteString(fmt.Sprintf("│  🔧 优化的结构体详情 (共 %d 个)                                    │\n", optimizedCount))
+	sb.WriteString("└────────────────────────────────────────────────────────────────────────────────┘\n\n")
+
+	// 呈现优化的结构体
+	for _, sr := range report.StructReports {
+		if sr.Skipped || sr.Saved <= 0 {
+			continue
+		}
 
 		sb.WriteString(fmt.Sprintf("📦 %s.%s\n", sr.PkgPath, sr.Name))
 		sb.WriteString(strings.Repeat("─", 80) + "\n")
 		sb.WriteString(fmt.Sprintf("   📁 文件：%s\n", sr.File))
-		
-		if sr.Saved > 0 {
-			sb.WriteString(fmt.Sprintf("   📏 优化前：%d 字节  →  📏 优化后：%d 字节  →  💰 节省：%d 字节 (%.1f%%)\n",
-				sr.OrigSize, sr.OptSize, sr.Saved, float64(sr.Saved)/float64(sr.OrigSize)*100))
-		} else {
-			sb.WriteString(fmt.Sprintf("   📏 大小：%d 字节 (无需优化)\n", sr.OrigSize))
-		}
+		sb.WriteString(fmt.Sprintf("   📏 优化前：%d 字节  →  📏 优化后：%d 字节  →  💰 节省：%d 字节 (%.1f%%)\n",
+			sr.OrigSize, sr.OptSize, sr.Saved, float64(sr.Saved)/float64(sr.OrigSize)*100))
 		sb.WriteString("\n")
 
 		sb.WriteString("   优化前字段顺序:\n")
 		for i, field := range sr.OrigFields {
 			typeInfo := ""
+			sizeInfo := ""
 			if sr.FieldTypes != nil {
 				if t, ok := sr.FieldTypes[field]; ok {
-					typeInfo = " (" + t + ")"
+					typeInfo = t
 				}
 			}
-			sb.WriteString(fmt.Sprintf("      %2d. %s%s\n", i+1, field, typeInfo))
+			// 获取字段大小（需要从 FieldInfo 获取，但报告中没有，暂时留空）
+			if typeInfo != "" {
+				sizeInfo = fmt.Sprintf(" [%d 字节]", getFieldSize(typeInfo))
+			}
+			sb.WriteString(fmt.Sprintf("      %2d. %-20s %-15s%s\n", i+1, field, typeInfo, sizeInfo))
 		}
 
-		if sr.Saved > 0 {
-			sb.WriteString("\n   优化后字段顺序:\n")
-			for i, field := range sr.OptFields {
-				typeInfo := ""
-				if sr.FieldTypes != nil {
-					if t, ok := sr.FieldTypes[field]; ok {
-						typeInfo = " (" + t + ")"
-					}
+		sb.WriteString("\n   优化后字段顺序:\n")
+		for i, field := range sr.OptFields {
+			typeInfo := ""
+			sizeInfo := ""
+			if sr.FieldTypes != nil {
+				if t, ok := sr.FieldTypes[field]; ok {
+					typeInfo = t
 				}
-				arrow := ""
-				if i < len(sr.OrigFields) && sr.OrigFields[i] != field {
-					arrow = " ⬆️"
-				}
-				sb.WriteString(fmt.Sprintf("      %2d. %s%s%s\n", i+1, field, typeInfo, arrow))
 			}
+			if typeInfo != "" {
+				sizeInfo = fmt.Sprintf(" [%d 字节]", getFieldSize(typeInfo))
+			}
+			arrow := ""
+			if i < len(sr.OrigFields) && sr.OrigFields[i] != field {
+				arrow = " ⬆️"
+			}
+			sb.WriteString(fmt.Sprintf("      %2d. %-20s %-15s%s%s\n", i+1, field, typeInfo, sizeInfo, arrow))
 		}
 		sb.WriteString("\n\n")
-	}
-
-	if optimizedCount == 0 {
-		sb.WriteString("   无优化的结构体\n\n")
 	}
 
 	// 跳过的结构体
