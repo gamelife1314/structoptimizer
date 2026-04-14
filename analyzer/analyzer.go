@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"golang.org/x/tools/go/packages"
 )
@@ -404,16 +405,17 @@ func (a *Analyzer) LoadAndParseFile(filePath string) (*ast.File, *types.Info, er
 // Log 日志输出
 func (a *Analyzer) Log(level int, format string, args ...interface{}) {
 	if level <= a.config.Verbose {
-		prefix := ""
+		timestamp := time.Now().Format("15:04:05.000")
+		levelPrefix := ""
 		switch level {
 		case 1:
-			prefix = "[INFO] "
+			levelPrefix = "[INFO] "
 		case 2:
-			prefix = "[DEBUG] "
+			levelPrefix = "[DEBUG] "
 		case 3:
-			prefix = "[TRACE] "
+			levelPrefix = "[TRACE] "
 		}
-		fmt.Printf(prefix+format+"\n", args...)
+		fmt.Printf("%s%s "+format+"\n", append([]interface{}{timestamp, levelPrefix}, args...)...)
 	}
 }
 
