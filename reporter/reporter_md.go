@@ -13,7 +13,8 @@ func (r *Reporter) GenerateMD(report *optimizer.Report) (string, error) {
 	var sb strings.Builder
 
 	sb.WriteString("# 🚀 StructOptimizer 优化报告\n\n")
-	sb.WriteString(fmt.Sprintf("> 🕐 生成时间：%s\n\n", time.Now().Format("2006-01-02 15:04:05")))
+	sb.WriteString(fmt.Sprintf("> 🕐 生成时间：%s  \n", time.Now().Format("2006-01-02 15:04:05")))
+	sb.WriteString(fmt.Sprintf("> 📦 版本：v%s\n\n", Version))
 
 	// 1. 优化总览
 	sb.WriteString("## 📊 优化总览\n\n")

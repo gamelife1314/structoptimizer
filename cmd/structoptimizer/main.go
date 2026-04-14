@@ -13,33 +13,45 @@ import (
 	"github.com/gamelife1314/structoptimizer/writer"
 )
 
+// 版本信息
+const (
+	Version = "1.2.0"
+)
+
 // Config 配置
 type Config struct {
 	Struct         string
 	Package        string
 	SourceFile     string
 	Write          bool
-	Backup        bool
-	SkipDirs      string
-	SkipFiles     string
-	SkipByMethods string
-	SkipByNames   string
-	Output        string
-	Verbose       int
-	SortSameSize  bool
-	ReportFormat  string
-	ProjectType   string // 项目类型：gomod 或 gopath
-	GOPATH        string // GOPATH 路径（可选）
-	TargetDir     string // 项目目录（位置参数）
-	MaxDepth      int    // 最大递归深度
-	Timeout       int    // 超时时间（秒）
-	PkgScope      string // 包范围限制
-	PkgWorkerLimit int   // 包并发限制
+	Backup         bool
+	SkipDirs       string
+	SkipFiles      string
+	SkipByMethods  string
+	SkipByNames    string
+	Output         string
+	Verbose        int
+	SortSameSize   bool
+	ReportFormat   string
+	ProjectType    string // 项目类型：gomod 或 gopath
+	GOPATH         string // GOPATH 路径（可选）
+	TargetDir      string // 项目目录（位置参数）
+	MaxDepth       int    // 最大递归深度
+	Timeout        int    // 超时时间（秒）
+	PkgScope       string // 包范围限制
+	PkgWorkerLimit int    // 包并发限制
+	ShowVersion    bool   // 显示版本
 }
 
 func main() {
 	// 解析命令行参数
 	cfg := parseFlags()
+
+	// 显示版本
+	if cfg.ShowVersion {
+		fmt.Printf("structoptimizer version %s\n", Version)
+		os.Exit(0)
+	}
 
 	// 验证参数
 	if err := validateFlags(cfg); err != nil {
@@ -147,6 +159,7 @@ func main() {
 func parseFlags() *Config {
 	cfg := &Config{}
 
+	flag.BoolVar(&cfg.ShowVersion, "version", false, "显示版本号")
 	flag.StringVar(&cfg.Struct, "struct", "", "结构体名称（格式：包路径。结构体名）")
 	flag.StringVar(&cfg.Package, "package", "", "包路径（与 -struct 互斥）")
 	flag.StringVar(&cfg.SourceFile, "source-file", "", "源文件路径")
