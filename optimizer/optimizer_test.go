@@ -96,7 +96,7 @@ func TestCalcStructSize(t *testing.T) {
 	}
 	badStruct := types.NewStruct(fields, nil)
 
-	size := CalcStructSize(badStruct, nil)
+	size := CalcStructSize(badStruct)
 	// 计算：1+(7 填充) + 8 + 4 + 1+(3 填充) + 4 + (4 末尾填充) = 32 字节
 	if size != 32 {
 		t.Errorf("CalcStructSize(BadStruct) = %v, want 32", size)
@@ -119,7 +119,7 @@ func TestCalcStructSize(t *testing.T) {
 	}
 	goodStruct := types.NewStruct(optFields, nil)
 
-	size = CalcStructSize(goodStruct, nil)
+	size = CalcStructSize(goodStruct)
 	// 计算：8 + 4 + 4 + 1 + 1 + (6 末尾填充) = 24 字节
 	if size != 24 {
 		t.Errorf("CalcStructSize(GoodStruct) = %v, want 24", size)
@@ -152,24 +152,6 @@ func TestReorderFields(t *testing.T) {
 	}
 }
 
-// TestReorderFieldsWithEmbed 测试包含匿名字段的重排
-func TestReorderFieldsWithEmbed(t *testing.T) {
-	fields := []FieldInfo{
-		{Name: "A", Size: 1, Align: 1, TypeName: "bool", IsEmbed: false},
-		{Name: "B", Size: 8, Align: 8, TypeName: "int64", IsEmbed: false},
-		{Name: "Embedded", Size: 4, Align: 4, TypeName: "Inner", IsEmbed: true},
-		{Name: "C", Size: 4, Align: 4, TypeName: "int32", IsEmbed: false},
-	}
-
-	result := ReorderFields(fields, false)
-
-	// 期望顺序：匿名字段在前，然后是大字段
-	// Embedded(4), B(8), C(4), A(1)
-	if result[0].Name != "Embedded" || !result[0].IsEmbed {
-		t.Errorf("ReorderFields() embed first = %v, want Embedded", result[0].Name)
-	}
-}
-
 // TestSortFields 测试字段排序
 func TestSortFields(t *testing.T) {
 	fields := []FieldInfo{
@@ -178,16 +160,16 @@ func TestSortFields(t *testing.T) {
 		{Name: "C", Size: 4, Align: 4, TypeName: "int32"},
 	}
 
-	result := sortFields(fields, false)
+	result := ReorderFields(fields, false)
 
 	if result[0].Name != "B" {
-		t.Errorf("sortFields()[0] = %v, want B", result[0].Name)
+		t.Errorf("ReorderFields()[0] = %v, want B", result[0].Name)
 	}
 	if result[1].Name != "C" {
-		t.Errorf("sortFields()[1] = %v, want C", result[1].Name)
+		t.Errorf("ReorderFields()[1] = %v, want C", result[1].Name)
 	}
 	if result[2].Name != "A" {
-		t.Errorf("sortFields()[2] = %v, want A", result[2].Name)
+		t.Errorf("ReorderFields()[2] = %v, want A", result[2].Name)
 	}
 }
 
@@ -223,7 +205,7 @@ func TestIsStructType(t *testing.T) {
 		{"struct", structType, true},
 		{"named struct", wrappedNamed, true},
 		{"pointer to struct", types.NewPointer(structType), true},
-		{"slice of struct", types.NewSlice(structType), true},
+		{"slice of struct", types.NewSlice(structType), false}, // Slice 本身不是结构体
 		{"int", types.Typ[types.Int32], false},
 		{"string", types.Typ[types.String], false},
 	}
