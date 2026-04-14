@@ -76,6 +76,7 @@ func NewOptimizer(cfg *Config, analyzer *analyzer.Analyzer) *Optimizer {
 		processing:       make(map[string]bool),
 		collecting:       make(map[string]bool),
 		maxDepth:         maxDepth,
+		methodIndex:      NewMethodIndex(),
 		structQueue:      make([]*StructTask, 0),
 		structByLevel:    make(map[int][]*StructTask),
 		structByPkgLevel: make(map[int]map[string][]*StructTask),
