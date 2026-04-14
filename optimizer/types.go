@@ -32,6 +32,9 @@ type Optimizer struct {
 	pkgCache      map[string]*packages.Package
 	structCache   map[string]*types.Struct
 	filePathCache map[string]string
+
+	// 警告标记
+	methodCheckWarned bool // 是否已显示方法检查警告
 }
 
 // StructTask 结构体处理任务
