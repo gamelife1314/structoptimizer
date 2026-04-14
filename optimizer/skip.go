@@ -1,6 +1,8 @@
 package optimizer
 
 import (
+	"go/ast"
+	"go/token"
 	"go/types"
 	"path/filepath"
 	"strings"
@@ -43,12 +45,62 @@ func (o *Optimizer) shouldSkip(info *StructInfo, st *types.Struct, key string) s
 	}
 
 	// 检查是否通过方法指定跳过
-	// 注意：-skip-by-methods 功能已弃用
-	// 原因：检查方法需要加载包，性能极差
-	// 建议：使用 -skip-by-names 直接跳过结构体名
-	// 例如：-skip-by-names='BadStruct,DeprecatedStruct'
+	// 注意：-skip-by-methods 需要加载包来检查方法，性能较差
+	if len(o.config.SkipByMethods) > 0 {
+		// 只在第一次检查时打印警告
+		if !o.methodCheckWarned {
+			o.methodCheckWarned = true
+			o.Log(0, "⚠️  警告：-skip-by-methods 需要加载包检查方法，性能较慢")
+			o.Log(0, "   建议：使用 -skip-by-names 跳过结构体名（极快）")
+		}
+		
+		// 加载包检查方法
+		for _, methodName := range o.config.SkipByMethods {
+			if o.hasMethodByName(info, methodName) {
+				return "通过方法指定跳过：" + methodName
+			}
+		}
+	}
 
 	return ""
+}
+
+// hasMethodByName 检查结构体是否有指定方法（需要加载包）
+func (o *Optimizer) hasMethodByName(info *StructInfo, methodName string) bool {
+	// 加载包
+	pkg, err := o.analyzer.LoadPackage(info.PkgPath)
+	if err != nil {
+		o.Log(2, "加载包失败：%s: %v", info.PkgPath, err)
+		return false
+	}
+
+	// 在包中查找结构体类型
+	for _, syntax := range pkg.Syntax {
+		for _, decl := range syntax.Decls {
+			genDecl, ok := decl.(*ast.GenDecl)
+			if !ok || genDecl.Tok != token.TYPE {
+				continue
+			}
+			for _, spec := range genDecl.Specs {
+				typeSpec, ok := spec.(*ast.TypeSpec)
+				if !ok || typeSpec.Name.Name != info.Name {
+					continue
+				}
+				if named, ok := pkg.TypesInfo.ObjectOf(typeSpec.Name).(*types.TypeName); ok {
+					if t, ok := named.Type().(*types.Named); ok {
+						// 检查结构体的所有方法
+						for i := 0; i < t.NumMethods(); i++ {
+							if t.Method(i).Name() == methodName {
+								return true
+							}
+						}
+					}
+				}
+			}
+		}
+	}
+
+	return false
 }
 
 // matchStructName 匹配结构体名称（支持通配符）
