@@ -14,26 +14,27 @@ import (
 
 // Config 配置
 type Config struct {
-	Struct        string
-	Package       string
-	SourceFile    string
-	Write         bool
-	Backup        bool
-	SkipDirs      stringSlice
-	SkipFiles     stringSlice
-	SkipPatterns  stringSlice
-	SkipByMethods stringSlice
-	SkipByNames   stringSlice
-	Output        string
-	Verbose       int
-	SortSameSize  bool
-	ReportFormat  string
-	ProjectType   string // 项目类型：gomod 或 gopath
-	GOPATH        string // GOPATH 路径（可选）
-	TargetDir     string // 项目目录（位置参数）
-	MaxDepth      int    // 最大递归深度
-	Timeout       int    // 超时时间（秒）
-	PkgScope      string // 包范围限制
+	Struct         string
+	Package        string
+	SourceFile     string
+	Write          bool
+	Backup         bool
+	SkipDirs       stringSlice
+	SkipFiles      stringSlice
+	SkipPatterns   stringSlice
+	SkipByMethods  stringSlice
+	SkipByNames    stringSlice
+	Output         string
+	Verbose        int
+	SortSameSize   bool
+	ReportFormat   string
+	ProjectType    string // 项目类型：gomod 或 gopath
+	GOPATH         string // GOPATH 路径（可选）
+	TargetDir      string // 项目目录（位置参数）
+	MaxDepth       int    // 最大递归深度
+	Timeout        int    // 超时时间（秒）
+	PkgScope       string // 包范围限制
+	PkgWorkerLimit int    // 包并发限制
 }
 
 // stringSlice 自定义字符串切片类型
@@ -92,11 +93,12 @@ func main() {
 		Verbose:       cfg.Verbose,
 		SortSameSize:  cfg.SortSameSize,
 		Output:        cfg.Output,
-		ProjectType:   cfg.ProjectType,
-		GOPATH:        cfg.GOPATH,
-		MaxDepth:      cfg.MaxDepth,
-		Timeout:       cfg.Timeout,
-		PkgScope:      cfg.PkgScope,
+		ProjectType:    cfg.ProjectType,
+		GOPATH:         cfg.GOPATH,
+		MaxDepth:       cfg.MaxDepth,
+		Timeout:        cfg.Timeout,
+		PkgScope:       cfg.PkgScope,
+		PkgWorkerLimit: cfg.PkgWorkerLimit,
 	}
 	opt := optimizer.NewOptimizer(optimizerCfg, anlz)
 
@@ -154,6 +156,7 @@ func parseFlags() *Config {
 	flag.IntVar(&cfg.MaxDepth, "max-depth", 50, "最大递归深度（默认 50）")
 	flag.IntVar(&cfg.Timeout, "timeout", 300, "超时时间（秒，默认 300）")
 	flag.StringVar(&cfg.PkgScope, "pkg-scope", "", "包范围限制（GOPATH 模式必填，只分析此包内的结构体）")
+	flag.IntVar(&cfg.PkgWorkerLimit, "pkg-limit", 4, "包并发限制（默认 4，降低可防止 OOM）")
 
 	// 详细程度
 	v := flag.Bool("v", false, "显示详细信息")

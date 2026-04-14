@@ -1,6 +1,7 @@
 package optimizer
 
 import (
+	"runtime"
 	"sync"
 )
 
@@ -43,19 +44,33 @@ func (o *Optimizer) processStructsParallel() {
 		
 		// 按包并行处理
 		o.processByPackageParallel(level, pkgTasks)
+		
+		// 每层处理后强制 GC，释放内存
+		if level > 0 {
+			o.Log(3, "第 %d 层处理完成，执行 GC...", level)
+			runtime.GC()
+		}
 	}
+	
+	// 最后再执行一次 GC
+	runtime.GC()
+	o.Log(2, "所有层级处理完成，执行最终 GC")
 }
 
 // processByPackageParallel 按包并行处理同一层级的结构体
 // 每个包一个 goroutine，避免不同 goroutine 之间的竞争
+// 使用信号量限制并发包数量，防止 OOM
 func (o *Optimizer) processByPackageParallel(level int, pkgTasks map[string][]*StructTask) {
 	var wg sync.WaitGroup
+	pkgSem := make(chan struct{}, o.pkgWorkerLimit) // 包级别信号量
 	
 	for pkgPath, tasks := range pkgTasks {
+		pkgSem <- struct{}{} // 获取信号量
 		wg.Add(1)
 		
 		go func(pkg string, taskList []*StructTask) {
 			defer wg.Done()
+			defer func() { <-pkgSem }() // 释放信号量
 			
 			// panic 恢复
 			defer func() {

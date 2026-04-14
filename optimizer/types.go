@@ -26,6 +26,7 @@ type Optimizer struct {
 	collecting       map[string]bool
 	mu               sync.Mutex
 	workerLimit      int
+	pkgWorkerLimit   int // 包并发限制
 
 	// 缓存优化
 	pkgCache      map[string]*packages.Package
@@ -44,25 +45,26 @@ type StructTask struct {
 
 // Config 优化器配置
 type Config struct {
-	TargetDir     string
-	StructName    string
-	Package       string
-	SourceFile    string
-	Write         bool
-	Backup        bool
-	SkipDirs      []string
-	SkipFiles     []string
-	SkipPatterns  []string
-	SkipByMethods []string
-	SkipByNames   []string
-	Verbose       int
-	SortSameSize  bool
-	Output        string
-	ProjectType   string
-	GOPATH        string
-	MaxDepth      int
-	Timeout       int
-	PkgScope      string // 包范围限制（只分析此包内的结构体）
+	TargetDir       string
+	StructName      string
+	Package         string
+	SourceFile      string
+	Write           bool
+	Backup          bool
+	SkipDirs        []string
+	SkipFiles       []string
+	SkipPatterns    []string
+	SkipByMethods   []string
+	SkipByNames     []string
+	Verbose         int
+	SortSameSize    bool
+	Output          string
+	ProjectType     string
+	GOPATH          string
+	MaxDepth        int
+	Timeout         int
+	PkgScope        string
+	PkgWorkerLimit  int // 包并发限制（默认 4，防止 OOM）
 }
 
 // StructInfo 结构体信息
