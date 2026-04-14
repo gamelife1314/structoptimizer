@@ -9,6 +9,8 @@ import (
 	"sync"
 	"time"
 
+	"golang.org/x/tools/go/packages"
+
 	"github.com/gamelife1314/structoptimizer/analyzer"
 )
 
@@ -25,8 +27,14 @@ type Optimizer struct {
 	// 并行处理相关
 	structQueue   []*StructTask  // 待处理的结构体队列
 	structByLevel map[int][]*StructTask // 按层级分组的结构体
+	collecting    map[string]bool // 正在收集中的结构体（去重用）
 	mu            sync.Mutex     // 保护并发访问
 	workerLimit   int            // 并发工作协程数量限制
+	
+	// 缓存优化
+	pkgCache      map[string]*packages.Package // 包加载缓存
+	structCache   map[string]*types.Struct     // 结构体查找缓存
+	filePathCache map[string]string            // 文件路径缓存
 }
 
 // StructTask 结构体处理任务
@@ -102,10 +110,14 @@ func NewOptimizer(cfg *Config, analyzer *analyzer.Analyzer) *Optimizer {
 		analyzer: analyzer,
 		optimized: make(map[string]*StructInfo),
 		processing: make(map[string]bool),
+		collecting: make(map[string]bool),
 		maxDepth: maxDepth,
 		structQueue: make([]*StructTask, 0),
 		structByLevel: make(map[int][]*StructTask),
 		workerLimit: 10, // 最多 10 个并发协程
+		pkgCache: make(map[string]*packages.Package),
+		structCache: make(map[string]*types.Struct),
+		filePathCache: make(map[string]string),
 		report: &Report{
 			StructReports: make([]*StructReport, 0),
 		},
@@ -201,19 +213,19 @@ func (o *Optimizer) optimizeInternal() (*Report, error) {
 func (o *Optimizer) collectStructs(pkgPath, structName, filePath string, depth, level int) {
 	key := pkgPath + "." + structName
 
-	// 检查是否已收集（去重）
+	// 快速去重：使用 map 代替 slice 遍历
 	o.mu.Lock()
+	// 检查是否已收集或正在收集
 	if _, ok := o.optimized[key]; ok {
 		o.mu.Unlock()
 		return
 	}
-	// 检查是否已在队列中（去重）
-	for _, t := range o.structQueue {
-		if t.PkgPath == pkgPath && t.StructName == structName {
-			o.mu.Unlock()
-			return
-		}
+	if o.collecting[key] {
+		o.mu.Unlock()
+		return
 	}
+	// 标记为正在收集
+	o.collecting[key] = true
 	o.mu.Unlock()
 
 	// 检查递归深度
@@ -223,6 +235,12 @@ func (o *Optimizer) collectStructs(pkgPath, structName, filePath string, depth, 
 
 	// 检查是否是第三方包
 	if isVendorPackage(pkgPath) || !o.isProjectPackage(pkgPath) {
+		return
+	}
+
+	// 查找结构体（使用缓存）
+	st, filePath, err := o.findStructWithCache(pkgPath, structName)
+	if err != nil {
 		return
 	}
 
@@ -239,38 +257,135 @@ func (o *Optimizer) collectStructs(pkgPath, structName, filePath string, depth, 
 	o.structQueue = append(o.structQueue, task)
 	o.mu.Unlock()
 
-	// 查找结构体并收集嵌套依赖
+	// 分析字段，收集嵌套结构体（使用快速分析）
+	o.collectNestedStructs(st, structName, pkgPath, filePath, depth, level)
+}
+
+// findStructWithCache 带缓存的结构体查找
+func (o *Optimizer) findStructWithCache(pkgPath, structName string) (*types.Struct, string, error) {
+	key := pkgPath + "." + structName
+
+	// 检查结构体缓存
+	o.mu.Lock()
+	if st, ok := o.structCache[key]; ok {
+		filePath := o.filePathCache[key]
+		o.mu.Unlock()
+		return st, filePath, nil
+	}
+	o.mu.Unlock()
+
+	// 查找结构体
 	st, filePath, err := o.analyzer.FindStructByName(pkgPath, structName)
 	if err != nil {
+		return nil, "", err
+	}
+
+	// 缓存结果
+	o.mu.Lock()
+	o.structCache[key] = st
+	o.filePathCache[key] = filePath
+	o.mu.Unlock()
+
+	return st, filePath, nil
+}
+
+// collectNestedStructs 快速收集嵌套结构体（不创建 FieldAnalyzer，直接分析 AST）
+func (o *Optimizer) collectNestedStructs(st *types.Struct, structName, pkgPath, filePath string, depth, level int) {
+	if st == nil {
 		return
 	}
 
-	// 更新任务文件路径
-	o.mu.Lock()
-	task.FilePath = filePath
-	o.mu.Unlock()
+	// 遍历字段
+	for i := 0; i < st.NumFields(); i++ {
+		field := st.Field(i)
+		fieldType := field.Type()
 
-	// 分析字段，收集嵌套结构体
-	fieldAnalyzer := NewFieldAnalyzer(o.analyzer.GetTypesInfo(), o.analyzer.GetFset())
-	info := fieldAnalyzer.AnalyzeStruct(st, structName, pkgPath, filePath)
-
-	// 收集嵌套的结构体（深度优先，层级递增）
-	for _, field := range info.Fields {
-		if field.IsInterface || field.IsStdLib || field.IsThirdParty {
+		// 跳过接口、标准库、第三方包
+		if isInterfaceType(fieldType) {
 			continue
 		}
 
-		if field.TypeName != "" && isStructType(field.Type) {
-			fieldPkg := field.PkgPath
+		pkg := o.getTypePkg(fieldType)
+		if isStandardLibraryPkg(pkg) || isVendorPackage(pkg) || !o.isProjectPackage(pkg) {
+			continue
+		}
+
+		// 检查是否是结构体类型
+		if isStructType(fieldType) {
+			typeName := o.getTypeName(fieldType)
+			fieldPkg := pkg
 			if fieldPkg == "" {
 				fieldPkg = pkgPath
 			}
 
 			if fieldPkg != "" && o.isProjectPackage(fieldPkg) {
-				// 递归收集，层级 +1（去重在函数开头处理）
-				o.collectStructs(fieldPkg, field.TypeName, filePath, depth+1, level+1)
+				// 递归收集，层级 +1
+				o.collectStructs(fieldPkg, typeName, filePath, depth+1, level+1)
 			}
 		}
+	}
+}
+
+// getTypePkg 获取类型的包路径
+func (o *Optimizer) getTypePkg(typ types.Type) string {
+	if typ == nil {
+		return ""
+	}
+	switch t := typ.(type) {
+	case *types.Named:
+		if obj := t.Obj(); obj != nil {
+			if pkg := obj.Pkg(); pkg != nil {
+				return pkg.Path()
+			}
+		}
+		return ""
+	case *types.Pointer:
+		return o.getTypePkg(t.Elem())
+	case *types.Slice:
+		return o.getTypePkg(t.Elem())
+	case *types.Array:
+		return o.getTypePkg(t.Elem())
+	case *types.Map:
+		// Map 的包路径通常不重要
+		return ""
+	default:
+		return ""
+	}
+}
+
+// getTypeName 获取类型名称
+func (o *Optimizer) getTypeName(typ types.Type) string {
+	if typ == nil {
+		return ""
+	}
+	switch t := typ.(type) {
+	case *types.Named:
+		return t.Obj().Name()
+	case *types.Pointer:
+		return o.getTypeName(t.Elem())
+	case *types.Slice:
+		return o.getTypeName(t.Elem())
+	case *types.Array:
+		return o.getTypeName(t.Elem())
+	default:
+		return typ.String()
+	}
+}
+
+// isStructType 快速判断是否是结构体类型
+func isStructType(typ types.Type) bool {
+	if typ == nil {
+		return false
+	}
+	switch t := typ.(type) {
+	case *types.Struct:
+		return true
+	case *types.Named:
+		return isStructType(t.Underlying())
+	case *types.Pointer:
+		return isStructType(t.Elem())
+	default:
+		return false
 	}
 }
 
@@ -345,14 +460,17 @@ func (o *Optimizer) optimizeStruct(pkgPath, structName, filePath string, depth i
 		return info, nil
 	}
 
-	// 检查是否已优化
+	// 检查是否已优化（加锁保护）
+	o.mu.Lock()
 	if info, ok := o.optimized[key]; ok {
+		o.mu.Unlock()
 		o.Log(3, "结构体已处理：%s", key)
 		return info, nil
 	}
 
 	// 检测循环引用：如果正在处理中，说明有循环引用
 	if o.processing[key] {
+		o.mu.Unlock()
 		o.Log(2, "检测到循环引用，跳过：%s", key)
 		info := &StructInfo{
 			Name:       structName,
@@ -368,9 +486,13 @@ func (o *Optimizer) optimizeStruct(pkgPath, structName, filePath string, depth i
 
 	// 标记为正在处理
 	o.processing[key] = true
+	o.mu.Unlock()
+	
 	defer func() {
 		// 处理完成后，移除标记
+		o.mu.Lock()
 		delete(o.processing, key)
+		o.mu.Unlock()
 	}()
 
 	// 检查是否是 vendor 中的包或第三方包，如果是则跳过
@@ -383,7 +505,9 @@ func (o *Optimizer) optimizeStruct(pkgPath, structName, filePath string, depth i
 			Skipped:    true,
 			SkipReason: "vendor 中的第三方包结构体",
 		}
+		o.mu.Lock()
 		o.optimized[key] = info
+		o.mu.Unlock()
 		o.addReport(info, "vendor 中的第三方包结构体", depth)
 		return info, nil
 	}
@@ -403,7 +527,9 @@ func (o *Optimizer) optimizeStruct(pkgPath, structName, filePath string, depth i
 				return "非项目内部包结构体"
 			}(),
 		}
+		o.mu.Lock()
 		o.optimized[key] = info
+		o.mu.Unlock()
 		o.addReport(info, func() string {
 			if isStandardLibrary(pkgPath) {
 				return "Go 标准库结构体"
@@ -437,7 +563,9 @@ func (o *Optimizer) optimizeStruct(pkgPath, structName, filePath string, depth i
 		o.Log(2, "跳过结构体：%s, 原因：%s", key, skipReason)
 		info.Skipped = true
 		info.SkipReason = skipReason
+		o.mu.Lock()
 		o.optimized[key] = info
+		o.mu.Unlock()
 		o.addReport(info, skipReason, depth)
 		return info, nil
 	}
@@ -469,7 +597,9 @@ func (o *Optimizer) optimizeStruct(pkgPath, structName, filePath string, depth i
 		o.Log(2, "结构体无需优化：%s", key)
 	}
 
+	o.mu.Lock()
 	o.optimized[key] = info
+	o.mu.Unlock()
 	o.addReport(info, "", depth)
 
 	return info, nil
@@ -827,32 +957,5 @@ func (o *Optimizer) Log(level int, format string, args ...interface{}) {
 			levelPrefix = "[TRACE]"
 		}
 		fmt.Printf("%s %s "+format+"\n", append([]interface{}{timestamp, levelPrefix}, args...)...)
-	}
-}
-
-// isStructType 检查类型是否是结构体类型（需要优化的类型）
-// 接口类型大小固定，不需要优化
-func isStructType(typ types.Type) bool {
-	if typ == nil {
-		return false
-	}
-	switch t := typ.(type) {
-	case *types.Interface:
-		// 接口类型大小固定（16 字节），不需要优化
-		return false
-	case *types.Struct:
-		return true
-	case *types.Named:
-		return isStructType(t.Underlying())
-	case *types.Pointer:
-		return isStructType(t.Elem())
-	case *types.Slice:
-		// 检查 slice 的元素类型
-		return isStructType(t.Elem())
-	case *types.Map:
-		// 检查 map 的键和值类型
-		return isStructType(t.Key()) || isStructType(t.Elem())
-	default:
-		return false
 	}
 }
