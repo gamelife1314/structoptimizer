@@ -103,8 +103,8 @@ func (o *Optimizer) collectStructs(pkgPath, structName, filePath string, depth, 
 			continue
 		}
 
-		// 检查包范围限制
-		if o.config.PkgScope != "" && field.PkgPath != o.config.PkgScope {
+		// 检查包范围限制（前缀匹配）
+		if o.config.PkgScope != "" && !strings.HasPrefix(field.PkgPath, o.config.PkgScope) {
 			o.Log(3, "跳过跨包字段：%s (包：%s, 范围：%s)", field.Name, field.PkgPath, o.config.PkgScope)
 			continue
 		}
