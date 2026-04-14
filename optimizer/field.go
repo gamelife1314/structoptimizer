@@ -9,14 +9,17 @@ import (
 
 // FieldInfo 字段信息
 type FieldInfo struct {
-	Name     string      // 字段名（匿名字段为空）
-	Type     types.Type  // 字段类型
-	Size     int64       // 字段大小
-	Align    int64       // 字段对齐要求
-	IsEmbed  bool        // 是否匿名字段
-	PkgPath  string      // 字段类型所在包路径
-	TypeName string      // 类型名称
-	Tag      string      // 字段 tag
+	Name        string      // 字段名（匿名字段为空）
+	Type        types.Type  // 字段类型
+	Size        int64       // 字段大小
+	Align       int64       // 字段对齐要求
+	IsEmbed     bool        // 是否匿名字段
+	IsInterface bool        // 是否是接口类型（接口大小固定，不需要优化）
+	IsStdLib    bool        // 是否是标准库类型（不需要深入分析）
+	IsThirdParty bool       // 是否是第三方包类型（不需要深入分析）
+	PkgPath     string      // 字段类型所在包路径
+	TypeName    string      // 类型名称
+	Tag         string      // 字段 tag
 }
 
 // StructInfo 结构体信息
@@ -66,19 +69,35 @@ func (fa *FieldAnalyzer) AnalyzeStruct(structType *types.Struct, structName, pkg
 
 	for i := 0; i < structType.NumFields(); i++ {
 		field := structType.Field(i)
-		size, align := CalcFieldSize(field.Type(), fa.info)
-
-		typeName := fa.getTypeName(field.Type())
-		pkg := fa.getTypePkg(field.Type())
+		
+		// 获取字段类型信息
+		fieldType := field.Type()
+		typeName := fa.getTypeName(fieldType)
+		pkg := fa.getTypePkg(fieldType)
+		
+		// 快速判断是否是标准库或第三方包
+		isStdLib := isStandardLibraryPkg(pkg)
+		isThirdParty := !isStdLib && pkg != "" && !isProjectPkg(pkg)
+		
+		// 对于标准库和第三方包，使用快速大小计算，不深入递归
+		var size, align int64
+		if isStdLib || isThirdParty {
+			size, align = calcFieldSizeFast(fieldType)
+		} else {
+			size, align = CalcFieldSize(fieldType, fa.info)
+		}
 
 		fi := FieldInfo{
-			Name:     fa.getFieldName(field, i),
-			Type:     field.Type(),
-			Size:     size,
-			Align:    align,
-			IsEmbed:  field.Embedded(),
-			PkgPath:  pkg,
-			TypeName: typeName,
+			Name:        fa.getFieldName(field, i),
+			Type:        fieldType,
+			Size:        size,
+			Align:       align,
+			IsEmbed:     field.Embedded(),
+			IsInterface: isInterfaceType(fieldType),
+			IsStdLib:    isStdLib,
+			IsThirdParty: isThirdParty,
+			PkgPath:     pkg,
+			TypeName:    typeName,
 		}
 
 		// 获取 tag
@@ -286,4 +305,167 @@ func GetStructTypeFromAst(astStruct *ast.StructType, info *types.Info) *types.St
 	}
 
 	return types.NewStruct(fields, tags)
+}
+
+// isInterfaceType 检查类型是否是接口类型
+func isInterfaceType(typ types.Type) bool {
+	if typ == nil {
+		return false
+	}
+	switch t := typ.(type) {
+	case *types.Interface:
+		return true
+	case *types.Named:
+		return isInterfaceType(t.Underlying())
+	case *types.Pointer:
+		return isInterfaceType(t.Elem())
+	default:
+		return false
+	}
+}
+
+// isStandardLibraryPkg 快速判断是否是标准库包
+func isStandardLibraryPkg(pkgPath string) bool {
+	if pkgPath == "" {
+		return true
+	}
+	// 标准库不包含点号
+	if strings.Contains(pkgPath, ".") {
+		return false
+	}
+	// 单级包名或 go/ 开头的多级包名
+	if !strings.Contains(pkgPath, "/") || strings.HasPrefix(pkgPath, "go/") {
+		return true
+	}
+	return false
+}
+
+// isProjectPkg 快速判断是否是项目包（基于常见项目路径前缀）
+// 注意：这是一个快速判断，真正的判断需要在优化器中进行
+func isProjectPkg(pkgPath string) bool {
+	if pkgPath == "" {
+		return false
+	}
+	// 如果包含常见的代码托管平台域名，可能是项目包
+	// 这里只做快速判断，详细判断交给优化器
+	return strings.Contains(pkgPath, "/") && !isStandardLibraryPkg(pkgPath)
+}
+
+// calcFieldSizeFast 快速计算字段大小，不深入递归分析
+// 用于标准库和第三方包类型
+func calcFieldSizeFast(typ types.Type) (size, align int64) {
+	if typ == nil {
+		return 0, 1
+	}
+	
+	switch t := typ.(type) {
+	case *types.Basic:
+		return basicSizeFast(t.Kind())
+	
+	case *types.Pointer:
+		// 指针大小固定
+		return sizeofPtr(), alignofPtr()
+	
+	case *types.Array:
+		// 数组：元素大小 * 元素个数
+		elemSize, elemAlign := calcFieldSizeFast(t.Elem())
+		if t.Len() == 0 {
+			return 0, elemAlign
+		}
+		return elemSize * t.Len(), elemAlign
+	
+	case *types.Slice:
+		// slice 头大小固定（24 字节：data 指针 + len + cap）
+		return 24, 8
+	
+	case *types.Map:
+		// map 头大小固定（8 字节指针）
+		return 8, 8
+	
+	case *types.Chan:
+		// chan 大小固定（8 字节指针）
+		return 8, 8
+	
+	case *types.Interface:
+		// 接口大小固定（16 字节：data 指针 + type 指针）
+		return 16, 8
+	
+	case *types.Named:
+		// 具名类型，使用底层类型的快速计算
+		return calcFieldSizeFast(t.Underlying())
+	
+	case *types.Struct:
+		// 对于匿名结构体，使用简化计算
+		return calcStructSizeFast(t)
+	
+	default:
+		// 其他类型，返回默认值
+		return 8, 8
+	}
+}
+
+// basicSizeFast 快速计算基本类型大小
+func basicSizeFast(kind types.BasicKind) (size, align int64) {
+	switch kind {
+	case types.Bool, types.Uint8, types.Int8:
+		return 1, 1
+	case types.Uint16, types.Int16:
+		return 2, 2
+	case types.Uint32, types.Int32, types.Float32:
+		return 4, 4
+	case types.Uint64, types.Int64, types.Float64:
+		return 8, 8
+	case types.Uint, types.Int:
+		return 8, 8 // 假设 64 位系统
+	case types.Uintptr:
+		return 8, 8
+	case types.String:
+		return 16, 8 // string 头（data 指针 + len）
+	case types.UnsafePointer:
+		return 8, 8
+	default:
+		return 8, 8
+	}
+}
+
+// calcStructSizeFast 快速计算结构体大小
+func calcStructSizeFast(st *types.Struct) (size, align int64) {
+	if st.NumFields() == 0 {
+		return 0, 1
+	}
+	
+	var offset int64 = 0
+	var maxAlign int64 = 1
+	
+	for i := 0; i < st.NumFields(); i++ {
+		field := st.Field(i)
+		sz, al := calcFieldSizeFast(field.Type())
+		
+		// 对齐
+		if offset%al != 0 {
+			offset += al - (offset % al)
+		}
+		
+		offset += sz
+		if al > maxAlign {
+			maxAlign = al
+		}
+	}
+	
+	// 末尾填充
+	if offset%maxAlign != 0 {
+		offset += maxAlign - (offset % maxAlign)
+	}
+	
+	return offset, maxAlign
+}
+
+// sizeofPtr 返回指针大小
+func sizeofPtr() int64 {
+	return 8 // 64 位系统
+}
+
+// alignofPtr 返回指针对齐
+func alignofPtr() int64 {
+	return 8
 }

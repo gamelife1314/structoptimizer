@@ -35,6 +35,8 @@ type Config struct {
 	SkipByMethods []string
 	SkipByNames   []string
 	Verbose       int
+	ProjectType   string // 项目类型：gomod 或 gopath
+	GOPATH        string // GOPATH 路径（可选，为空则使用环境变量）
 }
 
 // NewAnalyzer 创建分析器
@@ -59,21 +61,8 @@ func (a *Analyzer) LoadPackage(pkgPath string) (*packages.Package, error) {
 		return nil, fmt.Errorf("package already loaded: %s", pkgPath)
 	}
 
-	// 检测是否是 GOPATH 项目
-	isGoMod := false
-	if _, err := os.Stat(a.config.TargetDir + "/go.mod"); err == nil {
-		isGoMod = true
-	} else {
-		// 检查父目录是否有 go.mod
-		dir := a.config.TargetDir
-		for dir != "/" && dir != "." {
-			dir = filepath.Dir(dir)
-			if _, err := os.Stat(dir + "/go.mod"); err == nil {
-				isGoMod = true
-				break
-			}
-		}
-	}
+	// 根据项目类型构建环境
+	isGoMod := a.config.ProjectType != "gopath"
 
 	// 构建环境
 	env := os.Environ()
@@ -81,10 +70,22 @@ func (a *Analyzer) LoadPackage(pkgPath string) (*packages.Package, error) {
 	if !isGoMod {
 		// GOPATH 模式
 		env = append(env, "GO111MODULE=off")
+		
+		// 使用配置的 GOPATH 或环境变量
+		gopath := a.config.GOPATH
+		if gopath == "" {
+			gopath = os.Getenv("GOPATH")
+		}
+		if gopath != "" {
+			env = append(env, "GOPATH="+gopath)
+		}
+		
 		loadDir = "" // GOPATH 模式下，使用 GOPATH 查找包
-		a.Log(1, "使用 GOPATH 模式加载包：%s (GOPATH=%s)", pkgPath, os.Getenv("GOPATH"))
+		a.Log(1, "使用 GOPATH 模式加载包：%s (GOPATH=%s)", pkgPath, gopath)
 	} else {
+		// Go Module 模式
 		loadDir = a.config.TargetDir
+		a.Log(1, "使用 Go Module 模式加载包：%s", pkgPath)
 	}
 
 	cfg := &packages.Config{
