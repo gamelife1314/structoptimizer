@@ -213,17 +213,23 @@ func (a *Analyzer) getModulePath() string {
 	return ""
 }
 
-// LoadPackage 加载包
+// LoadPackage 加载包（线程安全，带错误处理）
 func (a *Analyzer) LoadPackage(pkgPath string) (*packages.Package, error) {
-	// 检查缓存
+	// 检查缓存（读锁）
+	a.mu.RLock()
 	if pkg, ok := a.pkgMap[pkgPath]; ok {
+		a.mu.RUnlock()
 		return pkg, nil
 	}
+	a.mu.RUnlock()
 
 	// 检查是否已加载
+	a.mu.RLock()
 	if a.loadedPkgs[pkgPath] {
+		a.mu.RUnlock()
 		return nil, fmt.Errorf("package already loaded: %s", pkgPath)
 	}
+	a.mu.RUnlock()
 
 	// 根据项目类型构建环境
 	isGoMod := a.config.ProjectType != "gopath"
@@ -234,7 +240,7 @@ func (a *Analyzer) LoadPackage(pkgPath string) (*packages.Package, error) {
 	if !isGoMod {
 		// GOPATH 模式
 		env = append(env, "GO111MODULE=off")
-		
+
 		// 使用配置的 GOPATH 或环境变量
 		gopath := a.config.GOPATH
 		if gopath == "" {
@@ -243,7 +249,7 @@ func (a *Analyzer) LoadPackage(pkgPath string) (*packages.Package, error) {
 		if gopath != "" {
 			env = append(env, "GOPATH="+gopath)
 		}
-		
+
 		loadDir = "" // GOPATH 模式下，使用 GOPATH 查找包
 		a.Log(1, "使用 GOPATH 模式加载包：%s (GOPATH=%s)", pkgPath, gopath)
 	} else {
@@ -264,25 +270,46 @@ func (a *Analyzer) LoadPackage(pkgPath string) (*packages.Package, error) {
 	// 加载包
 	pkgs, err := packages.Load(cfg, pkgPath)
 	if err != nil {
-		return nil, err
+		// 标记为已加载（避免重复尝试）
+		a.mu.Lock()
+		a.loadedPkgs[pkgPath] = true
+		a.mu.Unlock()
+		return nil, fmt.Errorf("load package %s failed: %v", pkgPath, err)
 	}
 
 	if len(pkgs) == 0 {
+		// 标记为已加载
+		a.mu.Lock()
+		a.loadedPkgs[pkgPath] = true
+		a.mu.Unlock()
 		return nil, fmt.Errorf("package not found: %s", pkgPath)
 	}
 
 	if len(pkgs) > 1 {
+		// 标记为已加载
+		a.mu.Lock()
+		a.loadedPkgs[pkgPath] = true
+		a.mu.Unlock()
 		return nil, fmt.Errorf("multiple packages found: %s", pkgPath)
 	}
 
 	pkg := pkgs[0]
 
+	// 包有错误，记录但仍然缓存（避免重复尝试）
 	if len(pkg.Errors) > 0 {
-		return pkg, fmt.Errorf("package has errors: %v", pkg.Errors)
+		a.Log(2, "包 %s 有错误：%v", pkgPath, pkg.Errors)
+		a.mu.Lock()
+		a.pkgMap[pkgPath] = pkg
+		a.loadedPkgs[pkgPath] = true
+		a.mu.Unlock()
+		return pkg, nil // 返回包但不报错
 	}
 
+	// 缓存包（写锁）
+	a.mu.Lock()
 	a.pkgMap[pkgPath] = pkg
 	a.loadedPkgs[pkgPath] = true
+	a.mu.Unlock()
 
 	return pkg, nil
 }

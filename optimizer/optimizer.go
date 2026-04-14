@@ -276,15 +276,37 @@ func (o *Optimizer) optimizeStruct(pkgPath, structName, filePath string, depth i
 	// 加载包获取完整类型信息（用于优化阶段）
 	pkg, err := o.analyzer.LoadPackage(pkgPath)
 	if err != nil {
-		o.Log(2, "加载包失败：%v", err)
-		return o.createSkippedInfo(key, filePath, "加载包失败："+err.Error()), nil
+		o.Log(1, "警告：加载包失败，跳过：%s (%v)", key, err)
+		info := &StructInfo{
+			Name:       structName,
+			PkgPath:    pkgPath,
+			File:       filePath,
+			Skipped:    true,
+			SkipReason: "加载包失败：" + err.Error(),
+		}
+		o.mu.Lock()
+		o.optimized[key] = info
+		o.mu.Unlock()
+		o.addReport(info, info.SkipReason, depth)
+		return info, nil
 	}
 
 	// 在包中查找结构体
 	st, filePath, err := o.findStructInPackage(pkg, structName)
 	if err != nil {
-		o.Log(2, "查找结构体失败：%v", err)
-		return o.createSkippedInfo(key, filePath, "查找失败："+err.Error()), nil
+		o.Log(1, "警告：查找结构体失败，跳过：%s (%v)", key, err)
+		info := &StructInfo{
+			Name:       structName,
+			PkgPath:    pkgPath,
+			File:       filePath,
+			Skipped:    true,
+			SkipReason: "查找失败：" + err.Error(),
+		}
+		o.mu.Lock()
+		o.optimized[key] = info
+		o.mu.Unlock()
+		o.addReport(info, info.SkipReason, depth)
+		return info, nil
 	}
 
 	// 创建字段分析器（使用完整的类型信息）

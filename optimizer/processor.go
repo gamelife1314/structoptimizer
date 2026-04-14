@@ -47,6 +47,13 @@ func (o *Optimizer) processLevelParallel(tasks []*StructTask) {
 			defer wg.Done()
 			defer func() { <-sem }() // 释放信号量
 
+			// panic 恢复
+			defer func() {
+				if r := recover(); r != nil {
+					o.Log(0, "处理结构体时发生 panic：%s.%s: %v", t.PkgPath, t.StructName, r)
+				}
+			}()
+
 			key := t.PkgPath + "." + t.StructName
 			o.Log(3, "优化结构体：%s (层级:%d)", key, t.Level)
 			o.optimizeStruct(t.PkgPath, t.StructName, t.FilePath, t.Depth)
