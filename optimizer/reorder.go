@@ -5,6 +5,7 @@ import (
 )
 
 // ReorderFields 重排字段以优化内存对齐
+// 只有当能节省内存时才调整顺序，否则保持原顺序
 func ReorderFields(fields []FieldInfo, sortSameSize bool) []FieldInfo {
 	if len(fields) <= 1 {
 		return fields
@@ -25,5 +26,45 @@ func ReorderFields(fields []FieldInfo, sortSameSize bool) []FieldInfo {
 		return false
 	})
 
-	return result
+	// 计算原始大小
+	origSize := calcSizeFromFields(fields)
+	// 计算优化后大小
+	optSize := calcSizeFromFields(result)
+
+	// 只有能节省内存时才调整顺序
+	if optSize < origSize {
+		return result
+	}
+
+	// 否则保持原顺序
+	return fields
+}
+
+// calcSizeFromFields 计算字段总大小（含填充）
+func calcSizeFromFields(fields []FieldInfo) int64 {
+	if len(fields) == 0 {
+		return 0
+	}
+
+	var offset int64 = 0
+	var maxAlign int64 = 1
+
+	for _, field := range fields {
+		// 对齐
+		if offset%field.Align != 0 {
+			offset += field.Align - (offset % field.Align)
+		}
+
+		offset += field.Size
+		if field.Align > maxAlign {
+			maxAlign = field.Align
+		}
+	}
+
+	// 末尾填充
+	if offset%maxAlign != 0 {
+		offset += maxAlign - (offset % maxAlign)
+	}
+
+	return offset
 }

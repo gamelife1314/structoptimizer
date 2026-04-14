@@ -1,10 +1,15 @@
 package optimizer
 
 import (
+	"bytes"
 	"fmt"
 	"go/ast"
+	"go/parser"
 	"go/token"
 	"go/types"
+	"os"
+	"path/filepath"
+	"strings"
 
 	"golang.org/x/tools/go/packages"
 )
@@ -72,18 +77,16 @@ func (o *Optimizer) collectStructs(pkgPath, structName, filePath string, depth, 
 		return
 	}
 
-	// 加载包并查找结构体（需要完整类型信息来收集嵌套依赖）
-	pkg, err := o.analyzer.LoadPackage(pkgPath)
+	// 快速路径：通过文件扫描查找结构体（不加载包）
+	st, filePath, err := o.findStructFast(pkgPath, structName)
 	if err != nil {
-		o.Log(3, "加载包失败：%s: %v", pkgPath, err)
-		return
-	}
-
-	// 在包中查找结构体
-	st, filePath, err := o.findStructInPackage(pkg, structName)
-	if err != nil {
-		o.Log(3, "查找结构体失败：%s.%s: %v", pkgPath, structName, err)
-		return
+		o.Log(3, "快速查找失败，加载包：%s.%s: %v", pkgPath, structName, err)
+		// 慢速路径：加载包查找
+		st, filePath, err = o.findStructInPackageSlow(pkgPath, structName)
+		if err != nil {
+			o.Log(3, "查找结构体失败：%s.%s: %v", pkgPath, structName, err)
+			return
+		}
 	}
 
 	// 添加到队列
@@ -101,6 +104,41 @@ func (o *Optimizer) collectStructs(pkgPath, structName, filePath string, depth, 
 
 	// 分析字段，收集嵌套结构体
 	o.collectNestedStructs(st, structName, pkgPath, filePath, depth, level)
+}
+
+// findStructFast 快速查找结构体（只解析文件，不加载包）
+func (o *Optimizer) findStructFast(pkgPath, structName string) (*types.Struct, string, error) {
+	// 确定搜索目录
+	searchDir := o.getPackageDir(pkgPath)
+	if searchDir == "" {
+		return nil, "", fmt.Errorf("无法确定包目录：%s", pkgPath)
+	}
+
+	// 查找包含结构体的文件
+	files, err := o.findFilesWithStruct(searchDir, structName)
+	if err != nil {
+		return nil, "", err
+	}
+
+	// 解析找到的文件
+	for _, filePath := range files {
+		st, err := o.parseStructFromFile(filePath, structName)
+		if err == nil && st != nil {
+			return st, filePath, nil
+		}
+	}
+
+	return nil, "", fmt.Errorf("struct %s not found", structName)
+}
+
+// findStructInPackageSlow 慢速路径：加载包查找结构体
+func (o *Optimizer) findStructInPackageSlow(pkgPath, structName string) (*types.Struct, string, error) {
+	pkg, err := o.analyzer.LoadPackage(pkgPath)
+	if err != nil {
+		return nil, "", err
+	}
+
+	return o.findStructInPackage(pkg, structName)
 }
 
 // findStructInPackage 在已加载的包中查找结构体
@@ -223,5 +261,122 @@ func (o *Optimizer) getTypeName(typ types.Type) string {
 		return o.getTypeName(t.Elem())
 	default:
 		return typ.String()
+	}
+}
+
+// findFilesWithStruct 查找可能包含指定结构体的文件
+func (o *Optimizer) findFilesWithStruct(dir, structName string) ([]string, error) {
+	var result []string
+
+	// 读取目录
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return nil, err
+	}
+
+	for _, entry := range entries {
+		if entry.IsDir() {
+			continue
+		}
+
+		name := entry.Name()
+		if !strings.HasSuffix(name, ".go") {
+			continue
+		}
+
+		filePath := filepath.Join(dir, name)
+
+		// 快速检查文件是否包含结构体名称
+		if o.fileContainsStruct(filePath, structName) {
+			result = append(result, filePath)
+		}
+	}
+
+	return result, nil
+}
+
+// fileContainsStruct 快速检查文件是否包含结构体定义（不解析）
+func (o *Optimizer) fileContainsStruct(filePath, structName string) bool {
+	data, err := os.ReadFile(filePath)
+	if err != nil {
+		return false
+	}
+
+	// 简单字符串匹配：查找 "type StructName struct"
+	pattern := []byte("type " + structName + " struct")
+	return bytes.Contains(data, pattern)
+}
+
+// parseStructFromFile 从文件中解析结构体（简化版）
+func (o *Optimizer) parseStructFromFile(filePath, structName string) (*types.Struct, error) {
+	fset := token.NewFileSet()
+	f, err := parser.ParseFile(fset, filePath, nil, parser.ParseComments)
+	if err != nil {
+		return nil, err
+	}
+
+	for _, decl := range f.Decls {
+		genDecl, ok := decl.(*ast.GenDecl)
+		if !ok || genDecl.Tok != token.TYPE {
+			continue
+		}
+
+		for _, spec := range genDecl.Specs {
+			ts, ok := spec.(*ast.TypeSpec)
+			if !ok {
+				continue
+			}
+
+			if ts.Name.Name == structName {
+				if st, ok := ts.Type.(*ast.StructType); ok {
+					return o.createSimpleStruct(st, fset), nil
+				}
+			}
+		}
+	}
+
+	return nil, fmt.Errorf("struct %s not found in file %s", structName, filePath)
+}
+
+// createSimpleStruct 创建简化的结构体
+func (o *Optimizer) createSimpleStruct(astStruct *ast.StructType, fset *token.FileSet) *types.Struct {
+	var fields []*types.Var
+
+	for _, field := range astStruct.Fields.List {
+		var fieldNames []*ast.Ident
+		if field.Names != nil {
+			fieldNames = field.Names
+		}
+
+		fieldType := types.Typ[types.Invalid]
+
+		for _, name := range fieldNames {
+			fieldVar := types.NewField(name.Pos(), nil, name.Name, fieldType, false)
+			fields = append(fields, fieldVar)
+		}
+
+		if len(fieldNames) == 0 {
+			typeName := o.extractTypeName(field.Type)
+			if typeName != "" {
+				fieldVar := types.NewField(field.Pos(), nil, typeName, fieldType, true)
+				fields = append(fields, fieldVar)
+			}
+		}
+	}
+
+	return types.NewStruct(fields, nil)
+}
+
+// extractTypeName 从 AST 提取类型名称
+func (o *Optimizer) extractTypeName(expr ast.Expr) string {
+	switch t := expr.(type) {
+	case *ast.Ident:
+		return t.Name
+	case *ast.StarExpr:
+		return o.extractTypeName(t.X)
+	case *ast.SelectorExpr:
+		return t.Sel.Name
+	default:
+		return ""
 	}
 }

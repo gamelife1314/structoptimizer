@@ -80,17 +80,18 @@ type StructInfo struct {
 
 // StructReport 结构体报告
 type StructReport struct {
-	Name       string
-	PkgPath    string
-	File       string
-	OrigSize   int64
-	OptSize    int64
-	Saved      int64
-	OrigFields []string
-	OptFields  []string
-	Skipped    bool
-	SkipReason string
-	Depth      int
+	Name        string
+	PkgPath     string
+	File        string
+	OrigSize    int64
+	OptSize     int64
+	Saved       int64
+	OrigFields  []string
+	OptFields   []string
+	FieldTypes  map[string]string // 字段名 -> 类型名
+	Skipped     bool
+	SkipReason  string
+	Depth       int
 }
 
 // Report 优化报告

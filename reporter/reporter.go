@@ -103,17 +103,29 @@ func (r *Reporter) GenerateTXT(report *optimizer.Report) (string, error) {
 
 		sb.WriteString("   优化前字段顺序:\n")
 		for i, field := range sr.OrigFields {
-			sb.WriteString(fmt.Sprintf("      %2d. %s\n", i+1, field))
+			typeInfo := ""
+			if sr.FieldTypes != nil {
+				if t, ok := sr.FieldTypes[field]; ok {
+					typeInfo = " (" + t + ")"
+				}
+			}
+			sb.WriteString(fmt.Sprintf("      %2d. %s%s\n", i+1, field, typeInfo))
 		}
 
 		if sr.Saved > 0 {
 			sb.WriteString("\n   优化后字段顺序:\n")
 			for i, field := range sr.OptFields {
+				typeInfo := ""
+				if sr.FieldTypes != nil {
+					if t, ok := sr.FieldTypes[field]; ok {
+						typeInfo = " (" + t + ")"
+					}
+				}
 				arrow := ""
 				if i < len(sr.OrigFields) && sr.OrigFields[i] != field {
 					arrow = " ⬆️"
 				}
-				sb.WriteString(fmt.Sprintf("      %2d. %s%s\n", i+1, field, arrow))
+				sb.WriteString(fmt.Sprintf("      %2d. %s%s%s\n", i+1, field, typeInfo, arrow))
 			}
 		}
 		sb.WriteString("\n\n")
@@ -216,24 +228,34 @@ func (r *Reporter) GenerateMD(report *optimizer.Report) (string, error) {
 		sb.WriteString("**字段顺序对比:**\n\n")
 		sb.WriteString("| 序号 | 优化前 | 优化后 | 变化 |\n")
 		sb.WriteString("|:----:|--------|--------|------|\n")
-		
+
 		maxLen := len(sr.OrigFields)
 		if len(sr.OptFields) > maxLen {
 			maxLen = len(sr.OptFields)
 		}
-		
+
 		for i := 0; i < maxLen; i++ {
 			orig := "-"
 			opt := "-"
 			change := ""
-			
+
 			if i < len(sr.OrigFields) {
 				orig = sr.OrigFields[i]
+				if sr.FieldTypes != nil {
+					if t, ok := sr.FieldTypes[orig]; ok {
+						orig = orig + " (" + t + ")"
+					}
+				}
 			}
 			if i < len(sr.OptFields) {
 				opt = sr.OptFields[i]
+				if sr.FieldTypes != nil {
+					if t, ok := sr.FieldTypes[opt]; ok {
+						opt = opt + " (" + t + ")"
+					}
+				}
 			}
-			
+
 			if orig != "-" && opt != "-" && orig != opt {
 				change = "🔄 重排"
 			} else if orig != "-" && opt == "-" {
@@ -243,7 +265,7 @@ func (r *Reporter) GenerateMD(report *optimizer.Report) (string, error) {
 			} else {
 				change = "➖ 不变"
 			}
-			
+
 			sb.WriteString(fmt.Sprintf("| %d | `%s` | `%s` | %s |\n", i+1, orig, opt, change))
 		}
 		sb.WriteString("\n---\n\n")
