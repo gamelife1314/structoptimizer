@@ -6,6 +6,20 @@ import (
 	"strings"
 )
 
+// isStandardLibraryPkg 快速判断是否是标准库包
+func isStandardLibraryPkg(pkgPath string) bool {
+	if pkgPath == "" {
+		return true
+	}
+	if strings.Contains(pkgPath, ".") {
+		return false
+	}
+	if !strings.Contains(pkgPath, "/") || strings.HasPrefix(pkgPath, "go/") {
+		return true
+	}
+	return false
+}
+
 // isVendorPackage 判断是否是 vendor 中的包或第三方包
 func isVendorPackage(pkgPath string) bool {
 	// 1. 空包路径（通常是标准库或内置类型）
@@ -18,22 +32,6 @@ func isVendorPackage(pkgPath string) bool {
 		return true
 	}
 
-	return false
-}
-
-// isStandardLibraryPkg 快速判断是否是标准库包
-func isStandardLibraryPkg(pkgPath string) bool {
-	if pkgPath == "" {
-		return true
-	}
-	// 标准库不包含点号
-	if strings.Contains(pkgPath, ".") {
-		return false
-	}
-	// 单级包名或 go/ 开头的多级包名
-	if !strings.Contains(pkgPath, "/") || strings.HasPrefix(pkgPath, "go/") {
-		return true
-	}
 	return false
 }
 
