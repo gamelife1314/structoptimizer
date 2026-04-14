@@ -57,8 +57,8 @@ func (o *Optimizer) shouldSkip(info *StructInfo, st *types.Struct, key string) s
 	return ""
 }
 
-// hasMethodByName 检查结构体是否有指定方法（需要加载包）
-func (o *Optimizer) hasMethodByName(info *StructInfo, methodName string) bool {
+// hasMethodByName 检查结构体是否有指定方法（需要加载包，支持通配符）
+func (o *Optimizer) hasMethodByName(info *StructInfo, methodPattern string) bool {
 	// 加载包
 	pkg, err := o.analyzer.LoadPackage(info.PkgPath)
 	if err != nil {
@@ -80,15 +80,33 @@ func (o *Optimizer) hasMethodByName(info *StructInfo, methodName string) bool {
 				}
 				if named, ok := pkg.TypesInfo.ObjectOf(typeSpec.Name).(*types.TypeName); ok {
 					if t, ok := named.Type().(*types.Named); ok {
-						// 检查结构体的所有方法
+						// 检查结构体的所有方法（支持通配符匹配）
 						for i := 0; i < t.NumMethods(); i++ {
-							if t.Method(i).Name() == methodName {
+							methodName := t.Method(i).Name()
+							if o.matchMethod(methodName, methodPattern) {
 								return true
 							}
 						}
 					}
 				}
 			}
+		}
+	}
+
+	return false
+}
+
+// matchMethod 匹配方法名（支持通配符）
+func (o *Optimizer) matchMethod(methodName, pattern string) bool {
+	// 完全匹配
+	if methodName == pattern {
+		return true
+	}
+
+	// 通配符匹配
+	if strings.Contains(pattern, "*") || strings.Contains(pattern, "?") {
+		if matched, _ := filepath.Match(pattern, methodName); matched {
+			return true
 		}
 	}
 
