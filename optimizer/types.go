@@ -53,7 +53,6 @@ type Config struct {
 	Backup          bool
 	SkipDirs        []string
 	SkipFiles       []string
-	SkipPatterns    []string
 	SkipByMethods   []string
 	SkipByNames     []string
 	Verbose         int

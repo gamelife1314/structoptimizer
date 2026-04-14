@@ -43,7 +43,6 @@ type Config struct {
 	SourceFile    string
 	SkipDirs      []string
 	SkipFiles     []string
-	SkipPatterns  []string
 	SkipByMethods []string
 	SkipByNames   []string
 	Verbose       int
@@ -712,13 +711,6 @@ func (a *Analyzer) shouldSkipFile(filePath string) bool {
 
 	// 检查文件跳过
 	for _, pattern := range a.config.SkipFiles {
-		if matched, _ := filepath.Match(pattern, name); matched {
-			return true
-		}
-	}
-
-	// 检查通用跳过模式
-	for _, pattern := range a.config.SkipPatterns {
 		if matched, _ := filepath.Match(pattern, name); matched {
 			return true
 		}
