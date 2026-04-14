@@ -65,18 +65,19 @@ func NewOptimizer(cfg *Config, analyzer *analyzer.Analyzer) *Optimizer {
 	}
 
 	return &Optimizer{
-		config:        cfg,
-		analyzer:      analyzer,
-		optimized:     make(map[string]*StructInfo),
-		processing:    make(map[string]bool),
-		collecting:    make(map[string]bool),
-		maxDepth:      maxDepth,
-		structQueue:   make([]*StructTask, 0),
-		structByLevel: make(map[int][]*StructTask),
-		workerLimit:   10, // 最多 10 个并发协程
-		pkgCache:      make(map[string]*packages.Package),
-		structCache:   make(map[string]*types.Struct),
-		filePathCache: make(map[string]string),
+		config:           cfg,
+		analyzer:         analyzer,
+		optimized:        make(map[string]*StructInfo),
+		processing:       make(map[string]bool),
+		collecting:       make(map[string]bool),
+		maxDepth:         maxDepth,
+		structQueue:      make([]*StructTask, 0),
+		structByLevel:    make(map[int][]*StructTask),
+		structByPkgLevel: make(map[int]map[string][]*StructTask),
+		workerLimit:      10, // 最多 10 个并发协程
+		pkgCache:         make(map[string]*packages.Package),
+		structCache:      make(map[string]*types.Struct),
+		filePathCache:    make(map[string]string),
 		report: &Report{
 			StructReports: make([]*StructReport, 0),
 		},

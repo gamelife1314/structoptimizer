@@ -11,14 +11,18 @@ func (o *Optimizer) processStructsParallel() {
 		return
 	}
 
-	// 按层级分组
+	// 按层级和包分组
+	o.structByPkgLevel = make(map[int]map[string][]*StructTask)
 	for _, task := range o.structQueue {
-		o.structByLevel[task.Level] = append(o.structByLevel[task.Level], task)
+		if _, ok := o.structByPkgLevel[task.Level]; !ok {
+			o.structByPkgLevel[task.Level] = make(map[string][]*StructTask)
+		}
+		o.structByPkgLevel[task.Level][task.PkgPath] = append(o.structByPkgLevel[task.Level][task.PkgPath], task)
 	}
 
 	// 找出最大层级
 	maxLevel := 0
-	for level := range o.structByLevel {
+	for level := range o.structByPkgLevel {
 		if level > maxLevel {
 			maxLevel = level
 		}
@@ -28,37 +32,48 @@ func (o *Optimizer) processStructsParallel() {
 
 	// 从叶子节点（最大层级）开始，逐层向上处理
 	for level := maxLevel; level >= 0; level-- {
-		tasks := o.structByLevel[level]
-		o.Log(2, "处理第 %d 层，共 %d 个结构体", level, len(tasks))
-		o.processLevelParallel(tasks)
+		pkgTasks := o.structByPkgLevel[level]
+		
+		// 统计本层级信息
+		totalStructs := 0
+		for _, tasks := range pkgTasks {
+			totalStructs += len(tasks)
+		}
+		o.Log(2, "处理第 %d 层，共 %d 个包，%d 个结构体", level, len(pkgTasks), totalStructs)
+		
+		// 按包并行处理
+		o.processByPackageParallel(level, pkgTasks)
 	}
 }
 
-// processLevelParallel 并行处理同一层级的结构体
-func (o *Optimizer) processLevelParallel(tasks []*StructTask) {
+// processByPackageParallel 按包并行处理同一层级的结构体
+// 每个包一个 goroutine，避免不同 goroutine 之间的竞争
+func (o *Optimizer) processByPackageParallel(level int, pkgTasks map[string][]*StructTask) {
 	var wg sync.WaitGroup
-	sem := make(chan struct{}, o.workerLimit) // 信号量限制并发数
-
-	for _, task := range tasks {
+	
+	for pkgPath, tasks := range pkgTasks {
 		wg.Add(1)
-		sem <- struct{}{} // 获取信号量
-
-		go func(t *StructTask) {
+		
+		go func(pkg string, taskList []*StructTask) {
 			defer wg.Done()
-			defer func() { <-sem }() // 释放信号量
-
+			
 			// panic 恢复
 			defer func() {
 				if r := recover(); r != nil {
-					o.Log(0, "处理结构体时发生 panic：%s.%s: %v", t.PkgPath, t.StructName, r)
+					o.Log(0, "处理包 %s 时发生 panic: %v", pkg, r)
 				}
 			}()
-
-			key := t.PkgPath + "." + t.StructName
-			o.Log(3, "优化结构体：%s (层级:%d)", key, t.Level)
-			o.optimizeStruct(t.PkgPath, t.StructName, t.FilePath, t.Depth)
-		}(task)
+			
+			o.Log(3, "处理包：%s (%d 个结构体)", pkg, len(taskList))
+			
+			// 串行处理包内的结构体（避免包内竞争）
+			for _, task := range taskList {
+				key := task.PkgPath + "." + task.StructName
+				o.Log(3, "优化结构体：%s (层级:%d)", key, task.Level)
+				o.optimizeStruct(task.PkgPath, task.StructName, task.FilePath, task.Depth)
+			}
+		}(pkgPath, tasks)
 	}
-
+	
 	wg.Wait()
 }
