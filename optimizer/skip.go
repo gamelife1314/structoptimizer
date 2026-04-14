@@ -1,6 +1,8 @@
 package optimizer
 
 import (
+	"go/ast"
+	"go/token"
 	"go/types"
 	"path/filepath"
 	"strings"
@@ -44,11 +46,47 @@ func (o *Optimizer) shouldSkip(info *StructInfo, st *types.Struct, key string) s
 
 	// 检查是否通过方法指定跳过
 	if len(o.config.SkipByMethods) > 0 {
-		// 注意：这里无法直接从 types.Struct 获取方法，需要跳过这个检查
-		// 方法检查需要在 analyzer 中进行
+		// 需要加载包来检查方法
+		pkg, err := o.analyzer.LoadPackage(info.PkgPath)
+		if err == nil {
+			// 在包中查找结构体类型
+			for _, syntax := range pkg.Syntax {
+				for _, decl := range syntax.Decls {
+					genDecl, ok := decl.(*ast.GenDecl)
+					if !ok || genDecl.Tok != token.TYPE {
+						continue
+					}
+					for _, spec := range genDecl.Specs {
+						typeSpec, ok := spec.(*ast.TypeSpec)
+						if !ok || typeSpec.Name.Name != info.Name {
+							continue
+						}
+						if named, ok := pkg.TypesInfo.ObjectOf(typeSpec.Name).(*types.TypeName); ok {
+							if t, ok := named.Type().(*types.Named); ok {
+								for _, methodName := range o.config.SkipByMethods {
+									if o.hasMethod(t, methodName) {
+										return "通过方法指定跳过：" + methodName
+									}
+								}
+							}
+						}
+					}
+				}
+			}
+		}
 	}
 
 	return ""
+}
+
+// hasMethod 检查结构体是否有指定方法
+func (o *Optimizer) hasMethod(named *types.Named, methodName string) bool {
+	for i := 0; i < named.NumMethods(); i++ {
+		if named.Method(i).Name() == methodName {
+			return true
+		}
+	}
+	return false
 }
 
 // matchStructName 匹配结构体名称（支持通配符）
