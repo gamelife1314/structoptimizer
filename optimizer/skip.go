@@ -64,7 +64,7 @@ func (o *Optimizer) shouldSkip(info *StructInfo, st *types.Struct, key string) s
 						if named, ok := pkg.TypesInfo.ObjectOf(typeSpec.Name).(*types.TypeName); ok {
 							if t, ok := named.Type().(*types.Named); ok {
 								for _, methodName := range o.config.SkipByMethods {
-									if o.hasMethod(t, methodName) {
+									if o.hasMethodOrMatch(t, methodName) {
 										return "通过方法指定跳过：" + methodName
 									}
 								}
@@ -79,13 +79,33 @@ func (o *Optimizer) shouldSkip(info *StructInfo, st *types.Struct, key string) s
 	return ""
 }
 
-// hasMethod 检查结构体是否有指定方法
+// hasMethod 检查结构体是否有指定方法（精确匹配）
 func (o *Optimizer) hasMethod(named *types.Named, methodName string) bool {
 	for i := 0; i < named.NumMethods(); i++ {
 		if named.Method(i).Name() == methodName {
 			return true
 		}
 	}
+	return false
+}
+
+// hasMethodOrMatch 检查结构体是否有指定方法或匹配通配符
+func (o *Optimizer) hasMethodOrMatch(named *types.Named, pattern string) bool {
+	// 精确匹配
+	if o.hasMethod(named, pattern) {
+		return true
+	}
+
+	// 通配符匹配
+	if strings.Contains(pattern, "*") {
+		for i := 0; i < named.NumMethods(); i++ {
+			methodName := named.Method(i).Name()
+			if matched, _ := filepath.Match(pattern, methodName); matched {
+				return true
+			}
+		}
+	}
+
 	return false
 }
 
