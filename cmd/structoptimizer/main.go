@@ -18,34 +18,22 @@ type Config struct {
 	Package        string
 	SourceFile     string
 	Write          bool
-	Backup         bool
-	SkipDirs       stringSlice
-	SkipFiles      stringSlice
-	SkipByMethods  stringSlice
-	SkipByNames    stringSlice
-	Output         string
-	Verbose        int
-	SortSameSize   bool
-	ReportFormat   string
-	ProjectType    string // 项目类型：gomod 或 gopath
-	GOPATH         string // GOPATH 路径（可选）
-	TargetDir      string // 项目目录（位置参数）
-	MaxDepth       int    // 最大递归深度
-	Timeout        int    // 超时时间（秒）
-	PkgScope       string // 包范围限制
-	PkgWorkerLimit int    // 包并发限制
-}
-
-// stringSlice 自定义字符串切片类型
-type stringSlice []string
-
-func (s *stringSlice) String() string {
-	return strings.Join(*s, ", ")
-}
-
-func (s *stringSlice) Set(value string) error {
-	*s = append(*s, value)
-	return nil
+	Backup        bool
+	SkipDirs      string
+	SkipFiles     string
+	SkipByMethods string
+	SkipByNames   string
+	Output        string
+	Verbose       int
+	SortSameSize  bool
+	ReportFormat  string
+	ProjectType   string // 项目类型：gomod 或 gopath
+	GOPATH        string // GOPATH 路径（可选）
+	TargetDir     string // 项目目录（位置参数）
+	MaxDepth      int    // 最大递归深度
+	Timeout       int    // 超时时间（秒）
+	PkgScope      string // 包范围限制
+	PkgWorkerLimit int   // 包并发限制
 }
 
 func main() {
@@ -59,16 +47,22 @@ func main() {
 		os.Exit(1)
 	}
 
+	// 解析逗号分隔的参数
+	skipDirs := parseCommaList(cfg.SkipDirs)
+	skipFiles := parseCommaList(cfg.SkipFiles)
+	skipByMethods := parseCommaList(cfg.SkipByMethods)
+	skipByNames := parseCommaList(cfg.SkipByNames)
+
 	// 创建分析器
 	analyzerCfg := &analyzer.Config{
 		TargetDir:     cfg.TargetDir,
 		StructName:    cfg.Struct,
 		Package:       cfg.Package,
 		SourceFile:    cfg.SourceFile,
-		SkipDirs:      cfg.SkipDirs,
-		SkipFiles:     cfg.SkipFiles,
-		SkipByMethods: cfg.SkipByMethods,
-		SkipByNames:   cfg.SkipByNames,
+		SkipDirs:      skipDirs,
+		SkipFiles:     skipFiles,
+		SkipByMethods: skipByMethods,
+		SkipByNames:   skipByNames,
 		Verbose:       cfg.Verbose,
 		ProjectType:   cfg.ProjectType,
 		GOPATH:        cfg.GOPATH,
@@ -77,19 +71,19 @@ func main() {
 
 	// 创建优化器
 	optimizerCfg := &optimizer.Config{
-		TargetDir:     cfg.TargetDir,
-		StructName:    cfg.Struct,
-		Package:       cfg.Package,
-		SourceFile:    cfg.SourceFile,
-		Write:         cfg.Write,
-		Backup:        cfg.Backup,
-		SkipDirs:      cfg.SkipDirs,
-		SkipFiles:     cfg.SkipFiles,
-		SkipByMethods: cfg.SkipByMethods,
-		SkipByNames:   cfg.SkipByNames,
-		Verbose:       cfg.Verbose,
-		SortSameSize:  cfg.SortSameSize,
-		Output:        cfg.Output,
+		TargetDir:      cfg.TargetDir,
+		StructName:     cfg.Struct,
+		Package:        cfg.Package,
+		SourceFile:     cfg.SourceFile,
+		Write:          cfg.Write,
+		Backup:         cfg.Backup,
+		SkipDirs:       skipDirs,
+		SkipFiles:      skipFiles,
+		SkipByMethods:  skipByMethods,
+		SkipByNames:    skipByNames,
+		Verbose:        cfg.Verbose,
+		SortSameSize:   cfg.SortSameSize,
+		Output:         cfg.Output,
 		ProjectType:    cfg.ProjectType,
 		GOPATH:         cfg.GOPATH,
 		MaxDepth:       cfg.MaxDepth,
@@ -149,10 +143,10 @@ func parseFlags() *Config {
 	flag.StringVar(&cfg.SourceFile, "source-file", "", "源文件路径")
 	flag.BoolVar(&cfg.Write, "write", false, "直接写入源文件")
 	flag.BoolVar(&cfg.Backup, "backup", true, "修改前备份源文件")
-	flag.Var(&cfg.SkipDirs, "skip-dir", "跳过的目录（支持通配符，可多次指定）")
-	flag.Var(&cfg.SkipFiles, "skip-file", "跳过的文件（支持通配符，可多次指定）")
-	flag.Var(&cfg.SkipByMethods, "skip-by-methods", "具有这些方法的结构体跳过（逗号分隔）")
-	flag.Var(&cfg.SkipByNames, "skip-by-names", "指定名称的结构体跳过（逗号分隔）")
+	flag.StringVar(&cfg.SkipDirs, "skip-dir", "", "跳过的目录（支持通配符，逗号分隔）")
+	flag.StringVar(&cfg.SkipFiles, "skip-file", "", "跳过的文件（支持通配符，逗号分隔）")
+	flag.StringVar(&cfg.SkipByMethods, "skip-by-methods", "", "具有这些方法的结构体跳过（逗号分隔）")
+	flag.StringVar(&cfg.SkipByNames, "skip-by-names", "", "指定名称的结构体跳过（逗号分隔）")
 	flag.StringVar(&cfg.Output, "output", "", "报告输出路径")
 	flag.StringVar(&cfg.ReportFormat, "format", "md", "报告格式（txt/md/html）")
 	flag.BoolVar(&cfg.SortSameSize, "sort-same-size", false, "大小相同时按字段大小重排")
@@ -194,19 +188,6 @@ func parseFlags() *Config {
 	} else if *v {
 		cfg.Verbose = 1
 	}
-
-	// 解析 skip-by-methods（逗号分隔）
-	var methods []string
-	for _, m := range cfg.SkipByMethods {
-		parts := strings.Split(m, ",")
-		for _, p := range parts {
-			p = strings.TrimSpace(p)
-			if p != "" {
-				methods = append(methods, p)
-			}
-		}
-	}
-	cfg.SkipByMethods = methods
 
 	// 获取项目目录（位置参数）
 	if flag.NArg() > 0 {
@@ -259,4 +240,21 @@ func validateFlags(cfg *Config) error {
 	}
 
 	return nil
+}
+
+// parseCommaList 解析逗号分隔的列表
+func parseCommaList(s string) []string {
+	if s == "" {
+		return nil
+	}
+	
+	var result []string
+	parts := strings.Split(s, ",")
+	for _, p := range parts {
+		p = strings.TrimSpace(p)
+		if p != "" {
+			result = append(result, p)
+		}
+	}
+	return result
 }
