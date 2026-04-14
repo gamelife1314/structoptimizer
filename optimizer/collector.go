@@ -93,8 +93,17 @@ func (o *Optimizer) collectStructs(pkgPath, structName, filePath string, depth, 
 	o.structQueue = append(o.structQueue, task)
 	o.mu.Unlock()
 
-	// 递归收集嵌套结构体（只解析文件）
-	o.collectNestedFromFields(nestedFields, pkgPath, filePath, depth, level)
+	// 递归收集嵌套结构体（跨包分析）
+	for _, field := range nestedFields {
+		// 跳过标准库和第三方包
+		if isStandardLibraryPkg(field.PkgPath) || isVendorPackage(field.PkgPath) {
+			continue
+		}
+
+		if o.isProjectPackage(field.PkgPath) {
+			o.collectStructs(field.PkgPath, field.Name, filePath, depth+1, level+1)
+		}
+	}
 }
 
 // parseStructFromFileOnly 只解析文件获取结构体信息（不加载包）
