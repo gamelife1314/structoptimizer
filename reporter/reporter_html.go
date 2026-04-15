@@ -35,8 +35,6 @@ func (r *Reporter) GenerateHTML(report *optimizer.Report) (string, error) {
 	sb.WriteString("        .struct-card h4 { color: #7f8c8d; margin-top: 15px; }\n")
 	sb.WriteString("        .stats { background: #27ae60; color: white; padding: 15px; border-radius: 8px; display: inline-block; }\n")
 	sb.WriteString("        .warning { background: #f39c12; color: white; padding: 10px; border-radius: 5px; margin: 10px 0; }\n")
-	sb.WriteString("        .warning strong { font-weight: bold; }\n")
-	sb.WriteString("        em { color: #e74c3c; font-style: italic; }\n")
 	sb.WriteString("        table { border-collapse: collapse; width: 100%%; margin: 15px 0; }\n")
 	sb.WriteString("        th, td { border: 1px solid #ddd; padding: 10px; text-align: left; }\n")
 	sb.WriteString("        th { background: #3498db; color: white; }\n")
@@ -114,10 +112,10 @@ func (r *Reporter) GenerateHTML(report *optimizer.Report) (string, error) {
 				sr.OrigSize, sr.OptSize, sr.Saved, float64(sr.Saved)/float64(sr.OrigSize)*100))
 			sb.WriteString("                </div>\n\n")
 
-			// 字段对比表格（同一行显示优化前后，包含大小和匿名标记）
+			// 字段对比表格
 			sb.WriteString("                <h4>字段顺序对比:</h4>\n")
 			sb.WriteString("                <table>\n")
-			sb.WriteString("                    <tr><th>序号</th><th>优化前</th><th>优化后</th><th>大小</th><th>变化</th></tr>\n")
+			sb.WriteString("                    <tr><th>序号</th><th>优化前 - 字段名</th><th>优化前 - 类型</th><th>大小</th><th>优化后 - 字段名</th><th>优化后 - 类型</th><th>大小</th><th>变化</th></tr>\n")
 
 			maxLen := len(sr.OrigFields)
 			if len(sr.OptFields) > maxLen {
@@ -125,35 +123,33 @@ func (r *Reporter) GenerateHTML(report *optimizer.Report) (string, error) {
 			}
 
 			for i := 0; i < maxLen; i++ {
-				orig := "-"
-				opt := "-"
-				size := ""
+				origName := "-"
+				origType := "-"
+				origSize := ""
+				optName := "-"
+				optType := "-"
+				optSize := ""
 				change := ""
 
 				if i < len(sr.OrigFields) {
-					orig = sr.OrigFields[i]
+					origName = sr.OrigFields[i]
 					if sr.FieldTypes != nil {
-						if t, ok := sr.FieldTypes[orig]; ok {
-							size = fmt.Sprintf("%d", getFieldSize(t))
-							// 标记匿名字段
-							if orig == t {
-								orig = orig + " <em>(匿名)</em>"
-							}
+						if t, ok := sr.FieldTypes[origName]; ok {
+							origType = t
+							origSize = fmt.Sprintf("%d", getFieldSize(t))
 						}
 					}
 				}
 				if i < len(sr.OptFields) {
-					opt = sr.OptFields[i]
-					// 优化后也检查是否匿名
+					optName = sr.OptFields[i]
 					if sr.FieldTypes != nil {
-						if t, ok := sr.FieldTypes[opt]; ok {
-							if opt == t && !strings.Contains(opt, "(匿名)") {
-								opt = opt + " <em>(匿名)</em>"
-							}
+						if t, ok := sr.FieldTypes[optName]; ok {
+							optType = t
+							optSize = fmt.Sprintf("%d", getFieldSize(t))
 						}
 					}
 				}
-				if orig != "-" && opt != "-" && orig != opt {
+				if origName != "-" && optName != "-" && origName != optName {
 					change = "🔄"
 				}
 
@@ -161,8 +157,9 @@ func (r *Reporter) GenerateHTML(report *optimizer.Report) (string, error) {
 				if change != "" {
 					className = " class=\"changed\""
 				}
-				sb.WriteString(fmt.Sprintf("                    <tr%s><td>%d</td><td>%s</td><td>%s</td><td>%s</td><td>%s</td></tr>\n",
-					className, i+1, html.EscapeString(orig), html.EscapeString(opt), size, change))
+				sb.WriteString(fmt.Sprintf("                    <tr%s><td>%d</td><td><code>%s</code></td><td><code>%s</code></td><td>%s</td><td><code>%s</code></td><td><code>%s</code></td><td>%s</td><td>%s</td></tr>\n",
+					className, i+1, html.EscapeString(origName), html.EscapeString(origType), origSize,
+					html.EscapeString(optName), html.EscapeString(optType), optSize, change))
 			}
 			sb.WriteString("                </table>\n")
 			sb.WriteString("            </div>\n\n")
