@@ -83,18 +83,24 @@ func (mi *MethodIndex) indexPkg(pkgPath string) error {
 	// 获取包目录
 	dir, err := mi.getPkgDir(pkgPath)
 	if err != nil {
+		fmt.Printf("[DEBUG] MethodIndex indexPkg 失败 pkg=%s, err=%v\n", pkgPath, err)
 		return err
 	}
 
 	if dir == "" {
+		fmt.Printf("[DEBUG] MethodIndex indexPkg 空目录 pkg=%s\n", pkgPath)
 		return fmt.Errorf("无法获取包目录：%s", pkgPath)
 	}
+
+	fmt.Printf("[DEBUG] MethodIndex indexPkg pkg=%s dir=%s\n", pkgPath, dir)
 
 	// 扫描文件
 	files, err := filepath.Glob(filepath.Join(dir, "*.go"))
 	if err != nil {
 		return err
 	}
+
+	fmt.Printf("[DEBUG] MethodIndex 找到 %d 个文件\n", len(files))
 
 	// 确保包缓存存在
 	mi.mu.Lock()
@@ -136,9 +142,12 @@ func (mi *MethodIndex) indexPkg(pkgPath string) error {
 			}
 			pkgCache[recvType][methodName] = true
 			mi.mu.Unlock()
+			
+			fmt.Printf("[DEBUG] MethodIndex 添加方法: %s.%s\n", recvType, methodName)
 		}
 	}
 
+	fmt.Printf("[DEBUG] MethodIndex 索引完成，包 %s 有 %d 个结构体\n", pkgPath, len(pkgCache))
 	return nil
 }
 
@@ -159,19 +168,28 @@ func extractRecvType(expr ast.Expr) string {
 func (mi *MethodIndex) getPkgDir(pkgPath string) (string, error) {
 	// 使用 go list 获取目录，支持 Module 和 GOPATH
 	cmd := exec.Command("go", "list", "-f", "{{.Dir}}", pkgPath)
-	out, err := cmd.Output()
+	
+	// 继承当前环境变量，确保 GOPATH 和 GO111MODULE 正确传递
+	cmd.Env = os.Environ()
+	
+	out, err := cmd.CombinedOutput()
 	if err != nil {
+		fmt.Printf("[DEBUG] MethodIndex go list 失败 pkg=%s, err=%v, out=%s\n", pkgPath, err, string(out))
 		return "", err
 	}
-	dir := strings.TrimSpace(string(out))
-	if dir == "" {
-		return "", nil
-	}
 	
+	dir := strings.TrimSpace(string(out))
+	fmt.Printf("[DEBUG] MethodIndex go list 结果 pkg=%s dir=%s\n", pkgPath, dir)
+	
+	if dir == "" {
+		return "", fmt.Errorf("go list 返回空目录：%s", pkgPath)
+	}
+
 	// 验证目录是否存在
 	if _, err := os.Stat(dir); err != nil {
+		fmt.Printf("[DEBUG] MethodIndex 目录不存在 dir=%s\n", dir)
 		return "", err
 	}
-	
+
 	return dir, nil
 }
