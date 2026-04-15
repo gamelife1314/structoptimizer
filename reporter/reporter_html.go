@@ -124,11 +124,11 @@ func (r *Reporter) GenerateHTML(report *optimizer.Report) (string, error) {
 			}
 
 			for i := 0; i < maxLen; i++ {
-				origName := "-"
-				origType := "-"
+				origName := ""
+				origType := ""
 				origSize := ""
-				optName := "-"
-				optType := "-"
+				optName := ""
+				optType := ""
 				optSize := ""
 				change := ""
 
@@ -138,6 +138,10 @@ func (r *Reporter) GenerateHTML(report *optimizer.Report) (string, error) {
 						if t, ok := sr.FieldTypes[origName]; ok {
 							origType = t
 							origSize = fmt.Sprintf("%d", getFieldSize(t))
+							// 匿名字段：字段名显示为空，只显示类型名
+							if origName == origType {
+								origName = ""
+							}
 						}
 					}
 				}
@@ -147,10 +151,15 @@ func (r *Reporter) GenerateHTML(report *optimizer.Report) (string, error) {
 						if t, ok := sr.FieldTypes[optName]; ok {
 							optType = t
 							optSize = fmt.Sprintf("%d", getFieldSize(t))
+							// 匿名字段：字段名显示为空，只显示类型名
+							if optName == optType {
+								optName = ""
+							}
 						}
 					}
 				}
-				if origName != "-" && optName != "-" && origName != optName {
+
+				if origName != "" && optName != "" && origName != optName {
 					change = "🔄"
 				}
 

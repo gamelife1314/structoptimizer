@@ -114,7 +114,7 @@ func (r *Reporter) GenerateTXT(report *optimizer.Report) (string, error) {
 			if len(sr.OptFields) > maxLen {
 				maxLen = len(sr.OptFields)
 			}
-			
+
 			for i := 0; i < maxLen; i++ {
 				origName := "-"
 				origType := "-"
@@ -123,13 +123,17 @@ func (r *Reporter) GenerateTXT(report *optimizer.Report) (string, error) {
 				optType := "-"
 				optSize := ""
 				change := ""
-				
+
 				if i < len(sr.OrigFields) {
 					origName = sr.OrigFields[i]
 					if sr.FieldTypes != nil {
 						if t, ok := sr.FieldTypes[origName]; ok {
 							origType = t
 							origSize = fmt.Sprintf("%d", getFieldSize(t))
+							// 匿名字段：字段名显示为空，只显示类型名
+							if origName == origType {
+								origName = ""
+							}
 						}
 					}
 				}
@@ -139,14 +143,18 @@ func (r *Reporter) GenerateTXT(report *optimizer.Report) (string, error) {
 						if t, ok := sr.FieldTypes[optName]; ok {
 							optType = t
 							optSize = fmt.Sprintf("%d", getFieldSize(t))
+							// 匿名字段：字段名显示为空，只显示类型名
+							if optName == optType {
+								optName = ""
+							}
 						}
 					}
 				}
-				
-				if origName != "-" && optName != "-" && origName != optName {
+
+				if origName != "" && optName != "" && origName != optName {
 					change = "🔄"
 				}
-				
+
 				sb.WriteString(fmt.Sprintf("   │ %-2d │ %-24s │ %-24s │ %-6s │ %-24s │ %-24s │ %-6s │ %-6s │\n",
 					i+1, origName, origType, origSize, optName, optType, optSize, change))
 			}
