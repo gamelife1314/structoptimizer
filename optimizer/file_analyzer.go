@@ -74,12 +74,15 @@ func extractFieldsFromAST(ts *ast.TypeSpec, fset *token.FileSet) (*types.Struct,
 	for _, f := range st.Fields.List {
 		typeName := extractTypeName(f.Type)
 		size, align := estimateFieldSize(f.Type)
-		
+
 		// 判断是否是匿名字段
 		isEmbed := len(f.Names) == 0
+		
+		// 获取字段名（用于 FieldInfo）
+		fieldName := getFieldName(f)
 
 		fi := FieldInfo{
-			Name:     getFieldName(f),
+			Name:     fieldName,
 			Size:     size,
 			Align:    align,
 			TypeName: typeName,
@@ -93,7 +96,12 @@ func extractFieldsFromAST(ts *ast.TypeSpec, fset *token.FileSet) (*types.Struct,
 		fields = append(fields, fi)
 
 		// 创建 types.Var 用于后续处理
-		varFields = append(varFields, types.NewField(f.Pos(), nil, fi.Name, types.Typ[types.Invalid], false))
+		// 注意：匿名字段在 types.Var 中使用类型名，避免 "multifields with the same name" 错误
+		typesFieldName := fieldName
+		if isEmbed {
+			typesFieldName = typeName
+		}
+		varFields = append(varFields, types.NewField(f.Pos(), nil, typesFieldName, types.Typ[types.Invalid], false))
 	}
 
 	// 创建简化的 types.Struct
