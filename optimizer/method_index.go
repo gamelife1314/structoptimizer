@@ -1,6 +1,7 @@
 package optimizer
 
 import (
+	"fmt"
 	"go/ast"
 	"os"
 	"os/exec"
@@ -61,13 +62,19 @@ func (mi *MethodIndex) HasMethod(pkgPath, structName, methodPattern string) bool
 
 // matchMethod 匹配方法名（支持通配符）
 func (mi *MethodIndex) matchMethod(methodName, pattern string) bool {
+	// 完全匹配
 	if methodName == pattern {
 		return true
 	}
+	
+	// 通配符匹配
 	if strings.Contains(pattern, "*") || strings.Contains(pattern, "?") {
 		matched, _ := filepath.Match(pattern, methodName)
-		return matched
+		if matched {
+			return true
+		}
 	}
+	
 	return false
 }
 
@@ -77,6 +84,10 @@ func (mi *MethodIndex) indexPkg(pkgPath string) error {
 	dir, err := mi.getPkgDir(pkgPath)
 	if err != nil {
 		return err
+	}
+
+	if dir == "" {
+		return fmt.Errorf("无法获取包目录：%s", pkgPath)
 	}
 
 	// 扫描文件
@@ -99,10 +110,7 @@ func (mi *MethodIndex) indexPkg(pkgPath string) error {
 		if strings.HasSuffix(file, "_test.go") {
 			continue
 		}
-		
-		// 快速跳过不包含 func 的文件（可选，简单读取字节检查）
-		// 这里直接解析，性能通常可接受
-		
+
 		f, err := parser.ParseFile(fset, file, nil, parser.ParseComments)
 		if err != nil {
 			continue

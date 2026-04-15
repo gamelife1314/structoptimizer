@@ -58,7 +58,9 @@ func (o *Optimizer) shouldSkip(info *StructInfo, st *types.Struct, key string) s
 // hasMethodByName 检查结构体是否有指定方法（使用 MethodIndex，不加载包）
 func (o *Optimizer) hasMethodByName(info *StructInfo, methodPattern string) bool {
 	// 使用 MethodIndex 查询，无需加载整个包
-	return o.methodIndex.HasMethod(info.PkgPath, info.Name, methodPattern)
+	result := o.methodIndex.HasMethod(info.PkgPath, info.Name, methodPattern)
+	o.Log(3, "检查方法 %s.%s.%s = %v", info.PkgPath, info.Name, methodPattern, result)
+	return result
 }
 
 // matchMethod 匹配方法名（支持通配符）
