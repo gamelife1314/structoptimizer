@@ -89,7 +89,8 @@ func (r *Reporter) GenerateHTML(report *optimizer.Report) (string, error) {
 			} else {
 				skippedError = append(skippedError, sr)
 			}
-		} else if sr.Saved > 0 {
+		} else if sr.OrigSize > sr.OptSize {
+			// 与 OptimizedCount 统计标准一致
 			optimized = append(optimized, sr)
 		} else {
 			unchanged = append(unchanged, sr)

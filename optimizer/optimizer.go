@@ -171,7 +171,8 @@ func (o *Optimizer) optimizeInternal() (*Report, error) {
 	for _, info := range o.optimized {
 		if info.Skipped {
 			o.report.SkippedCount++
-		} else if info.Optimized {
+		} else if info.OrigSize > info.OptSize {
+			// 只有真正节省了内存才算优化
 			o.report.OptimizedCount++
 			o.report.TotalSaved += info.OrigSize - info.OptSize
 		}
