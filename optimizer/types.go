@@ -96,6 +96,7 @@ type StructReport struct {
 	Skipped     bool
 	SkipReason  string
 	Depth       int
+	HasEmbed    bool // 是否包含匿名字段
 }
 
 // Report 优化报告

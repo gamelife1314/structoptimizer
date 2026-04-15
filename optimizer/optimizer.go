@@ -413,10 +413,12 @@ func (o *Optimizer) createSkippedInfo(key, filePath, reason string) *StructInfo 
 func (o *Optimizer) addReport(info *StructInfo, skipReason string, depth int) {
 	// 构建字段类型映射
 	fieldTypes := make(map[string]string)
+	hasEmbed := false
 	for _, f := range info.Fields {
 		key := f.Name
 		if key == "" {
 			key = f.TypeName // 匿名字段使用类型名
+			hasEmbed = true
 		}
 		fieldTypes[key] = f.TypeName
 	}
@@ -434,6 +436,7 @@ func (o *Optimizer) addReport(info *StructInfo, skipReason string, depth int) {
 		Skipped:    info.Skipped,
 		SkipReason: skipReason,
 		Depth:      depth,
+		HasEmbed:   hasEmbed,
 	}
 
 	if info.OptSize == 0 && info.OrigSize == 0 {
