@@ -58,8 +58,15 @@ func (r *Reporter) GenerateMD(report *optimizer.Report) (string, error) {
 		sb.WriteString(fmt.Sprintf("**共 %d 个结构体被优化**\n\n", len(optimized)))
 
 		for _, sr := range optimized {
-			sb.WriteString(fmt.Sprintf("### 📦 %s.%s\n\n", sr.PkgPath, sr.Name))
+			warning := ""
+			if sr.HasEmbed {
+				warning = " ⚠️"
+			}
+			sb.WriteString(fmt.Sprintf("### 📦 %s.%s%s\n\n", sr.PkgPath, sr.Name, warning))
 			sb.WriteString(fmt.Sprintf("**📁 文件**: `%s`\n\n", sr.File))
+			if sr.HasEmbed {
+				sb.WriteString("> ⚠️  **警告：包含匿名字段，优化后可能影响兼容性，请手动检查！**\n\n")
+			}
 
 			// 大小对比
 			sb.WriteString("### 📏 内存优化\n\n")
@@ -71,40 +78,42 @@ func (r *Reporter) GenerateMD(report *optimizer.Report) (string, error) {
 			sb.WriteString(fmt.Sprintf("节省：  %6d 字节 (%.1f%%)\n", sr.Saved, float64(sr.Saved)/float64(sr.OrigSize)*100))
 			sb.WriteString("```\n\n")
 
-			// 字段对比表格
-			sb.WriteString("**优化前字段顺序:**\n\n")
-			sb.WriteString("| 序号 | 字段名 | 类型 | 大小 |\n")
-			sb.WriteString("|:----:|--------|------|------|\n")
-			for i, field := range sr.OrigFields {
-				typeInfo := ""
-				sizeInfo := ""
-				if sr.FieldTypes != nil {
-					if t, ok := sr.FieldTypes[field]; ok {
-						typeInfo = t
-						sizeInfo = fmt.Sprintf(" [%d 字节]", getFieldSize(typeInfo))
-					}
-				}
-				sb.WriteString(fmt.Sprintf("| %d | `%s` | `%s` |%s |\n", i+1, field, typeInfo, sizeInfo))
-			}
-			sb.WriteString("\n")
+			// 字段对比表格（同一行显示优化前后）
+			sb.WriteString("**字段顺序对比:**\n\n")
+			sb.WriteString("| 序号 | 优化前 | 优化后 | 变化 |\n")
+			sb.WriteString("|:----:|--------|--------|------|\n")
 
-			sb.WriteString("**优化后字段顺序:**\n\n")
-			sb.WriteString("| 序号 | 字段名 | 类型 | 大小 | 变化 |\n")
-			sb.WriteString("|:----:|--------|------|------|------|\n")
-			for i, field := range sr.OptFields {
-				typeInfo := ""
-				sizeInfo := ""
-				if sr.FieldTypes != nil {
-					if t, ok := sr.FieldTypes[field]; ok {
-						typeInfo = t
-						sizeInfo = fmt.Sprintf(" [%d 字节]", getFieldSize(typeInfo))
+			maxLen := len(sr.OrigFields)
+			if len(sr.OptFields) > maxLen {
+				maxLen = len(sr.OptFields)
+			}
+
+			for i := 0; i < maxLen; i++ {
+				orig := "-"
+				opt := "-"
+				change := ""
+
+				if i < len(sr.OrigFields) {
+					orig = sr.OrigFields[i]
+					if sr.FieldTypes != nil {
+						if t, ok := sr.FieldTypes[orig]; ok {
+							orig = orig + " (" + t + ")"
+						}
 					}
 				}
-				change := ""
-				if i < len(sr.OrigFields) && sr.OrigFields[i] != field {
-					change = "⬆️"
+				if i < len(sr.OptFields) {
+					opt = sr.OptFields[i]
+					if sr.FieldTypes != nil {
+						if t, ok := sr.FieldTypes[opt]; ok {
+							opt = opt + " (" + t + ")"
+						}
+					}
 				}
-				sb.WriteString(fmt.Sprintf("| %d | `%s` | `%s` |%s| %s |\n", i+1, field, typeInfo, sizeInfo, change))
+				if orig != "-" && opt != "-" && orig != opt {
+					change = "🔄"
+				}
+
+				sb.WriteString(fmt.Sprintf("| %d | `%s` | `%s` | %s |\n", i+1, orig, opt, change))
 			}
 			sb.WriteString("\n\n---\n\n")
 		}

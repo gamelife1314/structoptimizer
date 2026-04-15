@@ -90,47 +90,58 @@ func (r *Reporter) GenerateTXT(report *optimizer.Report) (string, error) {
 		sb.WriteString("└────────────────────────────────────────────────────────────────────────────────┘\n\n")
 
 		for _, sr := range optimized {
-			sb.WriteString(fmt.Sprintf("📦 %s.%s\n", sr.PkgPath, sr.Name))
+			sb.WriteString(fmt.Sprintf("📦 %s.%s", sr.PkgPath, sr.Name))
+			if sr.HasEmbed {
+				sb.WriteString(" ⚠️")
+			}
+			sb.WriteString("\n")
 			sb.WriteString(strings.Repeat("─", 80) + "\n")
 			sb.WriteString(fmt.Sprintf("   📁 文件：%s\n", sr.File))
+			if sr.HasEmbed {
+				sb.WriteString("   ⚠️  警告：包含匿名字段，优化后可能影响兼容性，请手动检查！\n")
+			}
 			sb.WriteString(fmt.Sprintf("   📏 优化前：%d 字节  →  📏 优化后：%d 字节  →  💰 节省：%d 字节 (%.1f%%)\n",
 				sr.OrigSize, sr.OptSize, sr.Saved, float64(sr.Saved)/float64(sr.OrigSize)*100))
 			sb.WriteString("\n")
 
-			sb.WriteString("   优化前字段顺序:\n")
-			for i, field := range sr.OrigFields {
-				typeInfo := ""
-				sizeInfo := ""
-				if sr.FieldTypes != nil {
-					if t, ok := sr.FieldTypes[field]; ok {
-						typeInfo = t
-					}
-					if typeInfo != "" {
-						sizeInfo = fmt.Sprintf(" [%d 字节]", getFieldSize(typeInfo))
-					}
-				}
-				sb.WriteString(fmt.Sprintf("      %2d. %-20s %-15s%s\n", i+1, field, typeInfo, sizeInfo))
+			sb.WriteString("   字段顺序对比:\n")
+			sb.WriteString("   ┌────────┬──────────────────────┬──────────────────────┬────────┐\n")
+			sb.WriteString("   │ 序号   │ 优化前               │ 优化后               │ 变化   │\n")
+			sb.WriteString("   ├────────┼──────────────────────┼──────────────────────┼────────┤\n")
+			
+			maxLen := len(sr.OrigFields)
+			if len(sr.OptFields) > maxLen {
+				maxLen = len(sr.OptFields)
 			}
-
-			sb.WriteString("\n   优化后字段顺序:\n")
-			for i, field := range sr.OptFields {
-				typeInfo := ""
-				sizeInfo := ""
-				if sr.FieldTypes != nil {
-					if t, ok := sr.FieldTypes[field]; ok {
-						typeInfo = t
-					}
-					if typeInfo != "" {
-						sizeInfo = fmt.Sprintf(" [%d 字节]", getFieldSize(typeInfo))
+			
+			for i := 0; i < maxLen; i++ {
+				orig := "-"
+				opt := "-"
+				change := ""
+				
+				if i < len(sr.OrigFields) {
+					orig = sr.OrigFields[i]
+					if sr.FieldTypes != nil {
+						if t, ok := sr.FieldTypes[orig]; ok {
+							orig = orig + " (" + t + ")"
+						}
 					}
 				}
-				arrow := ""
-				if i < len(sr.OrigFields) && sr.OrigFields[i] != field {
-					arrow = " ⬆️"
+				if i < len(sr.OptFields) {
+					opt = sr.OptFields[i]
+					if sr.FieldTypes != nil {
+						if t, ok := sr.FieldTypes[opt]; ok {
+							opt = opt + " (" + t + ")"
+						}
+					}
 				}
-				sb.WriteString(fmt.Sprintf("      %2d. %-20s %-15s%s%s\n", i+1, field, typeInfo, sizeInfo, arrow))
+				if orig != "-" && opt != "-" && orig != opt {
+					change = "🔄"
+				}
+				
+				sb.WriteString(fmt.Sprintf("   │ %-6d │ %-20s │ %-20s │ %-6s │\n", i+1, orig, opt, change))
 			}
-			sb.WriteString("\n\n")
+			sb.WriteString("   └────────┴──────────────────────┴──────────────────────┴────────┘\n\n")
 		}
 	}
 
