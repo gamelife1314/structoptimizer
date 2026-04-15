@@ -65,7 +65,8 @@ func (r *Reporter) GenerateMD(report *optimizer.Report) (string, error) {
 			sb.WriteString(fmt.Sprintf("### 📦 %s.%s%s\n\n", sr.PkgPath, sr.Name, warning))
 			sb.WriteString(fmt.Sprintf("**📁 文件**: `%s`\n\n", sr.File))
 			if sr.HasEmbed {
-				sb.WriteString("> ⚠️  **警告：包含匿名字段，优化后可能影响兼容性，请手动检查！**\n\n")
+				sb.WriteString("> ⚠️  **警告：包含匿名字段，优化后可能影响兼容性，请手动检查！**\n")
+				sb.WriteString("> ⚠️  **提示：如果使用 -write 参数直接修改源码文件，建议人工审核！**\n\n")
 			}
 
 			// 大小对比
