@@ -13,10 +13,7 @@ import (
 	"github.com/gamelife1314/structoptimizer/writer"
 )
 
-// 版本信息
-const (
-	Version = "1.5.0"
-)
+// 版本信息使用 reporter 包统一定义
 
 // Config 配置
 type Config struct {
@@ -50,7 +47,7 @@ func main() {
 
 	// 显示版本
 	if cfg.ShowVersion {
-		fmt.Printf("structoptimizer version %s\n", Version)
+		fmt.Printf("structoptimizer version %s\n", reporter.Version)
 		os.Exit(0)
 	}
 
