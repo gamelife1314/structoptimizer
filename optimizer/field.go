@@ -105,11 +105,8 @@ func (fa *FieldAnalyzer) analyzeFields(structType *types.Struct, structName, pkg
 
 // getFieldName 获取字段名称
 func (fa *FieldAnalyzer) getFieldName(field *types.Var, index int) string {
-	if field.Name() != "" {
-		return field.Name()
-	}
-	// 匿名字段
-	return fa.getTypeName(field.Type())
+	// 直接返回字段名，匿名字段返回空字符串
+	return field.Name()
 }
 
 // getTypePkg 获取类型的包路径

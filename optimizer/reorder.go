@@ -6,7 +6,40 @@ import (
 
 // ReorderFields 重排字段以优化内存对齐
 // 只有当能节省内存时才调整顺序，否则保持原顺序
-func ReorderFields(fields []FieldInfo, sortSameSize bool) []FieldInfo {
+// reservedFields 中的字段始终排在最后
+func ReorderFields(fields []FieldInfo, sortSameSize bool, reservedFields []string) []FieldInfo {
+	if len(fields) <= 1 {
+		return fields
+	}
+
+	// 分离预留字段和普通字段
+	var reserved []FieldInfo
+	var normal []FieldInfo
+	
+	reservedMap := make(map[string]bool)
+	for _, name := range reservedFields {
+		reservedMap[name] = true
+	}
+	
+	for _, f := range fields {
+		if reservedMap[f.Name] {
+			reserved = append(reserved, f)
+		} else {
+			normal = append(normal, f)
+		}
+	}
+
+	// 对普通字段排序
+	sorted := reorderFieldsInternal(normal, sortSameSize)
+	
+	// 预留字段追加到末尾
+	sorted = append(sorted, reserved...)
+	
+	return sorted
+}
+
+// reorderFieldsInternal 内部字段排序逻辑
+func reorderFieldsInternal(fields []FieldInfo, sortSameSize bool) []FieldInfo {
 	if len(fields) <= 1 {
 		return fields
 	}

@@ -136,7 +136,7 @@ func TestReorderFields(t *testing.T) {
 		{Name: "E", Size: 4, Align: 4, TypeName: "int32"},
 	}
 
-	result := ReorderFields(fields, false)
+	result := ReorderFields(fields, false, nil)
 
 	// 期望顺序：B(8), C(4), E(4), A(1), D(1)
 	expected := []string{"B", "C", "E", "A", "D"}
@@ -160,7 +160,7 @@ func TestSortFields(t *testing.T) {
 		{Name: "C", Size: 4, Align: 4, TypeName: "int32"},
 	}
 
-	result := ReorderFields(fields, false)
+	result := ReorderFields(fields, false, nil)
 
 	if result[0].Name != "B" {
 		t.Errorf("ReorderFields()[0] = %v, want B", result[0].Name)
@@ -170,6 +170,29 @@ func TestSortFields(t *testing.T) {
 	}
 	if result[2].Name != "A" {
 		t.Errorf("ReorderFields()[2] = %v, want A", result[2].Name)
+	}
+}
+
+// TestReorderFieldsWithReserved 测试预留字段
+func TestReorderFieldsWithReserved(t *testing.T) {
+	fields := []FieldInfo{
+		{Name: "A", Size: 1, Align: 1, TypeName: "bool"},
+		{Name: "Reserved", Size: 8, Align: 8, TypeName: "[8]byte"},
+		{Name: "B", Size: 8, Align: 8, TypeName: "int64"},
+		{Name: "Padding", Size: 4, Align: 4, TypeName: "[4]byte"},
+	}
+
+	result := ReorderFields(fields, false, []string{"Reserved", "Padding"})
+	if len(result) != 4 {
+		t.Fatalf("ReorderFields() len = %v, want 4", len(result))
+	}
+
+	// 预留字段应该在最后
+	if result[2].Name != "Reserved" {
+		t.Errorf("ReorderFields()[2] = %v, want Reserved", result[2].Name)
+	}
+	if result[3].Name != "Padding" {
+		t.Errorf("ReorderFields()[3] = %v, want Padding", result[3].Name)
 	}
 }
 

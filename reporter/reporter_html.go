@@ -32,7 +32,9 @@ func (r *Reporter) GenerateHTML(report *optimizer.Report) (string, error) {
 	sb.WriteString("        .section { margin: 30px 0; }\n")
 	sb.WriteString("        .struct-card { background: #fafafa; border: 1px solid #e0e0e0; border-radius: 8px; padding: 20px; margin: 20px 0; }\n")
 	sb.WriteString("        .struct-card h3 { margin-top: 0; color: #2980b9; }\n")
+	sb.WriteString("        .struct-card h4 { color: #7f8c8d; margin-top: 15px; }\n")
 	sb.WriteString("        .stats { background: #27ae60; color: white; padding: 15px; border-radius: 8px; display: inline-block; }\n")
+	sb.WriteString("        .warning { background: #f39c12; color: white; padding: 10px; border-radius: 5px; margin: 10px 0; }\n")
 	sb.WriteString("        table { border-collapse: collapse; width: 100%%; margin: 15px 0; }\n")
 	sb.WriteString("        th, td { border: 1px solid #ddd; padding: 10px; text-align: left; }\n")
 	sb.WriteString("        th { background: #3498db; color: white; }\n")
@@ -64,6 +66,12 @@ func (r *Reporter) GenerateHTML(report *optimizer.Report) (string, error) {
 	}
 	if report.RootStruct != "" {
 		sb.WriteString(fmt.Sprintf("                <tr><td>🎯 主结构体</td><td><code>%s</code></td></tr>\n", html.EscapeString(report.RootStruct)))
+		if report.RootStructSize > 0 {
+			optRate := float64(report.RootStructSize-report.RootStructOptSize) / float64(report.RootStructSize) * 100
+			sb.WriteString(fmt.Sprintf("                <tr><td>📏 优化前大小</td><td><strong>%d 字节</strong></td></tr>\n", report.RootStructSize))
+			sb.WriteString(fmt.Sprintf("                <tr><td>📏 优化后大小</td><td><strong>%d 字节</strong></td></tr>\n", report.RootStructOptSize))
+			sb.WriteString(fmt.Sprintf("                <tr><td>📈 优化率</td><td><strong>%.1f%%</strong></td></tr>\n", optRate))
+		}
 	}
 	sb.WriteString("            </table>\n")
 	sb.WriteString("        </div>\n\n")
@@ -86,56 +94,82 @@ func (r *Reporter) GenerateHTML(report *optimizer.Report) (string, error) {
 		sb.WriteString(fmt.Sprintf("            <h2>✏️ 调整的结构体 (%d 个)</h2>\n\n", len(optimized)))
 
 		for _, sr := range optimized {
+			warning := ""
+			if sr.HasEmbed {
+				warning = " ⚠️"
+			}
 			sb.WriteString(fmt.Sprintf("            <div class=\"struct-card\">\n"))
-			sb.WriteString(fmt.Sprintf("                <h3>📦 %s.%s</h3>\n", html.EscapeString(sr.PkgPath), html.EscapeString(sr.Name)))
+			sb.WriteString(fmt.Sprintf("                <h3>📦 %s.%s%s</h3>\n", html.EscapeString(sr.PkgPath), html.EscapeString(sr.Name), warning))
 			sb.WriteString(fmt.Sprintf("                <p><strong>📁 文件</strong>: <code>%s</code></p>\n", html.EscapeString(sr.File)))
+			if sr.HasEmbed {
+				sb.WriteString("                <div class=\"warning\">\n")
+				sb.WriteString("                    ⚠️  <strong>警告：包含匿名字段，优化后可能影响兼容性，请手动检查！</strong><br>\n")
+				sb.WriteString("                    ⚠️  <strong>提示：如果使用 -write 参数直接修改源码文件，建议人工审核！</strong>\n")
+				sb.WriteString("                </div>\n\n")
+			}
 
 			sb.WriteString("                <div class=\"stats\">\n")
 			sb.WriteString(fmt.Sprintf("                    优化前：%d 字节 → 优化后：%d 字节 → 节省：%d 字节 (%.1f%%)\n",
 				sr.OrigSize, sr.OptSize, sr.Saved, float64(sr.Saved)/float64(sr.OrigSize)*100))
 			sb.WriteString("                </div>\n\n")
 
-			// 优化前字段
-			sb.WriteString("                <h4>优化前字段顺序:</h4>\n")
+			// 字段对比表格
+			sb.WriteString("                <h4>字段顺序对比:</h4>\n")
 			sb.WriteString("                <table>\n")
-			sb.WriteString("                    <tr><th>序号</th><th>字段名</th><th>类型</th><th>大小</th></tr>\n")
-			for i, field := range sr.OrigFields {
-				typeInfo := ""
-				sizeInfo := ""
-				if sr.FieldTypes != nil {
-					if t, ok := sr.FieldTypes[field]; ok {
-						typeInfo = t
-						sizeInfo = fmt.Sprintf(" [%d 字节]", getFieldSize(typeInfo))
-					}
-				}
-				sb.WriteString(fmt.Sprintf("                    <tr><td>%d</td><td><code>%s</code></td><td><code>%s</code></td><td>%s</td></tr>\n",
-					i+1, html.EscapeString(field), html.EscapeString(typeInfo), sizeInfo))
-			}
-			sb.WriteString("                </table>\n\n")
+			sb.WriteString("                    <tr><th>序号</th><th>优化前 - 字段名</th><th>优化前 - 类型</th><th>大小</th><th>优化后 - 字段名</th><th>优化后 - 类型</th><th>大小</th><th>变化</th></tr>\n")
 
-			// 优化后字段
-			sb.WriteString("                <h4>优化后字段顺序:</h4>\n")
-			sb.WriteString("                <table>\n")
-			sb.WriteString("                    <tr><th>序号</th><th>字段名</th><th>类型</th><th>大小</th><th>变化</th></tr>\n")
-			for i, field := range sr.OptFields {
-				typeInfo := ""
-				sizeInfo := ""
+			maxLen := len(sr.OrigFields)
+			if len(sr.OptFields) > maxLen {
+				maxLen = len(sr.OptFields)
+			}
+
+			for i := 0; i < maxLen; i++ {
+				origName := ""
+				origType := ""
+				origSize := ""
+				optName := ""
+				optType := ""
+				optSize := ""
 				change := ""
-				if sr.FieldTypes != nil {
-					if t, ok := sr.FieldTypes[field]; ok {
-						typeInfo = t
-						sizeInfo = fmt.Sprintf(" [%d 字节]", getFieldSize(typeInfo))
+
+				if i < len(sr.OrigFields) {
+					origName = sr.OrigFields[i]
+					if sr.FieldTypes != nil {
+						if t, ok := sr.FieldTypes[origName]; ok {
+							origType = t
+							origSize = fmt.Sprintf("%d", getFieldSize(t))
+							// 匿名字段：字段名显示为空，只显示类型名
+							if origName == origType {
+								origName = ""
+							}
+						}
 					}
 				}
-				if i < len(sr.OrigFields) && sr.OrigFields[i] != field {
-					change = "⬆️"
+				if i < len(sr.OptFields) {
+					optName = sr.OptFields[i]
+					if sr.FieldTypes != nil {
+						if t, ok := sr.FieldTypes[optName]; ok {
+							optType = t
+							optSize = fmt.Sprintf("%d", getFieldSize(t))
+							// 匿名字段：字段名显示为空，只显示类型名
+							if optName == optType {
+								optName = ""
+							}
+						}
+					}
 				}
+
+				if origName != "" && optName != "" && origName != optName {
+					change = "🔄"
+				}
+
 				className := ""
 				if change != "" {
 					className = " class=\"changed\""
 				}
-				sb.WriteString(fmt.Sprintf("                    <tr%s><td>%d</td><td><code>%s</code></td><td><code>%s</code></td><td>%s</td><td>%s</td></tr>\n",
-					className, i+1, html.EscapeString(field), html.EscapeString(typeInfo), sizeInfo, change))
+				sb.WriteString(fmt.Sprintf("                    <tr%s><td>%d</td><td><code>%s</code></td><td><code>%s</code></td><td>%s</td><td><code>%s</code></td><td><code>%s</code></td><td>%s</td><td>%s</td></tr>\n",
+					className, i+1, html.EscapeString(origName), html.EscapeString(origType), origSize,
+					html.EscapeString(optName), html.EscapeString(optType), optSize, change))
 			}
 			sb.WriteString("                </table>\n")
 			sb.WriteString("            </div>\n\n")

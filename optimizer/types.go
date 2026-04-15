@@ -67,6 +67,7 @@ type Config struct {
 	Timeout         int
 	PkgScope        string
 	PkgWorkerLimit  int // 包并发限制（默认 4，防止 OOM）
+	ReservedFields  []string // 预留字段名称（始终排在最后）
 }
 
 // StructInfo 结构体信息
@@ -98,6 +99,7 @@ type StructReport struct {
 	Skipped     bool
 	SkipReason  string
 	Depth       int
+	HasEmbed    bool // 是否包含匿名字段
 }
 
 // Report 优化报告
@@ -108,4 +110,6 @@ type Report struct {
 	TotalSaved     int64
 	StructReports  []*StructReport
 	RootStruct     string // 主结构体名称（-struct 模式）
+	RootStructSize int64  // 主结构体优化前大小
+	RootStructOptSize int64  // 主结构体优化后大小
 }
