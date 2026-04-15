@@ -187,6 +187,9 @@ func extractFieldNames(fields []FieldInfo) []string {
 	for _, f := range fields {
 		if f.Name != "" {
 			names = append(names, f.Name)
+		} else {
+			// 匿名字段使用类型名
+			names = append(names, f.TypeName)
 		}
 	}
 	return names

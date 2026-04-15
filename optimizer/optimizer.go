@@ -363,22 +363,25 @@ func (o *Optimizer) optimizeStruct(pkgPath, structName, filePath string, depth i
 	}
 
 	// 重排字段（嵌套结构体已在收集阶段处理）
-	optimizedFields := ReorderFields(info.Fields, o.config.SortSameSize, o.config.ReservedFields)
-	info.Fields = optimizedFields
+	// 注意：ReorderFields 内部使用估计大小判断是否重排，可能不准确
+	// 我们总是获取排序结果，然后在下面用准确大小判断是否采用
+	sortedFields := ReorderFields(info.Fields, o.config.SortSameSize, o.config.ReservedFields)
 
-	// 计算优化后大小
-	info.OptSize = CalcOptimizedSize(optimizedFields, o.analyzer.GetTypesInfo())
+	// 计算排序后的大小（使用准确的类型信息）
+	sortedOptSize := CalcOptimizedSize(sortedFields, o.analyzer.GetTypesInfo())
 
-	// 生成优化后的字段顺序
-	var optOrder []string
-	for _, f := range optimizedFields {
-		if f.Name != "" {
-			optOrder = append(optOrder, f.Name)
-		} else {
-			optOrder = append(optOrder, f.TypeName)
-		}
+	// 判断是否采用排序结果
+	// 条件：1) 能节省内存  2) 或者字段顺序不同（但大小相同也采用，因为可能有其他优化）
+	sortedOrder := extractFieldNamesFromInfo(sortedFields)
+	if sortedOptSize < info.OrigSize || !o.fieldOrderSame(info.OrigOrder, sortedOrder) {
+		info.Fields = sortedFields
+		info.OptSize = sortedOptSize
+		info.OptOrder = sortedOrder
+	} else {
+		// 不采用排序，保持原顺序
+		info.OptSize = info.OrigSize
+		info.OptOrder = info.OrigOrder
 	}
-	info.OptOrder = optOrder
 
 	// 检查是否真正优化了
 	if info.OrigSize != info.OptSize || !o.fieldOrderSame(info.OrigOrder, info.OptOrder) {
@@ -488,4 +491,18 @@ func isBasicType(typeName string) bool {
 		"byte": true, "rune": true, "uintptr": true,
 	}
 	return basicTypes[typeName]
+}
+
+// extractFieldNamesFromInfo 从 FieldInfo 列表提取字段名称
+func extractFieldNamesFromInfo(fields []FieldInfo) []string {
+	var names []string
+	for _, f := range fields {
+		if f.Name != "" {
+			names = append(names, f.Name)
+		} else {
+			// 匿名字段使用类型名
+			names = append(names, f.TypeName)
+		}
+	}
+	return names
 }

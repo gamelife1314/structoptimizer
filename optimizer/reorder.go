@@ -39,6 +39,7 @@ func ReorderFields(fields []FieldInfo, sortSameSize bool, reservedFields []strin
 }
 
 // reorderFieldsInternal 内部字段排序逻辑
+// 注意：这个函数现在总是返回排序结果，由调用者决定是否采用
 func reorderFieldsInternal(fields []FieldInfo, sortSameSize bool) []FieldInfo {
 	if len(fields) <= 1 {
 		return fields
@@ -59,18 +60,8 @@ func reorderFieldsInternal(fields []FieldInfo, sortSameSize bool) []FieldInfo {
 		return false
 	})
 
-	// 计算原始大小
-	origSize := calcSizeFromFields(fields)
-	// 计算优化后大小
-	optSize := calcSizeFromFields(result)
-
-	// 只有能节省内存时才调整顺序
-	if optSize < origSize {
-		return result
-	}
-
-	// 否则保持原顺序
-	return fields
+	// 总是返回排序结果，由调用者决定是否采用
+	return result
 }
 
 // calcSizeFromFields 计算字段总大小（含填充）
