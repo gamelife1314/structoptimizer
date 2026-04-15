@@ -15,7 +15,7 @@ import (
 
 // 版本信息
 const (
-	Version = "1.2.0"
+	Version = "1.5.0"
 )
 
 // Config 配置
