@@ -78,10 +78,10 @@ func (r *Reporter) GenerateMD(report *optimizer.Report) (string, error) {
 			sb.WriteString(fmt.Sprintf("节省：  %6d 字节 (%.1f%%)\n", sr.Saved, float64(sr.Saved)/float64(sr.OrigSize)*100))
 			sb.WriteString("```\n\n")
 
-			// 字段对比表格（同一行显示优化前后，包含大小和匿名标记）
+			// 字段对比表格
 			sb.WriteString("**字段顺序对比:**\n\n")
-			sb.WriteString("| 序号 | 优化前 | 优化后 | 大小 | 变化 |\n")
-			sb.WriteString("|:----:|--------|--------|------|------|\n")
+			sb.WriteString("| 序号 | 优化前 - 字段名 | 优化前 - 类型 | 大小 | 优化后 - 字段名 | 优化后 - 类型 | 大小 | 变化 |\n")
+			sb.WriteString("|:----:|----------------|---------------|------|-----------------|---------------|------|------|\n")
 
 			maxLen := len(sr.OrigFields)
 			if len(sr.OptFields) > maxLen {
@@ -89,39 +89,38 @@ func (r *Reporter) GenerateMD(report *optimizer.Report) (string, error) {
 			}
 
 			for i := 0; i < maxLen; i++ {
-				orig := "-"
-				opt := "-"
-				size := ""
+				origName := "-"
+				origType := "-"
+				origSize := ""
+				optName := "-"
+				optType := "-"
+				optSize := ""
 				change := ""
 
 				if i < len(sr.OrigFields) {
-					orig = sr.OrigFields[i]
+					origName = sr.OrigFields[i]
 					if sr.FieldTypes != nil {
-						if t, ok := sr.FieldTypes[orig]; ok {
-							size = fmt.Sprintf("%d", getFieldSize(t))
-							// 标记匿名字段
-							if orig == t {
-								orig = orig + " *(匿名)*"
-							}
+						if t, ok := sr.FieldTypes[origName]; ok {
+							origType = t
+							origSize = fmt.Sprintf("%d", getFieldSize(t))
 						}
 					}
 				}
 				if i < len(sr.OptFields) {
-					opt = sr.OptFields[i]
-					// 优化后也检查是否匿名
+					optName = sr.OptFields[i]
 					if sr.FieldTypes != nil {
-						if t, ok := sr.FieldTypes[opt]; ok {
-							if opt == t && !strings.Contains(opt, "(匿名)") {
-								opt = opt + " *(匿名)*"
-							}
+						if t, ok := sr.FieldTypes[optName]; ok {
+							optType = t
+							optSize = fmt.Sprintf("%d", getFieldSize(t))
 						}
 					}
 				}
-				if orig != "-" && opt != "-" && orig != opt {
+				if origName != "-" && optName != "-" && origName != optName {
 					change = "🔄"
 				}
 
-				sb.WriteString(fmt.Sprintf("| %d | `%s` | `%s` | %s | %s |\n", i+1, orig, opt, size, change))
+				sb.WriteString(fmt.Sprintf("| %d | `%s` | `%s` | %s | `%s` | `%s` | %s | %s |\n",
+					i+1, origName, origType, origSize, optName, optType, optSize, change))
 			}
 			sb.WriteString("\n\n---\n\n")
 		}
