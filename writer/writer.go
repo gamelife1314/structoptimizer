@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"fmt"
 	"go/ast"
+	"go/format"
 	"go/parser"
 	"go/printer"
 	"go/token"
@@ -230,19 +231,25 @@ func (w *SourceWriter) RewriteFile(filePath string, optimizedStructs map[string]
 		return nil
 	}
 
-	// 写回文件
+	// 写回文件（使用 go/format 格式化）
 	var buf bytes.Buffer
 	err = printer.Fprint(&buf, w.fset, f)
 	if err != nil {
 		return fmt.Errorf("格式化代码失败：%v", err)
 	}
 
-	err = os.WriteFile(filePath, buf.Bytes(), 0644)
+	// 使用 go/format 进行标准格式化（删除空行，保留注释）
+	formatted, err := format.Source(buf.Bytes())
+	if err != nil {
+		return fmt.Errorf("go fmt 格式化失败：%v", err)
+	}
+
+	err = os.WriteFile(filePath, formatted, 0644)
 	if err != nil {
 		return fmt.Errorf("写入文件失败：%v", err)
 	}
 
-	w.log(1, "文件已重写：%s", filePath)
+	w.log(1, "文件已重写：%s (已使用 go fmt 格式化)", filePath)
 	return nil
 }
 
@@ -308,7 +315,7 @@ func (w *SourceWriter) FormatNode(node ast.Node) (string, error) {
 
 // SortFieldInfos 对字段信息进行排序
 func SortFieldInfos(fields []optimizer.FieldInfo, sortSameSize bool) []optimizer.FieldInfo {
-	return optimizer.ReorderFields(fields, sortSameSize)
+	return optimizer.ReorderFields(fields, sortSameSize, nil)
 }
 
 // CreateFieldInfo 创建字段信息（用于测试）
