@@ -417,10 +417,14 @@ func (o *Optimizer) addReport(info *StructInfo, skipReason string, depth int) {
 	for _, f := range info.Fields {
 		key := f.Name
 		if key == "" {
-			key = f.TypeName // 匿名字段使用类型名
-			hasEmbed = true
+			key = f.TypeName // 匿名字段使用类型名作为 key
 		}
 		fieldTypes[key] = f.TypeName
+		
+		// 检查是否是匿名字段
+		if f.IsEmbed {
+			hasEmbed = true
+		}
 	}
 
 	report := &StructReport{
