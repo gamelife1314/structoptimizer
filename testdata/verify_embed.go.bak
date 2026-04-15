@@ -1,0 +1,15 @@
+package testdata
+
+// TestInner 测试内层结构体
+type TestInner struct {
+	A int8
+	B int64
+	C int8
+}
+
+// TestOuterWithEmbed 包含匿名字段的结构体
+type TestOuterWithEmbed struct {
+	TestInner  // ← 匿名字段（没有字段名）
+	Name string
+	ID   int64
+}
