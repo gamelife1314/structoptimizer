@@ -134,14 +134,6 @@ func (o *Optimizer) optimizeInternal() (*Report, error) {
 
 		o.Log(1, "收集结构体：%s.%s", pkgPath, structName)
 		o.collectStructs(pkgPath, structName, "", 0, 0)
-		
-		// 获取主结构体的大小信息（在优化后设置）
-		defer func() {
-			if info, ok := o.optimized[pkgPath+"."+structName]; ok {
-				o.report.RootStructSize = info.OrigSize
-				o.report.RootStructOptSize = info.OptSize
-			}
-		}()
 	} else if o.config.Package != "" {
 		// 优化包中所有结构体
 		o.Log(1, "收集包：%s", o.config.Package)
@@ -172,6 +164,8 @@ func (o *Optimizer) optimizeInternal() (*Report, error) {
 	o.report.TotalStructs = len(o.optimized)
 	o.report.OptimizedCount = 0
 	o.report.SkippedCount = 0
+	o.report.RootStructSize = 0
+	o.report.RootStructOptSize = 0
 
 	for _, info := range o.optimized {
 		if info.Skipped {
@@ -180,6 +174,10 @@ func (o *Optimizer) optimizeInternal() (*Report, error) {
 			o.report.OptimizedCount++
 			o.report.TotalSaved += info.OrigSize - info.OptSize
 		}
+		
+		// 累计所有结构体的大小（用于总览等式）
+		o.report.RootStructSize += info.OrigSize
+		o.report.RootStructOptSize += info.OptSize
 	}
 
 	o.Log(1, "优化完成：共处理 %d 个结构体，优化 %d 个，跳过 %d 个，节省 %d 字节",
