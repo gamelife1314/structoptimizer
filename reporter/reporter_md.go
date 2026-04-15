@@ -104,10 +104,6 @@ func (r *Reporter) GenerateMD(report *optimizer.Report) (string, error) {
 						if t, ok := sr.FieldTypes[origName]; ok {
 							origType = t
 							origSize = fmt.Sprintf("%d", getFieldSize(t))
-							// 匿名字段：字段名显示为空，只显示类型名
-							if origName == origType {
-								origName = ""
-							}
 						}
 					}
 				}
@@ -117,16 +113,23 @@ func (r *Reporter) GenerateMD(report *optimizer.Report) (string, error) {
 						if t, ok := sr.FieldTypes[optName]; ok {
 							optType = t
 							optSize = fmt.Sprintf("%d", getFieldSize(t))
-							// 匿名字段：字段名显示为空，只显示类型名
-							if optName == optType {
-								optName = ""
-							}
 						}
 					}
 				}
 
-				if origName != "" && optName != "" && origName != optName {
+				// 比较变化时使用完整字段信息（包括类型名）
+				origKey := origName + ":" + origType
+				optKey := optName + ":" + optType
+				if origKey != optKey {
 					change = "🔄"
+				}
+
+				// 显示时匿名字段字段名为空，只显示类型名
+				if origName == origType {
+					origName = ""
+				}
+				if optName == optType {
+					optName = ""
 				}
 
 				sb.WriteString(fmt.Sprintf("| %d | `%s` | `%s` | %s | `%s` | `%s` | %s | %s |\n",
