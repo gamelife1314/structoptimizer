@@ -166,30 +166,67 @@ func extractRecvType(expr ast.Expr) string {
 
 // getPkgDir 使用 go list 获取包目录
 func (mi *MethodIndex) getPkgDir(pkgPath string) (string, error) {
-	// 使用 go list 获取目录，支持 Module 和 GOPATH
+	// 尝试 1: 使用 go list（Go Modules 模式）
 	cmd := exec.Command("go", "list", "-f", "{{.Dir}}", pkgPath)
-	
-	// 继承当前环境变量，确保 GOPATH 和 GO111MODULE 正确传递
 	cmd.Env = os.Environ()
+	// 确保在 GOPATH 模式下运行
+	for i, env := range cmd.Env {
+		if strings.HasPrefix(env, "GO111MODULE=") {
+			cmd.Env[i] = "GO111MODULE=off"
+			break
+		}
+	}
 	
 	out, err := cmd.CombinedOutput()
-	if err != nil {
-		fmt.Printf("[DEBUG] MethodIndex go list 失败 pkg=%s, err=%v, out=%s\n", pkgPath, err, string(out))
-		return "", err
+	if err == nil {
+		dir := strings.TrimSpace(string(out))
+		fmt.Printf("[DEBUG] MethodIndex go list 结果 pkg=%s dir=%s\n", pkgPath, dir)
+		
+		if dir != "" {
+			// 验证目录是否存在
+			if _, err := os.Stat(dir); err == nil {
+				return dir, nil
+			}
+		}
 	}
 	
-	dir := strings.TrimSpace(string(out))
-	fmt.Printf("[DEBUG] MethodIndex go list 结果 pkg=%s dir=%s\n", pkgPath, dir)
+	fmt.Printf("[DEBUG] MethodIndex go list 失败 pkg=%s, err=%v, out=%s\n", pkgPath, err, string(out))
 	
-	if dir == "" {
-		return "", fmt.Errorf("go list 返回空目录：%s", pkgPath)
-	}
+	// 尝试 2: GOPATH 模式手动解析
+	return mi.getPkgDirFromGOPATH(pkgPath)
+}
 
-	// 验证目录是否存在
-	if _, err := os.Stat(dir); err != nil {
-		fmt.Printf("[DEBUG] MethodIndex 目录不存在 dir=%s\n", dir)
-		return "", err
+// getPkgDirFromGOPATH 从 GOPATH 解析包路径
+func (mi *MethodIndex) getPkgDirFromGOPATH(pkgPath string) (string, error) {
+	// 获取 GOPATH
+	gopath := os.Getenv("GOPATH")
+	if gopath == "" {
+		// 默认 GOPATH
+		home, err := os.UserHomeDir()
+		if err != nil {
+			return "", fmt.Errorf("无法获取用户主目录")
+		}
+		gopath = filepath.Join(home, "go")
 	}
-
-	return dir, nil
+	
+	// GOPATH 可能有多个路径，用分隔符分割
+	gopaths := filepath.SplitList(gopath)
+	
+	fmt.Printf("[DEBUG] MethodIndex GOPATH=%s\n", gopath)
+	
+	// 在每个 GOPATH 的 src 目录下查找
+	for _, gp := range gopaths {
+		srcDir := filepath.Join(gp, "src")
+		pkgDir := filepath.Join(srcDir, pkgPath)
+		
+		fmt.Printf("[DEBUG] MethodIndex 尝试路径: %s\n", pkgDir)
+		
+		// 验证目录是否存在
+		if _, err := os.Stat(pkgDir); err == nil {
+			fmt.Printf("[DEBUG] MethodIndex 找到目录: %s\n", pkgDir)
+			return pkgDir, nil
+		}
+	}
+	
+	return "", fmt.Errorf("在 GOPATH 中未找到包：%s", pkgPath)
 }
