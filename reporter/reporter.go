@@ -95,7 +95,7 @@ func (r *Reporter) GenerateTXT(report *optimizer.Report) (string, error) {
 				sb.WriteString(" ⚠️")
 			}
 			sb.WriteString("\n")
-			sb.WriteString(strings.Repeat("─", 80) + "\n")
+			sb.WriteString(strings.Repeat("─", 100) + "\n")
 			sb.WriteString(fmt.Sprintf("   📁 文件：%s\n", sr.File))
 			if sr.HasEmbed {
 				sb.WriteString("   ⚠️  警告：包含匿名字段，优化后可能影响兼容性，请手动检查！\n")
@@ -105,9 +105,9 @@ func (r *Reporter) GenerateTXT(report *optimizer.Report) (string, error) {
 			sb.WriteString("\n")
 
 			sb.WriteString("   字段顺序对比:\n")
-			sb.WriteString("   ┌────────┬──────────────────────┬──────────────────────┬────────┐\n")
-			sb.WriteString("   │ 序号   │ 优化前               │ 优化后               │ 变化   │\n")
-			sb.WriteString("   ├────────┼──────────────────────┼──────────────────────┼────────┤\n")
+			sb.WriteString("   ┌────────┬─────────────────────────────┬─────────────────────────────┬──────────┬──────────┬────────┐\n")
+			sb.WriteString("   │ 序号   │ 优化前                      │ 优化后                      │ 大小     │ 变化     │ 类型   │\n")
+			sb.WriteString("   ├────────┼─────────────────────────────┼─────────────────────────────┼──────────┼──────────┼────────┤\n")
 			
 			maxLen := len(sr.OrigFields)
 			if len(sr.OptFields) > maxLen {
@@ -117,13 +117,17 @@ func (r *Reporter) GenerateTXT(report *optimizer.Report) (string, error) {
 			for i := 0; i < maxLen; i++ {
 				orig := "-"
 				opt := "-"
+				origType := ""
+				optType := ""
 				change := ""
+				size := ""
 				
 				if i < len(sr.OrigFields) {
 					orig = sr.OrigFields[i]
 					if sr.FieldTypes != nil {
 						if t, ok := sr.FieldTypes[orig]; ok {
-							orig = orig + " (" + t + ")"
+							origType = t
+							size = fmt.Sprintf("%d", getFieldSize(t))
 						}
 					}
 				}
@@ -131,17 +135,26 @@ func (r *Reporter) GenerateTXT(report *optimizer.Report) (string, error) {
 					opt = sr.OptFields[i]
 					if sr.FieldTypes != nil {
 						if t, ok := sr.FieldTypes[opt]; ok {
-							opt = opt + " (" + t + ")"
+							optType = t
 						}
 					}
 				}
+				
+				// 标记匿名字段
+				if orig != "-" && orig == origType {
+					orig = orig + " (匿名)"
+				}
+				if opt != "-" && opt == optType {
+					opt = opt + " (匿名)"
+				}
+				
 				if orig != "-" && opt != "-" && orig != opt {
 					change = "🔄"
 				}
 				
-				sb.WriteString(fmt.Sprintf("   │ %-6d │ %-20s │ %-20s │ %-6s │\n", i+1, orig, opt, change))
+				sb.WriteString(fmt.Sprintf("   │ %-6d │ %-27s │ %-27s │ %-8s │ %-8s │ %-6s │\n", i+1, orig, opt, size, change, origType))
 			}
-			sb.WriteString("   └────────┴──────────────────────┴──────────────────────┴────────┘\n\n")
+			sb.WriteString("   └────────┴─────────────────────────────┴─────────────────────────────┴──────────┴──────────┴────────┘\n\n")
 		}
 	}
 

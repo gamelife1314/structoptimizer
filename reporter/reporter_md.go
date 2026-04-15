@@ -78,10 +78,10 @@ func (r *Reporter) GenerateMD(report *optimizer.Report) (string, error) {
 			sb.WriteString(fmt.Sprintf("节省：  %6d 字节 (%.1f%%)\n", sr.Saved, float64(sr.Saved)/float64(sr.OrigSize)*100))
 			sb.WriteString("```\n\n")
 
-			// 字段对比表格（同一行显示优化前后）
+			// 字段对比表格（同一行显示优化前后，包含大小和匿名标记）
 			sb.WriteString("**字段顺序对比:**\n\n")
-			sb.WriteString("| 序号 | 优化前 | 优化后 | 变化 |\n")
-			sb.WriteString("|:----:|--------|--------|------|\n")
+			sb.WriteString("| 序号 | 优化前 | 优化后 | 大小 | 变化 |\n")
+			sb.WriteString("|:----:|--------|--------|------|------|\n")
 
 			maxLen := len(sr.OrigFields)
 			if len(sr.OptFields) > maxLen {
@@ -91,21 +91,29 @@ func (r *Reporter) GenerateMD(report *optimizer.Report) (string, error) {
 			for i := 0; i < maxLen; i++ {
 				orig := "-"
 				opt := "-"
+				size := ""
 				change := ""
 
 				if i < len(sr.OrigFields) {
 					orig = sr.OrigFields[i]
 					if sr.FieldTypes != nil {
 						if t, ok := sr.FieldTypes[orig]; ok {
-							orig = orig + " (" + t + ")"
+							size = fmt.Sprintf("%d", getFieldSize(t))
+							// 标记匿名字段
+							if orig == t {
+								orig = orig + " *(匿名)*"
+							}
 						}
 					}
 				}
 				if i < len(sr.OptFields) {
 					opt = sr.OptFields[i]
+					// 优化后也检查是否匿名
 					if sr.FieldTypes != nil {
 						if t, ok := sr.FieldTypes[opt]; ok {
-							opt = opt + " (" + t + ")"
+							if opt == t && !strings.Contains(opt, "(匿名)") {
+								opt = opt + " *(匿名)*"
+							}
 						}
 					}
 				}
@@ -113,7 +121,7 @@ func (r *Reporter) GenerateMD(report *optimizer.Report) (string, error) {
 					change = "🔄"
 				}
 
-				sb.WriteString(fmt.Sprintf("| %d | `%s` | `%s` | %s |\n", i+1, orig, opt, change))
+				sb.WriteString(fmt.Sprintf("| %d | `%s` | `%s` | %s | %s |\n", i+1, orig, opt, size, change))
 			}
 			sb.WriteString("\n\n---\n\n")
 		}
