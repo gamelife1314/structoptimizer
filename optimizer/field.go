@@ -53,7 +53,8 @@ func (fa *FieldAnalyzer) AnalyzeStruct(st *types.Struct, structName, pkgPath, fi
 	info.OrigOrder = origOrder
 
 	// 计算原始大小
-	info.OrigSize = CalcStructSize(st)
+	// 注意：types.Info 没有 Sizes 字段，使用手动计算
+	info.OrigSize = CalcStructSize(st, nil)
 
 	return info
 }

@@ -96,7 +96,7 @@ func TestCalcStructSize(t *testing.T) {
 	}
 	badStruct := types.NewStruct(fields, nil)
 
-	size := CalcStructSize(badStruct)
+	size := CalcStructSize(badStruct, nil)
 	// 计算：1+(7 填充) + 8 + 4 + 1+(3 填充) + 4 + (4 末尾填充) = 32 字节
 	if size != 32 {
 		t.Errorf("CalcStructSize(BadStruct) = %v, want 32", size)
@@ -119,7 +119,7 @@ func TestCalcStructSize(t *testing.T) {
 	}
 	goodStruct := types.NewStruct(optFields, nil)
 
-	size = CalcStructSize(goodStruct)
+	size = CalcStructSize(goodStruct, nil)
 	// 计算：8 + 4 + 4 + 1 + 1 + (6 末尾填充) = 24 字节
 	if size != 24 {
 		t.Errorf("CalcStructSize(GoodStruct) = %v, want 24", size)

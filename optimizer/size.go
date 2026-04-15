@@ -33,8 +33,23 @@ func CalcStructSizeFromFields(fields []FieldInfo) int64 {
 	return offset
 }
 
-// CalcStructSize 计算结构体大小
-func CalcStructSize(st *types.Struct) int64 {
+// CalcStructSize 计算结构体大小（使用 types.Sizes 模拟 unsafe.Sizeof）
+func CalcStructSize(st *types.Struct, sizes types.Sizes) int64 {
+	if st == nil {
+		return 0
+	}
+
+	// 如果有 types.Sizes，使用它来计算（更准确）
+	if sizes != nil {
+		return sizes.Sizeof(st)
+	}
+
+	// 否则回退到手动计算
+	return calcStructSizeManual(st)
+}
+
+// calcStructSizeManual 手动计算结构体大小（回退方案）
+func calcStructSizeManual(st *types.Struct) int64 {
 	if st == nil {
 		return 0
 	}
@@ -101,7 +116,7 @@ func CalcFieldSize(typ types.Type, info *types.Info) (size, align int64) {
 		return CalcFieldSize(t.Underlying(), info)
 
 	case *types.Struct:
-		return CalcStructSize(t), 8
+		return CalcStructSize(t, nil), 8
 
 	default:
 		return 8, 8
