@@ -41,11 +41,20 @@ func (r *Reporter) GenerateMD(report *optimizer.Report) (string, error) {
 	sb.WriteString("\n")
 
 	// 分类结构体
-	var optimized, skipped, unchanged []*optimizer.StructReport
+	var optimized, skippedNormal, skippedError, unchanged []*optimizer.StructReport
 	for _, sr := range report.StructReports {
 		if sr.Skipped {
-			skipped = append(skipped, sr)
-		} else if sr.Saved > 0 {
+			// 区分正常跳过和异常跳过
+			if strings.HasPrefix(sr.SkipReason, "通过方法指定跳过") ||
+				strings.HasPrefix(sr.SkipReason, "通过名字指定跳过") ||
+				sr.SkipReason == "空结构体" ||
+				sr.SkipReason == "单字段结构体" {
+				skippedNormal = append(skippedNormal, sr)
+			} else {
+				skippedError = append(skippedError, sr)
+			}
+		} else if sr.OrigSize > sr.OptSize {
+			// 与 OptimizedCount 统计标准一致
 			optimized = append(optimized, sr)
 		} else {
 			unchanged = append(unchanged, sr)
@@ -104,10 +113,6 @@ func (r *Reporter) GenerateMD(report *optimizer.Report) (string, error) {
 						if t, ok := sr.FieldTypes[origName]; ok {
 							origType = t
 							origSize = fmt.Sprintf("%d", getFieldSize(t))
-							// 匿名字段：字段名显示为空，只显示类型名
-							if origName == origType {
-								origName = ""
-							}
 						}
 					}
 				}
@@ -117,16 +122,23 @@ func (r *Reporter) GenerateMD(report *optimizer.Report) (string, error) {
 						if t, ok := sr.FieldTypes[optName]; ok {
 							optType = t
 							optSize = fmt.Sprintf("%d", getFieldSize(t))
-							// 匿名字段：字段名显示为空，只显示类型名
-							if optName == optType {
-								optName = ""
-							}
 						}
 					}
 				}
 
-				if origName != "" && optName != "" && origName != optName {
+				// 比较变化时使用完整字段信息（包括类型名）
+				origKey := origName + ":" + origType
+				optKey := optName + ":" + optType
+				if origKey != optKey {
 					change = "🔄"
+				}
+
+				// 显示时匿名字段字段名为空，只显示类型名
+				if origName == origType {
+					origName = ""
+				}
+				if optName == optType {
+					optName = ""
 				}
 
 				sb.WriteString(fmt.Sprintf("| %d | `%s` | `%s` | %s | `%s` | `%s` | %s | %s |\n",
@@ -136,18 +148,29 @@ func (r *Reporter) GenerateMD(report *optimizer.Report) (string, error) {
 		}
 	}
 
-	// 3. 异常跳过的结构体
-	if len(skipped) > 0 {
-		sb.WriteString("## ⚠️ 异常跳过的结构体\n\n")
-		sb.WriteString(fmt.Sprintf("**共 %d 个结构体因异常被跳过**\n\n", len(skipped)))
+	// 3. 正常跳过的结构体（仅详细模式显示）
+	if r.level >= ReportLevelFull && len(skippedNormal) > 0 {
+		sb.WriteString("## ⏭️ 正常跳过的结构体\n\n")
+		sb.WriteString(fmt.Sprintf("**共 %d 个结构体被跳过**\n\n", len(skippedNormal)))
 
-		for _, sr := range skipped {
+		for _, sr := range skippedNormal {
+			sb.WriteString(fmt.Sprintf("### ✓ %s.%s\n\n", sr.PkgPath, sr.Name))
+			sb.WriteString(fmt.Sprintf("**原因**: %s\n\n", sr.SkipReason))
+		}
+	}
+
+	// 4. 异常跳过的结构体
+	if len(skippedError) > 0 {
+		sb.WriteString("## ⚠️ 异常跳过的结构体\n\n")
+		sb.WriteString(fmt.Sprintf("**共 %d 个结构体因异常被跳过**\n\n", len(skippedError)))
+
+		for _, sr := range skippedError {
 			sb.WriteString(fmt.Sprintf("### ⏭️ %s.%s\n\n", sr.PkgPath, sr.Name))
 			sb.WriteString(fmt.Sprintf("**原因**: %s\n\n", sr.SkipReason))
 		}
 	}
 
-	// 4. 未变化的结构体（详细模式下显示）
+	// 5. 未变化的结构体（详细模式下显示）
 	if r.level >= ReportLevelFull && len(unchanged) > 0 {
 		sb.WriteString("## ✔️ 未变化的结构体\n\n")
 		sb.WriteString(fmt.Sprintf("**共 %d 个结构体无需优化**\n\n", len(unchanged)))

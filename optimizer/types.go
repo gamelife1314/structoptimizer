@@ -19,6 +19,9 @@ type Optimizer struct {
 	processing    map[string]bool
 	maxDepth      int
 
+	// 方法索引器
+	methodIndex *MethodIndex
+
 	// 并行处理相关
 	structQueue      []*StructTask
 	structByLevel    map[int][]*StructTask

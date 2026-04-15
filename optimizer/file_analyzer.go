@@ -75,11 +75,18 @@ func extractFieldsFromAST(ts *ast.TypeSpec, fset *token.FileSet) (*types.Struct,
 		typeName := extractTypeName(f.Type)
 		size, align := estimateFieldSize(f.Type)
 
+		// 判断是否是匿名字段
+		isEmbed := len(f.Names) == 0
+		
+		// 获取字段名（用于 FieldInfo）
+		fieldName := getFieldName(f)
+
 		fi := FieldInfo{
-			Name:     getFieldName(f),
+			Name:     fieldName,
 			Size:     size,
 			Align:    align,
 			TypeName: typeName,
+			IsEmbed:  isEmbed, // 正确设置匿名字段标记
 		}
 
 		if f.Tag != nil {
@@ -89,7 +96,12 @@ func extractFieldsFromAST(ts *ast.TypeSpec, fset *token.FileSet) (*types.Struct,
 		fields = append(fields, fi)
 
 		// 创建 types.Var 用于后续处理
-		varFields = append(varFields, types.NewField(f.Pos(), nil, fi.Name, types.Typ[types.Invalid], false))
+		// 注意：匿名字段在 types.Var 中使用类型名，避免 "multifields with the same name" 错误
+		typesFieldName := fieldName
+		if isEmbed {
+			typesFieldName = typeName
+		}
+		varFields = append(varFields, types.NewField(f.Pos(), nil, typesFieldName, types.Typ[types.Invalid], false))
 	}
 
 	// 创建简化的 types.Struct
@@ -123,8 +135,8 @@ func getFieldName(f *ast.Field) string {
 	if len(f.Names) > 0 && f.Names[0] != nil {
 		return f.Names[0].Name
 	}
-	// 匿名字段
-	return extractTypeName(f.Type)
+	// 匿名字段返回空字符串
+	return ""
 }
 
 // estimateFieldSize 估算字段大小
@@ -183,6 +195,9 @@ func extractFieldNames(fields []FieldInfo) []string {
 	for _, f := range fields {
 		if f.Name != "" {
 			names = append(names, f.Name)
+		} else {
+			// 匿名字段使用类型名
+			names = append(names, f.TypeName)
 		}
 	}
 	return names

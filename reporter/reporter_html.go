@@ -77,11 +77,20 @@ func (r *Reporter) GenerateHTML(report *optimizer.Report) (string, error) {
 	sb.WriteString("        </div>\n\n")
 
 	// 分类结构体
-	var optimized, skipped, unchanged []*optimizer.StructReport
+	var optimized, skippedNormal, skippedError, unchanged []*optimizer.StructReport
 	for _, sr := range report.StructReports {
 		if sr.Skipped {
-			skipped = append(skipped, sr)
-		} else if sr.Saved > 0 {
+			// 区分正常跳过和异常跳过
+			if strings.HasPrefix(sr.SkipReason, "通过方法指定跳过") ||
+				strings.HasPrefix(sr.SkipReason, "通过名字指定跳过") ||
+				sr.SkipReason == "空结构体" ||
+				sr.SkipReason == "单字段结构体" {
+				skippedNormal = append(skippedNormal, sr)
+			} else {
+				skippedError = append(skippedError, sr)
+			}
+		} else if sr.OrigSize > sr.OptSize {
+			// 与 OptimizedCount 统计标准一致
 			optimized = append(optimized, sr)
 		} else {
 			unchanged = append(unchanged, sr)
@@ -138,10 +147,6 @@ func (r *Reporter) GenerateHTML(report *optimizer.Report) (string, error) {
 						if t, ok := sr.FieldTypes[origName]; ok {
 							origType = t
 							origSize = fmt.Sprintf("%d", getFieldSize(t))
-							// 匿名字段：字段名显示为空，只显示类型名
-							if origName == origType {
-								origName = ""
-							}
 						}
 					}
 				}
@@ -151,16 +156,23 @@ func (r *Reporter) GenerateHTML(report *optimizer.Report) (string, error) {
 						if t, ok := sr.FieldTypes[optName]; ok {
 							optType = t
 							optSize = fmt.Sprintf("%d", getFieldSize(t))
-							// 匿名字段：字段名显示为空，只显示类型名
-							if optName == optType {
-								optName = ""
-							}
 						}
 					}
 				}
 
-				if origName != "" && optName != "" && origName != optName {
+				// 比较变化时使用完整字段信息（包括类型名）
+				origKey := origName + ":" + origType
+				optKey := optName + ":" + optType
+				if origKey != optKey {
 					change = "🔄"
+				}
+
+				// 显示时匿名字段字段名为空，只显示类型名
+				if origName == origType {
+					origName = ""
+				}
+				if optName == optType {
+					optName = ""
 				}
 
 				className := ""
@@ -177,12 +189,26 @@ func (r *Reporter) GenerateHTML(report *optimizer.Report) (string, error) {
 		sb.WriteString("        </div>\n\n")
 	}
 
-	// 3. 异常跳过的结构体
-	if len(skipped) > 0 {
+	// 3. 正常跳过的结构体（仅详细模式显示）
+	if r.level >= ReportLevelFull && len(skippedNormal) > 0 {
 		sb.WriteString("        <div class=\"section\">\n")
-		sb.WriteString(fmt.Sprintf("            <h2>⚠️ 异常跳过的结构体 (%d 个)</h2>\n\n", len(skipped)))
+		sb.WriteString(fmt.Sprintf("            <h2>⏭️ 正常跳过的结构体 (%d 个)</h2>\n\n", len(skippedNormal)))
 
-		for _, sr := range skipped {
+		for _, sr := range skippedNormal {
+			sb.WriteString(fmt.Sprintf("            <div class=\"struct-card\">\n"))
+			sb.WriteString(fmt.Sprintf("                <h3>✓ %s.%s</h3>\n", html.EscapeString(sr.PkgPath), html.EscapeString(sr.Name)))
+			sb.WriteString(fmt.Sprintf("                <p><strong>原因</strong>: %s</p>\n", html.EscapeString(sr.SkipReason)))
+			sb.WriteString("            </div>\n\n")
+		}
+		sb.WriteString("        </div>\n\n")
+	}
+
+	// 4. 异常跳过的结构体
+	if len(skippedError) > 0 {
+		sb.WriteString("        <div class=\"section\">\n")
+		sb.WriteString(fmt.Sprintf("            <h2>⚠️ 异常跳过的结构体 (%d 个)</h2>\n\n", len(skippedError)))
+
+		for _, sr := range skippedError {
 			sb.WriteString(fmt.Sprintf("            <div class=\"struct-card skipped\">\n"))
 			sb.WriteString(fmt.Sprintf("                <h3>⏭️ %s.%s</h3>\n", html.EscapeString(sr.PkgPath), html.EscapeString(sr.Name)))
 			sb.WriteString(fmt.Sprintf("                <p><strong>原因</strong>: %s</p>\n", html.EscapeString(sr.SkipReason)))
@@ -191,7 +217,7 @@ func (r *Reporter) GenerateHTML(report *optimizer.Report) (string, error) {
 		sb.WriteString("        </div>\n\n")
 	}
 
-	// 4. 未变化的结构体（详细模式下显示）
+	// 5. 未变化的结构体（详细模式下显示）
 	if r.level >= ReportLevelFull && len(unchanged) > 0 {
 		sb.WriteString("        <div class=\"section\">\n")
 		sb.WriteString(fmt.Sprintf("            <h2>✔️ 未变化的结构体 (%d 个)</h2>\n\n", len(unchanged)))

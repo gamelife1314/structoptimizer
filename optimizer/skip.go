@@ -1,8 +1,6 @@
 package optimizer
 
 import (
-	"go/ast"
-	"go/token"
 	"go/types"
 	"path/filepath"
 	"strings"
@@ -57,43 +55,12 @@ func (o *Optimizer) shouldSkip(info *StructInfo, st *types.Struct, key string) s
 	return ""
 }
 
-// hasMethodByName 检查结构体是否有指定方法（需要加载包，支持通配符）
+// hasMethodByName 检查结构体是否有指定方法（使用 MethodIndex，不加载包）
 func (o *Optimizer) hasMethodByName(info *StructInfo, methodPattern string) bool {
-	// 加载包
-	pkg, err := o.analyzer.LoadPackage(info.PkgPath)
-	if err != nil {
-		o.Log(2, "加载包失败：%s: %v", info.PkgPath, err)
-		return false
-	}
-
-	// 在包中查找结构体类型
-	for _, syntax := range pkg.Syntax {
-		for _, decl := range syntax.Decls {
-			genDecl, ok := decl.(*ast.GenDecl)
-			if !ok || genDecl.Tok != token.TYPE {
-				continue
-			}
-			for _, spec := range genDecl.Specs {
-				typeSpec, ok := spec.(*ast.TypeSpec)
-				if !ok || typeSpec.Name.Name != info.Name {
-					continue
-				}
-				if named, ok := pkg.TypesInfo.ObjectOf(typeSpec.Name).(*types.TypeName); ok {
-					if t, ok := named.Type().(*types.Named); ok {
-						// 检查结构体的所有方法（支持通配符匹配）
-						for i := 0; i < t.NumMethods(); i++ {
-							methodName := t.Method(i).Name()
-							if o.matchMethod(methodName, methodPattern) {
-								return true
-							}
-						}
-					}
-				}
-			}
-		}
-	}
-
-	return false
+	// 使用 MethodIndex 查询，无需加载整个包
+	result := o.methodIndex.HasMethod(info.PkgPath, info.Name, methodPattern)
+	o.Log(3, "检查方法 %s.%s.%s = %v", info.PkgPath, info.Name, methodPattern, result)
+	return result
 }
 
 // matchMethod 匹配方法名（支持通配符）

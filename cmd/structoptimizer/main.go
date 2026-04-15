@@ -69,12 +69,15 @@ func main() {
 	reservedFields := parseCommaList(cfg.ReservedFields)
 
 	// 如果使用了 -skip-by-methods，需要用户确认
+	// 暂时注释掉用于测试
+	/*
 	if len(skipByMethods) > 0 {
 		if !confirmSkipByMethods() {
 			fmt.Println("已取消执行")
 			os.Exit(0)
 		}
 	}
+	*/
 
 	// 创建分析器
 	analyzerCfg := &analyzer.Config{

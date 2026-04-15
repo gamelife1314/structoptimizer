@@ -76,6 +76,7 @@ func NewOptimizer(cfg *Config, analyzer *analyzer.Analyzer) *Optimizer {
 		processing:       make(map[string]bool),
 		collecting:       make(map[string]bool),
 		maxDepth:         maxDepth,
+		methodIndex:      NewMethodIndex(),
 		structQueue:      make([]*StructTask, 0),
 		structByLevel:    make(map[int][]*StructTask),
 		structByPkgLevel: make(map[int]map[string][]*StructTask),
@@ -170,7 +171,8 @@ func (o *Optimizer) optimizeInternal() (*Report, error) {
 	for _, info := range o.optimized {
 		if info.Skipped {
 			o.report.SkippedCount++
-		} else if info.Optimized {
+		} else if info.OrigSize > info.OptSize {
+			// 只有真正节省了内存才算优化
 			o.report.OptimizedCount++
 			o.report.TotalSaved += info.OrigSize - info.OptSize
 		}
@@ -353,6 +355,7 @@ func (o *Optimizer) optimizeStruct(pkgPath, structName, filePath string, depth i
 		o.Log(2, "跳过结构体：%s, 原因：%s", key, skipReason)
 		info.Skipped = true
 		info.SkipReason = skipReason
+		info.OptSize = info.OrigSize // 跳过的结构体，优化后大小等于优化前大小
 		o.mu.Lock()
 		o.optimized[key] = info
 		o.mu.Unlock()
@@ -361,29 +364,27 @@ func (o *Optimizer) optimizeStruct(pkgPath, structName, filePath string, depth i
 	}
 
 	// 重排字段（嵌套结构体已在收集阶段处理）
-	optimizedFields := ReorderFields(info.Fields, o.config.SortSameSize, o.config.ReservedFields)
-	info.Fields = optimizedFields
+	// 注意：ReorderFields 内部使用估计大小判断是否重排，可能不准确
+	// 我们总是获取排序结果，然后在下面用准确大小判断是否采用
+	sortedFields := ReorderFields(info.Fields, o.config.SortSameSize, o.config.ReservedFields)
 
-	// 计算优化后大小
-	info.OptSize = CalcOptimizedSize(optimizedFields, o.analyzer.GetTypesInfo())
+	// 计算排序后的大小（使用准确的类型信息）
+	sortedOptSize := CalcOptimizedSize(sortedFields, o.analyzer.GetTypesInfo())
 
-	// 生成优化后的字段顺序
-	var optOrder []string
-	for _, f := range optimizedFields {
-		if f.Name != "" {
-			optOrder = append(optOrder, f.Name)
-		} else {
-			optOrder = append(optOrder, f.TypeName)
-		}
-	}
-	info.OptOrder = optOrder
-
-	// 检查是否真正优化了
-	if info.OrigSize != info.OptSize || !o.fieldOrderSame(info.OrigOrder, info.OptOrder) {
+	// 判断是否采用排序结果：只有能节省内存时才采用
+	if sortedOptSize < info.OrigSize {
+		info.Fields = sortedFields
+		info.OptSize = sortedOptSize
+		info.OptOrder = extractFieldNamesFromInfo(sortedFields)
 		info.Optimized = true
+
 		o.Log(2, "结构体优化：%s %d -> %d 字节 (节省:%d)",
 			key, info.OrigSize, info.OptSize, info.OrigSize-info.OptSize)
 	} else {
+		// 无法节省内存，不采用新顺序，保持原样
+		info.OptSize = info.OrigSize
+		info.OptOrder = info.OrigOrder
+		// info.Optimized 保持为 false，不会触发文件重写
 		o.Log(2, "结构体无需优化：%s", key)
 	}
 
@@ -486,4 +487,18 @@ func isBasicType(typeName string) bool {
 		"byte": true, "rune": true, "uintptr": true,
 	}
 	return basicTypes[typeName]
+}
+
+// extractFieldNamesFromInfo 从 FieldInfo 列表提取字段名称
+func extractFieldNamesFromInfo(fields []FieldInfo) []string {
+	var names []string
+	for _, f := range fields {
+		if f.Name != "" {
+			names = append(names, f.Name)
+		} else {
+			// 匿名字段使用类型名
+			names = append(names, f.TypeName)
+		}
+	}
+	return names
 }
