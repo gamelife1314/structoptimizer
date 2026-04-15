@@ -418,9 +418,14 @@ func (o *Optimizer) addReport(info *StructInfo, skipReason string, depth int) {
 		key := f.Name
 		if key == "" {
 			key = f.TypeName // 匿名字段使用类型名作为 key
-			hasEmbed = true  // 字段名为空，说明是匿名字段
 		}
 		fieldTypes[key] = f.TypeName
+
+		// 检查是否是匿名字段
+		// 判断条件：字段名等于类型名，且类型是结构体类型（非基本类型）
+		if f.Name == f.TypeName && !isBasicType(f.TypeName) {
+			hasEmbed = true
+		}
 	}
 
 	report := &StructReport{
@@ -471,4 +476,16 @@ func (o *Optimizer) Log(level int, format string, args ...interface{}) {
 		}
 		fmt.Printf("%s %s "+format+"\n", append([]interface{}{timestamp, levelPrefix}, args...)...)
 	}
+}
+
+// isBasicType 判断是否是基本类型
+func isBasicType(typeName string) bool {
+	basicTypes := map[string]bool{
+		"bool": true, "string": true,
+		"int": true, "int8": true, "int16": true, "int32": true, "int64": true,
+		"uint": true, "uint8": true, "uint16": true, "uint32": true, "uint64": true,
+		"float32": true, "float64": true,
+		"byte": true, "rune": true, "uintptr": true,
+	}
+	return basicTypes[typeName]
 }
