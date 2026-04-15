@@ -418,15 +418,9 @@ func (o *Optimizer) addReport(info *StructInfo, skipReason string, depth int) {
 		key := f.Name
 		if key == "" {
 			key = f.TypeName // 匿名字段使用类型名作为 key
+			hasEmbed = true  // 字段名为空，说明是匿名字段
 		}
 		fieldTypes[key] = f.TypeName
-
-		// 检查是否是匿名字段（两种方式）
-		// 1. IsEmbed 字段（通过 field.Embedded() 设置）
-		// 2. 字段名为空且类型是结构体类型
-		if f.IsEmbed || (f.Name == "" && f.TypeName != "") {
-			hasEmbed = true
-		}
 	}
 
 	report := &StructReport{
