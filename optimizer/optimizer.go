@@ -134,6 +134,14 @@ func (o *Optimizer) optimizeInternal() (*Report, error) {
 
 		o.Log(1, "收集结构体：%s.%s", pkgPath, structName)
 		o.collectStructs(pkgPath, structName, "", 0, 0)
+		
+		// 获取主结构体的大小信息（在优化后设置）
+		defer func() {
+			if info, ok := o.optimized[pkgPath+"."+structName]; ok {
+				o.report.RootStructSize = info.OrigSize
+				o.report.RootStructOptSize = info.OptSize
+			}
+		}()
 	} else if o.config.Package != "" {
 		// 优化包中所有结构体
 		o.Log(1, "收集包：%s", o.config.Package)
@@ -355,7 +363,7 @@ func (o *Optimizer) optimizeStruct(pkgPath, structName, filePath string, depth i
 	}
 
 	// 重排字段（嵌套结构体已在收集阶段处理）
-	optimizedFields := ReorderFields(info.Fields, o.config.SortSameSize)
+	optimizedFields := ReorderFields(info.Fields, o.config.SortSameSize, o.config.ReservedFields)
 	info.Fields = optimizedFields
 
 	// 计算优化后大小
