@@ -72,10 +72,18 @@ func (r *Reporter) GenerateTXT(report *optimizer.Report) (string, error) {
 	sb.WriteString("└────────────────────────────────────────────────────────────────────────────────┘\n\n")
 
 	// 分类结构体
-	var optimized, skipped, unchanged []*optimizer.StructReport
+	var optimized, skippedNormal, skippedError, unchanged []*optimizer.StructReport
 	for _, sr := range report.StructReports {
 		if sr.Skipped {
-			skipped = append(skipped, sr)
+			// 区分正常跳过和异常跳过
+			if strings.HasPrefix(sr.SkipReason, "通过方法指定跳过") ||
+				strings.HasPrefix(sr.SkipReason, "通过名字指定跳过") ||
+				sr.SkipReason == "空结构体" ||
+				sr.SkipReason == "单字段结构体" {
+				skippedNormal = append(skippedNormal, sr)
+			} else {
+				skippedError = append(skippedError, sr)
+			}
 		} else if sr.Saved > 0 {
 			optimized = append(optimized, sr)
 		} else {
@@ -165,19 +173,31 @@ func (r *Reporter) GenerateTXT(report *optimizer.Report) (string, error) {
 		}
 	}
 
-	// 3. 异常跳过的结构体
-	if len(skipped) > 0 {
+	// 3. 正常跳过的结构体（仅详细模式显示）
+	if r.level >= ReportLevelFull && len(skippedNormal) > 0 {
 		sb.WriteString("┌────────────────────────────────────────────────────────────────────────────────┐\n")
-		sb.WriteString(fmt.Sprintf("│  ⚠️  异常跳过的结构体 (共 %d 个)                                   │\n", len(skipped)))
+		sb.WriteString(fmt.Sprintf("│  ⏭️  正常跳过的结构体 (共 %d 个)                                   │\n", len(skippedNormal)))
 		sb.WriteString("└────────────────────────────────────────────────────────────────────────────────┘\n\n")
 
-		for _, sr := range skipped {
+		for _, sr := range skippedNormal {
+			sb.WriteString(fmt.Sprintf("✓ %s.%s [%d 字节]\n", sr.PkgPath, sr.Name, sr.OrigSize))
+			sb.WriteString(fmt.Sprintf("   原因：%s\n\n", sr.SkipReason))
+		}
+	}
+
+	// 4. 异常跳过的结构体
+	if len(skippedError) > 0 {
+		sb.WriteString("┌────────────────────────────────────────────────────────────────────────────────┐\n")
+		sb.WriteString(fmt.Sprintf("│  ⚠️  异常跳过的结构体 (共 %d 个)                                   │\n", len(skippedError)))
+		sb.WriteString("└────────────────────────────────────────────────────────────────────────────────┘\n\n")
+
+		for _, sr := range skippedError {
 			sb.WriteString(fmt.Sprintf("⏭️  %s.%s\n", sr.PkgPath, sr.Name))
 			sb.WriteString(fmt.Sprintf("   原因：%s\n\n", sr.SkipReason))
 		}
 	}
 
-	// 4. 未变化的结构体（详细模式下显示）
+	// 5. 未变化的结构体（详细模式下显示）
 	if r.level >= ReportLevelFull && len(unchanged) > 0 {
 		sb.WriteString("┌────────────────────────────────────────────────────────────────────────────────┐\n")
 		sb.WriteString(fmt.Sprintf("│  ✔️  未变化的结构体 (共 %d 个)                                     │\n", len(unchanged)))

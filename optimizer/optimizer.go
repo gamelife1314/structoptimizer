@@ -354,6 +354,7 @@ func (o *Optimizer) optimizeStruct(pkgPath, structName, filePath string, depth i
 		o.Log(2, "跳过结构体：%s, 原因：%s", key, skipReason)
 		info.Skipped = true
 		info.SkipReason = skipReason
+		info.OptSize = info.OrigSize // 跳过的结构体，优化后大小等于优化前大小
 		o.mu.Lock()
 		o.optimized[key] = info
 		o.mu.Unlock()
