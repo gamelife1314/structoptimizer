@@ -74,12 +74,16 @@ func extractFieldsFromAST(ts *ast.TypeSpec, fset *token.FileSet) (*types.Struct,
 	for _, f := range st.Fields.List {
 		typeName := extractTypeName(f.Type)
 		size, align := estimateFieldSize(f.Type)
+		
+		// 判断是否是匿名字段
+		isEmbed := len(f.Names) == 0
 
 		fi := FieldInfo{
 			Name:     getFieldName(f),
 			Size:     size,
 			Align:    align,
 			TypeName: typeName,
+			IsEmbed:  isEmbed, // 正确设置匿名字段标记
 		}
 
 		if f.Tag != nil {
@@ -123,8 +127,8 @@ func getFieldName(f *ast.Field) string {
 	if len(f.Names) > 0 && f.Names[0] != nil {
 		return f.Names[0].Name
 	}
-	// 匿名字段
-	return extractTypeName(f.Type)
+	// 匿名字段返回空字符串
+	return ""
 }
 
 // estimateFieldSize 估算字段大小
