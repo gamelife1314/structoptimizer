@@ -103,7 +103,8 @@ func (r *Reporter) GenerateHTML(report *optimizer.Report) (string, error) {
 			sb.WriteString(fmt.Sprintf("                <p><strong>📁 文件</strong>: <code>%s</code></p>\n", html.EscapeString(sr.File)))
 			if sr.HasEmbed {
 				sb.WriteString("                <div class=\"warning\">\n")
-				sb.WriteString("                    ⚠️  <strong>警告：包含匿名字段，优化后可能影响兼容性，请手动检查！</strong>\n")
+				sb.WriteString("                    ⚠️  <strong>警告：包含匿名字段，优化后可能影响兼容性，请手动检查！</strong><br>\n")
+				sb.WriteString("                    ⚠️  <strong>提示：如果使用 -write 参数直接修改源码文件，建议人工审核！</strong>\n")
 				sb.WriteString("                </div>\n\n")
 			}
 
