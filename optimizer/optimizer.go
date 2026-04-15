@@ -371,25 +371,20 @@ func (o *Optimizer) optimizeStruct(pkgPath, structName, filePath string, depth i
 	// 计算排序后的大小（使用准确的类型信息）
 	sortedOptSize := CalcOptimizedSize(sortedFields, o.analyzer.GetTypesInfo())
 
-	// 判断是否采用排序结果
-	// 条件：1) 能节省内存  2) 或者字段顺序不同（但大小相同也采用，因为可能有其他优化）
-	sortedOrder := extractFieldNamesFromInfo(sortedFields)
-	if sortedOptSize < info.OrigSize || !o.fieldOrderSame(info.OrigOrder, sortedOrder) {
+	// 判断是否采用排序结果：只有能节省内存时才采用
+	if sortedOptSize < info.OrigSize {
 		info.Fields = sortedFields
 		info.OptSize = sortedOptSize
-		info.OptOrder = sortedOrder
-	} else {
-		// 不采用排序，保持原顺序
-		info.OptSize = info.OrigSize
-		info.OptOrder = info.OrigOrder
-	}
-
-	// 检查是否真正优化了
-	if info.OrigSize != info.OptSize || !o.fieldOrderSame(info.OrigOrder, info.OptOrder) {
+		info.OptOrder = extractFieldNamesFromInfo(sortedFields)
 		info.Optimized = true
+
 		o.Log(2, "结构体优化：%s %d -> %d 字节 (节省:%d)",
 			key, info.OrigSize, info.OptSize, info.OrigSize-info.OptSize)
 	} else {
+		// 无法节省内存，不采用新顺序，保持原样
+		info.OptSize = info.OrigSize
+		info.OptOrder = info.OrigOrder
+		// info.Optimized 保持为 false，不会触发文件重写
 		o.Log(2, "结构体无需优化：%s", key)
 	}
 
