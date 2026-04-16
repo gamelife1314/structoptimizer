@@ -342,7 +342,7 @@ func (o *Optimizer) optimizeStruct(pkgPath, structName, filePath string, depth i
 				// 有未知类型，需要加载包获取准确大小
 				// 但使用缓存避免重复加载
 				o.Log(3, "检测到重定义类型或结构体字段，加载包获取准确大小（使用缓存）")
-				
+
 				// 加载包（使用缓存）
 				pkg, pkgErr := o.loadPackageCached(pkgPath)
 				if pkgErr != nil {
@@ -357,7 +357,7 @@ func (o *Optimizer) optimizeStruct(pkgPath, structName, filePath string, depth i
 						// 使用完整的类型信息重新分析
 						fa := NewFieldAnalyzer(pkg.TypesInfo, pkg.Fset)
 						info2 := fa.AnalyzeStruct(st2, structName, pkgPath, filePath)
-						
+
 						// 更新 info 中的字段和大小信息
 						info.Fields = info2.Fields
 						info.OrigSize = info2.OrigSize

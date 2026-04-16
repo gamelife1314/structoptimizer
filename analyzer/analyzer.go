@@ -257,15 +257,22 @@ func (a *Analyzer) LoadPackage(pkgPath string) (*packages.Package, error) {
 		a.Log(1, "使用 Go Module 模式加载包：%s", pkgPath)
 	}
 
+	// 使用完整模式加载包，获取类型信息和 AST
+	// 为了避免 OOM，关键设置：
+	// 1. Tests=false - 不加载测试文件
+	// 2. 不递归加载依赖包的 TypesInfo（packages 默认行为）
 	cfg := &packages.Config{
 		Mode: packages.NeedName | packages.NeedFiles | packages.NeedCompiledGoFiles |
 			packages.NeedImports | packages.NeedTypes | packages.NeedTypesSizes |
 			packages.NeedTypesInfo | packages.NeedSyntax,
-		Dir:  loadDir,
-		Fset: a.fset,
-		Env:  env,
+		Dir:     loadDir,
+		Fset:    a.fset,
+		Env:     env,
+		Tests:   false,  // 不加载测试文件，节省内存
 	}
 
+	a.Log(2, "加载包：%s（完整模式：TypesInfo + Syntax）", pkgPath)
+	
 	// 加载包
 	pkgs, err := packages.Load(cfg, pkgPath)
 	if err != nil {
