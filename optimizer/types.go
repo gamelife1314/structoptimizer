@@ -33,6 +33,7 @@ type Optimizer struct {
 
 	// 缓存优化
 	pkgCache      map[string]*packages.Package
+	pkgFileCache  *PackageCache  // 文件缓存
 	structCache   map[string]*types.Struct
 	filePathCache map[string]string
 }

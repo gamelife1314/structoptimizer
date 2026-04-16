@@ -94,6 +94,7 @@ func NewOptimizer(cfg *Config, analyzer *analyzer.Analyzer) *Optimizer {
 		workerLimit:      10,  // 结构体并发限制
 		pkgWorkerLimit:   pkgWorkerLimit,  // 包并发限制（防止 OOM）
 		pkgCache:         make(map[string]*packages.Package),
+		pkgFileCache:     NewPackageCache("", true),  // 启用文件缓存
 		structCache:      make(map[string]*types.Struct),
 		filePathCache:    make(map[string]string),
 		report: &Report{
@@ -459,14 +460,30 @@ func (o *Optimizer) optimizeStruct(pkgPath, structName, filePath string, depth i
 
 // loadPackageCached 惰性加载包，使用缓存避免重复加载
 func (o *Optimizer) loadPackageCached(pkgPath string) (*packages.Package, error) {
-	// 检查缓存
+	// 检查内存缓存
 	o.mu.Lock()
 	if pkg, ok := o.pkgCache[pkgPath]; ok {
 		o.mu.Unlock()
-		o.Log(3, "使用缓存的包：%s", pkgPath)
+		o.Log(3, "使用内存缓存的包：%s", pkgPath)
 		return pkg, nil
 	}
 	o.mu.Unlock()
+
+	// 检查文件缓存
+	if o.pkgFileCache != nil {
+		// 获取包的 Go 文件列表
+		goFiles := o.getPackageGoFiles(pkgPath)
+		if len(goFiles) > 0 {
+			cacheEntry, err := o.pkgFileCache.LoadPackageCache(pkgPath, goFiles)
+			if err != nil {
+				o.Log(3, "加载文件缓存失败：%v", err)
+			} else if cacheEntry != nil {
+				o.Log(2, "使用文件缓存的包：%s (%d 个结构体)", pkgPath, len(cacheEntry.Structs))
+				// TODO: 从缓存恢复包信息
+				// 这需要修改 LoadPackage 以支持从缓存创建
+			}
+		}
+	}
 
 	// 加载包
 	o.Log(3, "加载包（未缓存）：%s", pkgPath)
@@ -475,7 +492,7 @@ func (o *Optimizer) loadPackageCached(pkgPath string) (*packages.Package, error)
 		return nil, err
 	}
 
-	// 缓存包
+	// 缓存到内存
 	o.mu.Lock()
 	if o.pkgCache == nil {
 		o.pkgCache = make(map[string]*packages.Package)
@@ -483,7 +500,144 @@ func (o *Optimizer) loadPackageCached(pkgPath string) (*packages.Package, error)
 	o.pkgCache[pkgPath] = pkg
 	o.mu.Unlock()
 
+	// 保存到文件缓存
+	if o.pkgFileCache != nil {
+		go o.savePackageCache(pkgPath, pkg) // 异步保存，不阻塞
+	}
+
 	return pkg, nil
+}
+
+// getPackageGoFiles 获取包中的 Go 文件列表
+func (o *Optimizer) getPackageGoFiles(pkgPath string) []string {
+	pkgDir := o.getPackageDir(pkgPath)
+	if pkgDir == "" {
+		return nil
+	}
+
+	var goFiles []string
+	entries, err := os.ReadDir(pkgDir)
+	if err != nil {
+		return nil
+	}
+
+	for _, entry := range entries {
+		if !entry.IsDir() && strings.HasSuffix(entry.Name(), ".go") {
+			goFiles = append(goFiles, filepath.Join(pkgDir, entry.Name()))
+		}
+	}
+
+	return goFiles
+}
+
+// savePackageCache 保存包缓存到文件
+func (o *Optimizer) savePackageCache(pkgPath string, pkg *packages.Package) {
+	if o.pkgFileCache == nil || pkg == nil {
+		return
+	}
+
+	// 收集结构体信息
+	var structs []StructCacheInfo
+	for _, syntax := range pkg.Syntax {
+		filePath := pkg.Fset.File(syntax.Pos()).Name()
+		
+		for _, decl := range syntax.Decls {
+			genDecl, ok := decl.(*ast.GenDecl)
+			if !ok || genDecl.Tok != token.TYPE {
+				continue
+			}
+
+			for _, spec := range genDecl.Specs {
+				ts, ok := spec.(*ast.TypeSpec)
+				if !ok {
+					continue
+				}
+
+				st, ok := ts.Type.(*ast.StructType)
+				if !ok {
+					continue
+				}
+
+				// 提取字段信息
+				var fields []FieldCacheInfo
+				for _, f := range st.Fields.List {
+					fieldName := ""
+					if len(f.Names) > 0 {
+						fieldName = f.Names[0].Name
+					}
+					
+					typeName := extractTypeNameFromAST(f.Type)
+					size, align := estimateFieldSize(f.Type)
+					
+					tag := ""
+					if f.Tag != nil {
+						tag = strings.Trim(f.Tag.Value, "`")
+					}
+
+					fields = append(fields, FieldCacheInfo{
+						Name:     fieldName,
+						TypeName: typeName,
+						Size:     size,
+						Align:    align,
+						IsEmbed:  len(f.Names) == 0,
+						Tag:      tag,
+					})
+				}
+
+				structs = append(structs, StructCacheInfo{
+					Name:     ts.Name.Name,
+					FilePath: filePath,
+					Fields:   fields,
+				})
+			}
+		}
+	}
+
+	// 获取 Go 文件列表
+	goFiles := o.getPackageGoFiles(pkgPath)
+
+	// 计算哈希
+	contentHash, _ := o.pkgFileCache.computePackageHash(goFiles)
+	goModHash := o.pkgFileCache.computeGoModHash()
+
+	// 保存缓存
+	entry := &CacheEntry{
+		Hash:      contentHash,
+		PkgPath:   pkgPath,
+		Structs:   structs,
+		GoModHash: goModHash,
+		GoFiles:   goFiles,
+		CreatedAt: time.Now().Unix(),
+	}
+
+	if err := o.pkgFileCache.SavePackageCache(entry); err != nil {
+		o.Log(2, "保存包缓存失败：%s (%v)", pkgPath, err)
+	} else {
+		o.Log(3, "已保存包缓存：%s (%d 个结构体)", pkgPath, len(structs))
+	}
+}
+
+// extractTypeNameFromAST 从 AST 表达式中提取类型名称
+func extractTypeNameFromAST(expr ast.Expr) string {
+	switch t := expr.(type) {
+	case *ast.Ident:
+		return t.Name
+	case *ast.StarExpr:
+		return "*" + extractTypeNameFromAST(t.X)
+	case *ast.SelectorExpr:
+		return t.Sel.Name
+	case *ast.ArrayType:
+		if t.Len != nil {
+			return "[" + fmt.Sprintf("%v", t.Len) + "]" + extractTypeNameFromAST(t.Elt)
+		}
+		return "[]" + extractTypeNameFromAST(t.Elt)
+	case *ast.MapType:
+		return "map[" + extractTypeNameFromAST(t.Key) + "]" + extractTypeNameFromAST(t.Value)
+	case *ast.InterfaceType:
+		return "interface{}"
+	default:
+		return ""
+	}
 }
 
 // createSkippedInfo 创建跳过的结构体信息
