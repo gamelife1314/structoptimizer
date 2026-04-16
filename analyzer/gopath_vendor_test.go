@@ -425,3 +425,148 @@ func NewTask(id int64, name string) *Task {
 		t.Logf("成功加载无 vendor 项目的包")
 	})
 }
+
+// TestGopathSamePackageSubdir 测试同项目子包不从 vendor 查找
+func TestGopathSamePackageSubdir(t *testing.T) {
+	// 创建临时 GOPATH 目录
+	tmpDir, err := os.MkdirTemp("", "gopath_same_pkg_*")
+	if err != nil {
+		t.Fatalf("创建临时目录失败：%v", err)
+	}
+	defer os.RemoveAll(tmpDir)
+
+	// 创建项目结构（带 vendor 目录）
+	// tmpDir/
+	//   src/
+	//     mycompany/myproject/
+	//       vendor/                    # vendor 目录存在
+	//         github.com/external/lib/ # 但不会用于同项目的包
+	//       api/                       # 主包
+	//         main.go
+	//       api/handlers/              # 子包（同项目）
+	//         handlers.go
+
+	// 创建 vendor 目录（但不应该用于同项目的包）
+	vendorDir := filepath.Join(tmpDir, "src", "mycompany/myproject", "vendor", "github.com", "external", "lib")
+	if err := os.MkdirAll(vendorDir, 0755); err != nil {
+		t.Fatalf("创建 vendor 目录失败：%v", err)
+	}
+
+	// 创建 vendor 中的包
+	vendorFile := filepath.Join(vendorDir, "lib.go")
+	vendorContent := `package lib
+
+// ExternalLib vendor 中的外部库
+type ExternalLib struct {
+	Name string
+}
+`
+	if err := os.WriteFile(vendorFile, []byte(vendorContent), 0644); err != nil {
+		t.Fatalf("写入 vendor lib.go 失败：%v", err)
+	}
+
+	// 创建主包
+	apiDir := filepath.Join(tmpDir, "src", "mycompany/myproject", "api")
+	if err := os.MkdirAll(apiDir, 0755); err != nil {
+		t.Fatalf("创建 api 目录失败：%v", err)
+	}
+
+	apiFile := filepath.Join(apiDir, "main.go")
+	apiContent := `package api
+
+// APIHandler API 处理器
+type APIHandler struct {
+	Name string
+	Port int
+}
+
+// NewAPIHandler 创建处理器
+func NewAPIHandler(name string, port int) *APIHandler {
+	return &APIHandler{
+		Name: name,
+		Port: port,
+	}
+}
+`
+	if err := os.WriteFile(apiFile, []byte(apiContent), 0644); err != nil {
+		t.Fatalf("写入 api/main.go 失败：%v", err)
+	}
+
+	// 创建子包（handlers）
+	handlersDir := filepath.Join(apiDir, "handlers")
+	if err := os.MkdirAll(handlersDir, 0755); err != nil {
+		t.Fatalf("创建 handlers 目录失败：%v", err)
+	}
+
+	handlersFile := filepath.Join(handlersDir, "handlers.go")
+	handlersContent := `package handlers
+
+import "mycompany/myproject/api"
+
+// UserHandler 用户处理器
+type UserHandler struct {
+	API *api.APIHandler
+}
+
+// NewUserHandler 创建用户处理器
+func NewUserHandler(api *api.APIHandler) *UserHandler {
+	return &UserHandler{API: api}
+}
+`
+	if err := os.WriteFile(handlersFile, []byte(handlersContent), 0644); err != nil {
+		t.Fatalf("写入 handlers/handlers.go 失败：%v", err)
+	}
+
+	// 创建分析器（GOPATH 模式，指定 -pkg-scope）
+	cfg := &analyzer.Config{
+		TargetDir:   tmpDir,
+		Package:     "mycompany/myproject/api",  // 主包
+		ProjectType: "gopath",
+		GOPATH:      tmpDir,
+		Verbose:     0,
+	}
+
+	anlz := analyzer.NewAnalyzer(cfg)
+
+	// 测试加载主包
+	t.Run("LoadMainPackage", func(t *testing.T) {
+		pkg, err := anlz.LoadPackage("mycompany/myproject/api")
+		if err != nil {
+			t.Fatalf("加载主包失败：%v", err)
+		}
+
+		if pkg.Name != "api" {
+			t.Errorf("包名称错误：期望 api，实际 %s", pkg.Name)
+		}
+
+		// 验证 APIHandler 存在
+		obj := pkg.Types.Scope().Lookup("APIHandler")
+		if obj == nil {
+			t.Fatal("未找到 APIHandler 类型")
+		}
+
+		t.Logf("成功加载主包 mycompany/myproject/api")
+	})
+
+	// 测试加载子包（关键测试：不应该从 vendor 查找）
+	t.Run("LoadSubPackage", func(t *testing.T) {
+		// 这是同项目下的子包，应该从 $GOPATH/src 中查找
+		// 而不应该去 vendor 目录查找
+		pkg, err := anlz.LoadPackage("mycompany/myproject/api/handlers")
+		if err != nil {
+			t.Fatalf("加载子包失败：%v", err)
+		}
+
+		if pkg.Name != "handlers" {
+			t.Errorf("包名称错误：期望 handlers，实际 %s", pkg.Name)
+		}
+
+		// 验证 UserHandler 存在
+		obj := pkg.Types.Scope().Lookup("UserHandler")
+		if obj == nil {
+			t.Fatal("未找到 UserHandler 类型")
+		}
+
+		t.Logf("成功加载子包 mycompany/myproject/api/handlers（从 GOPATH/src 加载，非 vendor）")
+	})
+}

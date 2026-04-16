@@ -456,13 +456,24 @@ func (a *Analyzer) getPackageDir(pkgPath string) string {
 	// 根据项目类型决定查找方式
 	if a.config.ProjectType == "gopath" {
 		// GOPATH 模式
-		
-		// 先检查是否是 vendor 中的包
-		// vendor 包路径示例：github.com/xxx/yyy
-		// 应该在项目的 vendor 目录中查找
-		if a.config.Package != "" && pkgPath != a.config.Package {
-			// 不同包，可能是 vendor 中的依赖
-			// 查找项目根目录
+
+		// 检查是否是 vendor 中的包
+		// 只有当 pkgPath 不在当前项目范围内时，才去 vendor 查找
+		// 例如：
+		//   - pkg-scope=mycompany/myproject
+		//   - pkgPath=mycompany/myproject/api → 同项目，不去 vendor
+		//   - pkgPath=github.com/somelib/utils → 外部依赖，去 vendor 查找
+		isSameProject := false
+		if a.config.Package != "" {
+			// 检查 pkgPath 是否以 a.config.Package 为前缀
+			// 或者 a.config.Package 是否以 pkgPath 为前缀（父包）
+			isSameProject = strings.HasPrefix(pkgPath, a.config.Package+"/") ||
+				pkgPath == a.config.Package ||
+				strings.HasPrefix(a.config.Package, pkgPath+"/")
+		}
+
+		if !isSameProject {
+			// 外部依赖包，尝试从 vendor 目录查找
 			projectRoot := a.findProjectRootForPackage()
 			if projectRoot != "" {
 				vendorPath := filepath.Join(projectRoot, "vendor", pkgPath)
@@ -472,7 +483,7 @@ func (a *Analyzer) getPackageDir(pkgPath string) string {
 				}
 			}
 		}
-		
+
 		// 标准 GOPATH 模式：在 $GOPATH/src 中查找
 		gopath := a.config.GOPATH
 		if gopath == "" {
@@ -1057,8 +1068,16 @@ func (vi *vendorImporter) Import(path string) (*types.Package, error) {
 		return pkg, nil
 	}
 
-	// 1. 尝试从 vendor 目录导入
-	if vi.projectRoot != "" && path != "" {
+	// 检查是否是同项目的包（不应该从 vendor 查找）
+	isSameProject := false
+	if vi.analyzer.config.Package != "" {
+		isSameProject = strings.HasPrefix(path, vi.analyzer.config.Package+"/") ||
+			path == vi.analyzer.config.Package ||
+			strings.HasPrefix(vi.analyzer.config.Package, path+"/")
+	}
+
+	// 1. 尝试从 vendor 目录导入（仅限外部依赖包）
+	if vi.projectRoot != "" && path != "" && !isSameProject {
 		vendorPkgPath := filepath.Join(vi.projectRoot, "vendor", path)
 		if info, err := os.Stat(vendorPkgPath); err == nil && info.IsDir() {
 			// vendor 目录中有这个包，从源码导入
