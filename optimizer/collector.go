@@ -70,7 +70,6 @@ func (o *Optimizer) collectStructs(pkgPath, structName, filePath string, depth, 
 
 	// 检查是否是第三方包
 	if isVendorPackage(pkgPath) || !o.isProjectPackage(pkgPath) {
-		o.Log(3, "跳过结构体（非项目包）：%s (pkgPath=%s, isProjectPackage=%v)", structName, pkgPath, o.isProjectPackage(pkgPath))
 		return
 	}
 
@@ -118,7 +117,6 @@ func (o *Optimizer) collectStructs(pkgPath, structName, filePath string, depth, 
 
 		// 检查包范围限制（前缀匹配）
 		if o.config.PkgScope != "" && !strings.HasPrefix(field.PkgPath, o.config.PkgScope) {
-			o.Log(3, "跳过跨包字段：%s (包：%s, 范围：%s)", field.Name, field.PkgPath, o.config.PkgScope)
 			continue
 		}
 
@@ -143,7 +141,7 @@ func (o *Optimizer) parseStructFromFileOnly(pkgPath, structName, filePath string
 		return nil, "", fmt.Errorf("无法确定包目录：%s", pkgPath)
 	}
 
-	o.Log(3, "parseStructFromFileOnly: pkgPath=%s, searchDir=%s, structName=%s", pkgPath, searchDir, structName)
+	o.Log(3, "parseStructFromFileOnly: pkgPath=%s, searchDir=%s, structName=%s, filePath=%s", pkgPath, searchDir, structName, filePath)
 
 	// 如果没有指定文件路径，查找包含结构体的文件
 	if filePath == "" {
@@ -247,14 +245,32 @@ func (o *Optimizer) extractFieldInfo(field *ast.Field, importMap map[string]stri
 	// 1. 有包别名的是结构体（如 subpkg.SubStruct）
 	// 2. 未导出类型（小写字母开头且不是基本类型）可能是结构体
 	// 3. 基本类型（bool, int 等）不是结构体
-	// 4. 其他情况（如同包内的导出类型）需要在后续验证
-	isStruct := pkgAlias != "" || isUnexportedStructName(typeName)
+	// 4. 同包内的导出类型（大写开头）需要在后续验证，这里先假设是结构体
+	// 5. 排除已知的基本类型和内置类型
+	isStruct := pkgAlias != "" || 
+		(isUnexportedStructName(typeName) && !isBasicType(typeName)) ||
+		(isExportedStructName(typeName) && !isBasicType(typeName))
 
 	return nestedField{
 		Name:     typeName,
 		PkgPath:  fieldPkg,
 		IsStruct: isStruct,
 	}
+}
+
+// isExportedStructName 判断是否是导出的结构体类型名称（大写字母开头且不是基本类型）
+func isExportedStructName(name string) bool {
+	if name == "" {
+		return false
+	}
+	firstChar := name[0]
+	// 大写开头，可能是结构体
+	if firstChar < 'A' || firstChar > 'Z' {
+		return false
+	}
+	// 排除已知的非结构体类型（如接口、基本类型的别名等）
+	// 这里简单处理，只要是大写开头且不是基本类型，就认为是结构体
+	return true
 }
 
 // extractTypeNameFromExpr 从 AST 表达式中提取类型名称和包别名
