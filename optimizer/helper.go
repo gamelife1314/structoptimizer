@@ -11,13 +11,30 @@ func isStandardLibraryPkg(pkgPath string) bool {
 	if pkgPath == "" {
 		return true
 	}
+	// 标准库不包含点号
 	if strings.Contains(pkgPath, ".") {
 		return false
 	}
-	if !strings.Contains(pkgPath, "/") || strings.HasPrefix(pkgPath, "go/") {
+	// 以 go/ 开头的是标准库
+	if strings.HasPrefix(pkgPath, "go/") {
 		return true
 	}
-	return false
+	// 检查是否是已知的标准库包（单级包名）
+	standardLibs := map[string]bool{
+		"fmt": true, "os": true, "io": true, "net": true, "http": true,
+		"reflect": true, "errors": true, "bytes": true, "strings": true,
+		"bufio": true, "sort": true, "sync": true, "time": true,
+		"math": true, "rand": true, "regexp": true, "encoding": true,
+		"json": true, "xml": true, "csv": true, "html": true, "url": true,
+		"template": true, "text": true, "mime": true, "crypto": true,
+		"hash": true, "compress": true, "archive": true, "image": true,
+		"draw": true, "color": true, "jpeg": true, "png": true, "gif": true,
+		"syscall": true, "runtime": true, "debug": true, "plugin": true,
+		"unsafe": true, "atomic": true, "pprof": true, "trace": true,
+		"flag": true, "log": true, "testing": true, "path": true,
+		"filepath": true, "strconv": true, "unicode": true, "utf8": true,
+	}
+	return standardLibs[pkgPath]
 }
 
 // isVendorPackage 判断是否是 vendor 中的包或第三方包
@@ -156,23 +173,27 @@ func (o *Optimizer) fieldOrderSame(orig, opt []string) bool {
 
 // getPackageDir 获取包所在的目录
 func (o *Optimizer) getPackageDir(pkgPath string) string {
+	// GOPATH 模式
+	if o.config.ProjectType == "gopath" {
+		gopath := o.config.GOPATH
+		if gopath == "" {
+			gopath = os.Getenv("GOPATH")
+		}
+		if gopath != "" {
+			result := filepath.Join(gopath, "src", pkgPath)
+			return result
+		}
+		return ""
+	}
+
+	// Go Module 模式
 	if o.config.TargetDir != "" {
-		// Go Module 模式
 		relPath := strings.TrimPrefix(pkgPath, o.getModulePath())
 		relPath = strings.TrimPrefix(relPath, "/")
 		if relPath != "" {
 			return filepath.Join(o.config.TargetDir, relPath)
 		}
 		return o.config.TargetDir
-	}
-
-	// GOPATH 模式
-	gopath := o.config.GOPATH
-	if gopath == "" {
-		gopath = os.Getenv("GOPATH")
-	}
-	if gopath != "" {
-		return filepath.Join(gopath, "src", pkgPath)
 	}
 
 	return ""

@@ -142,6 +142,8 @@ func (o *Optimizer) parseStructFromFileOnly(pkgPath, structName, filePath string
 		return nil, "", fmt.Errorf("无法确定包目录：%s", pkgPath)
 	}
 
+	o.Log(3, "parseStructFromFileOnly: pkgPath=%s, searchDir=%s, structName=%s", pkgPath, searchDir, structName)
+
 	// 如果没有指定文件路径，查找包含结构体的文件
 	if filePath == "" {
 		files, err := o.findFilesWithStruct(searchDir, structName)
