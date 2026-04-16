@@ -240,20 +240,37 @@ func (o *Optimizer) extractFieldInfo(field *ast.Field, importMap map[string]stri
 		}
 	}
 
+	// 判断是否是结构体类型：
+	// 1. 有包别名的是结构体（如 subpkg.SubStruct）
+	// 2. 未导出类型（小写字母开头且不是基本类型）可能是结构体
+	// 3. 基本类型（bool, int 等）不是结构体
+	// 4. 其他情况（如同包内的导出类型）需要在后续验证
+	isStruct := pkgAlias != "" || isUnexportedStructName(typeName)
+
 	return nestedField{
 		Name:     typeName,
 		PkgPath:  fieldPkg,
-		IsStruct: true, // 假设是结构体，后续会验证
+		IsStruct: isStruct,
 	}
 }
 
 // extractTypeNameFromExpr 从 AST 表达式中提取类型名称和包别名
+// 支持处理指针、Slice、Array 等类型
 func (o *Optimizer) extractTypeNameFromExpr(expr ast.Expr) (typeName, pkgAlias string) {
 	switch t := expr.(type) {
 	case *ast.Ident:
 		return t.Name, ""
 	case *ast.StarExpr:
 		return o.extractTypeNameFromExpr(t.X)
+	case *ast.ArrayType:
+		// 处理 []T 或 [N]T 类型
+		return o.extractTypeNameFromExpr(t.Elt)
+	case *ast.MapType:
+		// 处理 map[K]V 类型，返回 value 的类型
+		return o.extractTypeNameFromExpr(t.Value)
+	case *ast.ChanType:
+		// 处理 chan T 类型
+		return o.extractTypeNameFromExpr(t.Value)
 	case *ast.SelectorExpr:
 		if ident, ok := t.X.(*ast.Ident); ok {
 			return t.Sel.Name, ident.Name
