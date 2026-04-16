@@ -70,6 +70,7 @@ func (o *Optimizer) collectStructs(pkgPath, structName, filePath string, depth, 
 
 	// 检查是否是第三方包
 	if isVendorPackage(pkgPath) || !o.isProjectPackage(pkgPath) {
+		o.Log(3, "跳过结构体（非项目包）：%s (pkgPath=%s, isProjectPackage=%v)", structName, pkgPath, o.isProjectPackage(pkgPath))
 		return
 	}
 

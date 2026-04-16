@@ -99,22 +99,11 @@ func (o *Optimizer) isProjectPackage(pkgPath string) bool {
 
 	// GOPATH 模式下，需要检查是否在项目路径下
 	if o.config.ProjectType == "gopath" {
-		gopath := o.config.GOPATH
-		if gopath == "" {
-			gopath = os.Getenv("GOPATH")
+		// vendor 中的不是项目包
+		if strings.Contains(pkgPath, "/vendor/") || strings.HasPrefix(pkgPath, "vendor/") {
+			return false
 		}
-		if gopath != "" {
-			// 检查包路径是否以 GOPATH/src/ 开头
-			if strings.HasPrefix(pkgPath, "src/") {
-				// 提取项目路径
-				relPath := strings.TrimPrefix(pkgPath, "src/")
-				// 检查是否包含 vendor
-				if strings.Contains(relPath, "/vendor/") {
-					return false
-				}
-				return true
-			}
-		}
+		
 		// GOPATH 模式下，只要不是 vendor 和标准库，就认为是项目包
 		return true
 	}
