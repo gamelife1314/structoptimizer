@@ -3,15 +3,26 @@ package optimizer
 import (
 	"fmt"
 	"go/ast"
+	"go/parser"
 	"go/token"
 	"go/types"
+	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"golang.org/x/tools/go/packages"
 
 	"github.com/gamelife1314/structoptimizer/analyzer"
 )
+
+// StructDef 结构体定义（用于文件扫描）
+type StructDef struct {
+	Name    string
+	PkgPath string
+	File    string
+	Type    *types.Struct
+}
 
 // findStructInPackage 在已加载的包中查找结构体（优化阶段使用）
 func (o *Optimizer) findStructInPackage(pkg *packages.Package, structName string) (*types.Struct, string, error) {
@@ -138,13 +149,25 @@ func (o *Optimizer) optimizeInternal() (*Report, error) {
 	} else if o.config.Package != "" {
 		// 优化包中所有结构体
 		o.Log(1, "收集包：%s", o.config.Package)
-		structs, err := o.analyzer.FindAllStructs(o.config.Package)
-		if err != nil {
-			return nil, err
-		}
-
-		for _, st := range structs {
-			o.collectStructs(st.PkgPath, st.Name, st.File, 0, 0)
+		
+		// GOPATH 模式下，使用文件扫描而不是包加载
+		if o.config.ProjectType == "gopath" {
+			structs, err := o.findAllStructsByScanning(o.config.Package)
+			if err != nil {
+				return nil, err
+			}
+			for _, st := range structs {
+				o.collectStructs(st.PkgPath, st.Name, st.File, 0, 0)
+			}
+		} else {
+			// Go Module 模式下，使用原来的方法
+			structs, err := o.analyzer.FindAllStructs(o.config.Package)
+			if err != nil {
+				return nil, err
+			}
+			for _, st := range structs {
+				o.collectStructs(st.PkgPath, st.Name, st.File, 0, 0)
+			}
 		}
 	}
 
@@ -303,18 +326,21 @@ func (o *Optimizer) optimizeStruct(pkgPath, structName, filePath string, depth i
 		if err != nil {
 			o.Log(3, "文件解析失败，加载包：%v", err)
 		} else {
-			// 快速路径成功，但需要检查是否有嵌套的未导出结构体
-			// 如果有，需要加载包来获取准确的大小信息
-			hasUnexportedStruct := false
-			for _, f := range info.Fields {
-				if isUnexportedStructName(f.TypeName) {
-					hasUnexportedStruct = true
-					break
+			// GOPATH 模式下，不强制加载包（因为可能失败）
+			if o.config.ProjectType != "gopath" {
+				// 快速路径成功，但需要检查是否有嵌套的未导出结构体
+				// 如果有，需要加载包来获取准确的大小信息
+				hasUnexportedStruct := false
+				for _, f := range info.Fields {
+					if isUnexportedStructName(f.TypeName) {
+						hasUnexportedStruct = true
+						break
+					}
 				}
-			}
-			if hasUnexportedStruct {
-				o.Log(3, "检测到未导出结构体字段，加载包获取准确大小")
-				info = nil // 强制使用慢速路径
+				if hasUnexportedStruct {
+					o.Log(3, "检测到未导出结构体字段，加载包获取准确大小")
+					info = nil // 强制使用慢速路径
+				}
 			}
 		}
 	}
@@ -501,6 +527,96 @@ func isBasicType(typeName string) bool {
 		"byte": true, "rune": true, "uintptr": true,
 	}
 	return basicTypes[typeName]
+}
+
+// findAllStructsByScanning 通过扫描文件查找包中的所有结构体（GOPATH 模式使用）
+func (o *Optimizer) findAllStructsByScanning(pkgPath string) ([]StructDef, error) {
+	// 获取包目录
+	pkgDir := o.getPackageDir(pkgPath)
+	if pkgDir == "" {
+		return nil, fmt.Errorf("无法确定包目录：%s", pkgPath)
+	}
+
+	o.Log(2, "扫描包目录：%s", pkgDir)
+
+	var structs []StructDef
+
+	// 扫描目录中的所有 Go 文件
+	err := o.scanDirForStructs(pkgDir, pkgPath, &structs)
+	if err != nil {
+		return nil, err
+	}
+
+	return structs, nil
+}
+
+// scanDirForStructs 递归扫描目录查找结构体
+func (o *Optimizer) scanDirForStructs(dir, pkgPath string, structs *[]StructDef) error {
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return err
+	}
+
+	for _, entry := range entries {
+		if entry.IsDir() {
+			// 跳过 vendor 和.git 等目录
+			name := entry.Name()
+			if name == "vendor" || name == ".git" || name == "node_modules" {
+				continue
+			}
+			// 递归扫描子目录
+			if err := o.scanDirForStructs(filepath.Join(dir, entry.Name()), pkgPath, structs); err != nil {
+				return err
+			}
+			continue
+		}
+
+		// 只处理.go 文件
+		name := entry.Name()
+		if !strings.HasSuffix(name, ".go") {
+			continue
+		}
+
+		filePath := filepath.Join(dir, name)
+
+		// 检查是否应该跳过
+		if o.shouldSkipFile(filePath) {
+			continue
+		}
+
+		// 解析文件查找结构体
+		fset := token.NewFileSet()
+		f, err := parser.ParseFile(fset, filePath, nil, parser.ParseComments)
+		if err != nil {
+			continue
+		}
+
+		// 提取结构体
+		for _, decl := range f.Decls {
+			genDecl, ok := decl.(*ast.GenDecl)
+			if !ok || genDecl.Tok != token.TYPE {
+				continue
+			}
+
+			for _, spec := range genDecl.Specs {
+				ts, ok := spec.(*ast.TypeSpec)
+				if !ok {
+					continue
+				}
+
+				if _, ok := ts.Type.(*ast.StructType); ok {
+					*structs = append(*structs, StructDef{
+						Name:    ts.Name.Name,
+						PkgPath: pkgPath,
+						File:    filePath,
+						Type:    nil, // 文件扫描时无法获取类型信息
+					})
+				}
+			}
+		}
+	}
+
+	return nil
 }
 
 // extractFieldNamesFromInfo 从 FieldInfo 列表提取字段名称
