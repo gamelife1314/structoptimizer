@@ -39,6 +39,7 @@ type Config struct {
 	PkgWorkerLimit int    // 包并发限制
 	ShowVersion    bool   // 显示版本
 	ReservedFields string // 预留字段名称（逗号分隔）
+	VendorDir      string // 自定义 vendor 目录路径（可选）
 }
 
 func main() {
@@ -89,6 +90,7 @@ func main() {
 		Verbose:       cfg.Verbose,
 		ProjectType:   cfg.ProjectType,
 		GOPATH:        cfg.GOPATH,
+		VendorDir:     cfg.VendorDir, // 传递自定义 vendor 目录
 	}
 	
 	// GOPATH 模式下，使用 -pkg-scope 作为包的根范围
@@ -187,6 +189,7 @@ func parseFlags() *Config {
 	flag.IntVar(&cfg.MaxDepth, "max-depth", 50, "最大递归深度（默认 50）")
 	flag.IntVar(&cfg.Timeout, "timeout", 1200, "超时时间（秒，默认 20 分钟）")
 	flag.StringVar(&cfg.PkgScope, "pkg-scope", "", "包范围限制（GOPATH 模式必填，只分析此包内的结构体）")
+	flag.StringVar(&cfg.VendorDir, "vendor-dir", "", "自定义 vendor 目录路径（可选，默认为项目根目录下的 vendor 目录）")
 	flag.IntVar(&cfg.PkgWorkerLimit, "pkg-limit", 4, "包并发限制（默认 4，降低可防止 OOM）")
 	flag.StringVar(&cfg.ReservedFields, "reserved-fields", "", "预留字段名称（逗号分隔，始终排在最后，如：reserved,padding,XXX）")
 

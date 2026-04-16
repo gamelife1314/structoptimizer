@@ -50,6 +50,7 @@ type Config struct {
 	Verbose       int
 	ProjectType   string // 项目类型：gomod 或 gopath
 	GOPATH        string // GOPATH 路径（可选，为空则使用环境变量）
+	VendorDir     string // 自定义 vendor 目录路径（可选）
 }
 
 // NewAnalyzer 创建分析器
@@ -993,26 +994,37 @@ func (a *Analyzer) FindStructByIndex(pkgPath, structName string) (*StructLocatio
 
 // vendorImporter 支持 vendor 目录的导入器
 // GOPATH 模式下，依赖查找顺序：
-// 1. 当前项目 vendor 目录（$GOPATH/src/mycompany/myproject/vendor）
-// 2. 父级项目 vendor 目录（向上查找）
-// 3. 标准库
-// 4. GOPATH 中的其他包
+// 1. 自定义 vendor 目录（通过 -vendor-dir 指定）
+// 2. 当前项目 vendor 目录（$GOPATH/src/mycompany/myproject/vendor）
+// 3. 父级项目 vendor 目录（向上查找）
+// 4. 标准库
+// 5. GOPATH 中的其他包
 type vendorImporter struct {
 	analyzer       *Analyzer
 	projectRoot    string              // 项目根目录（用于查找 vendor）
+	vendorDir      string              // vendor 目录路径（自定义或自动检测）
 	sourceImporter types.Importer     // 源码导入器
 	cache          map[string]*types.Package // 缓存已导入的包
 }
 
 // newVendorImporter 创建支持 vendor 目录的导入器
 func (a *Analyzer) newVendorImporter() *vendorImporter {
-	// 确定项目根目录
-	// GOPATH 模式下，项目根目录是 $GOPATH/src/ 下的第一级目录
+	// 确定项目根目录和 vendor 目录
 	projectRoot := a.findProjectRoot()
+	vendorDir := a.config.VendorDir
+	
+	// 如果指定了自定义 vendor 目录，使用它
+	// 否则使用自动检测的 vendor 目录
+	if vendorDir == "" {
+		vendorDir = filepath.Join(projectRoot, "vendor")
+	}
+	
+	a.Log(2, "vendorImporter 初始化：projectRoot=%s, vendorDir=%s", projectRoot, vendorDir)
 
 	return &vendorImporter{
 		analyzer:       a,
 		projectRoot:    projectRoot,
+		vendorDir:      vendorDir,
 		sourceImporter: importer.For("source", nil),
 		cache:          make(map[string]*types.Package),
 	}
@@ -1077,15 +1089,19 @@ func (vi *vendorImporter) Import(path string) (*types.Package, error) {
 	}
 
 	// 1. 尝试从 vendor 目录导入（仅限外部依赖包）
-	if vi.projectRoot != "" && path != "" && !isSameProject {
-		vendorPkgPath := filepath.Join(vi.projectRoot, "vendor", path)
+	if vi.vendorDir != "" && path != "" && !isSameProject {
+		vendorPkgPath := filepath.Join(vi.vendorDir, path)
+		vi.analyzer.Log(3, "尝试从 vendor 目录导入：%s -> %s", path, vendorPkgPath)
 		if info, err := os.Stat(vendorPkgPath); err == nil && info.IsDir() {
 			// vendor 目录中有这个包，从源码导入
 			if pkg, err := vi.importFromDir(path, vendorPkgPath); err == nil {
 				vi.cache[path] = pkg
 				return pkg, nil
+			} else {
+				vi.analyzer.Log(3, "从 vendor 目录导入失败：%s (%v)", vendorPkgPath, err)
 			}
-			vi.analyzer.Log(3, "从 vendor 目录导入失败：%s (%v)", vendorPkgPath, err)
+		} else {
+			vi.analyzer.Log(3, "vendor 路径不存在：%s", vendorPkgPath)
 		}
 	}
 
@@ -1120,18 +1136,23 @@ func (vi *vendorImporter) Import(path string) (*types.Package, error) {
 	}
 
 	// 4. 都失败了
-	return nil, fmt.Errorf("无法导入包 %s (GOPATH=%s, projectRoot=%s, isSameProject=%v)", 
-		path, vi.analyzer.config.GOPATH, vi.projectRoot, isSameProject)
+	return nil, fmt.Errorf("无法导入包 %s (GOPATH=%s, projectRoot=%s, vendorDir=%s, isSameProject=%v)", 
+		path, vi.analyzer.config.GOPATH, vi.projectRoot, vi.vendorDir, isSameProject)
 }
 
 // importFromDir 从指定目录导入包
 func (vi *vendorImporter) importFromDir(pkgPath, dir string) (*types.Package, error) {
+	vi.analyzer.Log(3, "importFromDir: 开始从目录导入：%s", dir)
+	
 	// 查找目录中的所有 Go 文件
 	goFiles, err := vi.analyzer.findGoFiles(dir)
 	if err != nil {
+		vi.analyzer.Log(3, "importFromDir: findGoFiles 失败：%v", err)
 		return nil, err
 	}
 
+	vi.analyzer.Log(3, "importFromDir: 找到 %d 个 Go 文件", len(goFiles))
+	
 	if len(goFiles) == 0 {
 		return nil, fmt.Errorf("目录中没有 Go 文件：%s", dir)
 	}
@@ -1139,17 +1160,22 @@ func (vi *vendorImporter) importFromDir(pkgPath, dir string) (*types.Package, er
 	// 解析文件
 	var astFiles []*ast.File
 	fset := token.NewFileSet()
+	parseErrors := []string{}
 	for _, f := range goFiles {
 		astFile, err := parser.ParseFile(fset, f, nil, parser.ParseComments)
 		if err != nil {
+			parseErrors = append(parseErrors, fmt.Sprintf("%s: %v", f, err))
+			vi.analyzer.Log(3, "importFromDir: 解析文件失败：%s (%v)", f, err)
 			continue // 跳过有问题的文件
 		}
 		astFiles = append(astFiles, astFile)
 	}
 
 	if len(astFiles) == 0 {
-		return nil, fmt.Errorf("没有可解析的 Go 文件：%s", dir)
+		return nil, fmt.Errorf("没有可解析的 Go 文件：%s (解析错误: %v)", dir, parseErrors)
 	}
+
+	vi.analyzer.Log(3, "importFromDir: 成功解析 %d 个文件", len(astFiles))
 
 	// 类型检查
 	info := &types.Info{
@@ -1163,11 +1189,14 @@ func (vi *vendorImporter) importFromDir(pkgPath, dir string) (*types.Package, er
 		Sizes:    types.SizesFor("gc", runtime.GOARCH),
 	}
 
+	vi.analyzer.Log(3, "importFromDir: 开始类型检查：%s", pkgPath)
 	pkg, err := conf.Check(pkgPath, fset, astFiles, info)
 	if err != nil {
+		vi.analyzer.Log(3, "importFromDir: 类型检查失败：%s (%v)", pkgPath, err)
 		return nil, err
 	}
 
+	vi.analyzer.Log(3, "importFromDir: 类型检查成功：%s", pkgPath)
 	return pkg, nil
 }
 
