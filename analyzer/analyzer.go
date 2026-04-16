@@ -1097,7 +1097,7 @@ func (vi *vendorImporter) Import(path string) (*types.Package, error) {
 		}
 	}
 
-	// 3. 尝试从 GOPATH 导入（其他项目）
+	// 3. 尝试从 GOPATH 导入（其他项目和同项目子包）
 	if vi.analyzer.config.ProjectType == "gopath" {
 		gopath := vi.analyzer.config.GOPATH
 		if gopath == "" {
@@ -1105,17 +1105,23 @@ func (vi *vendorImporter) Import(path string) (*types.Package, error) {
 		}
 		if gopath != "" {
 			gopathPkgPath := filepath.Join(gopath, "src", path)
+			vi.analyzer.Log(3, "尝试从 GOPATH 导入：%s -> %s", path, gopathPkgPath)
 			if info, err := os.Stat(gopathPkgPath); err == nil && info.IsDir() {
 				if pkg, err := vi.importFromDir(path, gopathPkgPath); err == nil {
 					vi.cache[path] = pkg
 					return pkg, nil
+				} else {
+					vi.analyzer.Log(3, "从 GOPATH 导入失败：%s (%v)", gopathPkgPath, err)
 				}
+			} else {
+				vi.analyzer.Log(3, "GOPATH 路径不存在：%s (%v)", gopathPkgPath, err)
 			}
 		}
 	}
 
 	// 4. 都失败了
-	return nil, fmt.Errorf("无法导入包 %s", path)
+	return nil, fmt.Errorf("无法导入包 %s (GOPATH=%s, projectRoot=%s, isSameProject=%v)", 
+		path, vi.analyzer.config.GOPATH, vi.projectRoot, isSameProject)
 }
 
 // importFromDir 从指定目录导入包
