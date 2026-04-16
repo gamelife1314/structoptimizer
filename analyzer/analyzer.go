@@ -288,12 +288,12 @@ func (a *Analyzer) loadPackageOnDemand(pkgPath string) (*packages.Package, error
 	}
 
 	conf := types.Config{
-		Importer: importer.Default(), // 只用于解析导入路径
+		Importer: newFallbackImporter(), // 使用回退 importer，找不到 .a 文件时从源码导入
 		Sizes:    types.SizesFor("gc", runtime.GOARCH),
 		Error: func(err error) {
-			// 收集类型检查错误
-			if a.config.Verbose >= 2 {
-				a.Log(2, "类型检查错误：%s (%v)", pkgPath, err)
+			// 只记录详细日志，不中断处理
+			if a.config.Verbose >= 3 {
+				a.Log(3, "类型检查信息：%s (%v)", pkgPath, err)
 			}
 		},
 	}
@@ -922,4 +922,56 @@ func (a *Analyzer) FindStructByIndex(pkgPath, structName string) (*StructLocatio
 	}
 
 	return loc, nil
+}
+
+// fallbackImporter 回退导入器
+// 当找不到 .a 文件时，尝试从源码导入
+type fallbackImporter struct {
+	defaultImporter types.Importer
+	sourceImporter  types.Importer
+}
+
+func newFallbackImporter() *fallbackImporter {
+	return &fallbackImporter{
+		defaultImporter: importer.Default(),
+		sourceImporter:  importer.For("source", nil),
+	}
+}
+
+func (fi *fallbackImporter) Import(path string) (*types.Package, error) {
+	// 先尝试使用默认 importer（查找 .a 文件）
+	pkg, err := fi.defaultImporter.Import(path)
+	if err == nil {
+		return pkg, nil
+	}
+
+	// 默认 importer 失败，尝试从源码导入
+	// 只尝试导入标准库，避免递归加载所有依赖
+	if !strings.Contains(path, ".") || isGoStdLib(path) {
+		// 标准库包（不包含 "." 或者是已知的标准库路径）
+		if srcPkg, srcErr := fi.sourceImporter.Import(path); srcErr == nil {
+			return srcPkg, nil
+		}
+	}
+
+	// 都失败了，返回错误但不影响主流程
+	// 这样类型检查仍然可以进行，只是缺少部分导入包的信息
+	return nil, err
+}
+
+// isGoStdLib 判断是否是 Go 标准库
+func isGoStdLib(pkgPath string) bool {
+	// 标准库包路径不包含 "." 且不包含 "/"
+	// 或者以 "github.com/", "golang.org/" 等开头的是第三方库
+	if strings.Contains(pkgPath, ".") {
+		return false
+	}
+	// 常见的第三方库前缀
+	if strings.HasPrefix(pkgPath, "github.com/") ||
+		strings.HasPrefix(pkgPath, "golang.org/") ||
+		strings.HasPrefix(pkgPath, "google.golang.org/") ||
+		strings.HasPrefix(pkgPath, "gopkg.in/") {
+		return false
+	}
+	return true
 }
