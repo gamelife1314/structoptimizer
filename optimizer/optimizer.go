@@ -302,6 +302,20 @@ func (o *Optimizer) optimizeStruct(pkgPath, structName, filePath string, depth i
 		info, st, err = analyzeStructFromFile(filePath, structName, pkgPath)
 		if err != nil {
 			o.Log(3, "文件解析失败，加载包：%v", err)
+		} else {
+			// 快速路径成功，但需要检查是否有嵌套的未导出结构体
+			// 如果有，需要加载包来获取准确的大小信息
+			hasUnexportedStruct := false
+			for _, f := range info.Fields {
+				if isUnexportedStructName(f.TypeName) {
+					hasUnexportedStruct = true
+					break
+				}
+			}
+			if hasUnexportedStruct {
+				o.Log(3, "检测到未导出结构体字段，加载包获取准确大小")
+				info = nil // 强制使用慢速路径
+			}
 		}
 	}
 

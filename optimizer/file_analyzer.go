@@ -140,11 +140,19 @@ func getFieldName(f *ast.Field) string {
 }
 
 // estimateFieldSize 估算字段大小
+// 对于未导出的结构体类型（小写字母开头），返回合理的估算值
 func estimateFieldSize(expr ast.Expr) (size, align int64) {
 	switch t := expr.(type) {
 	case *ast.Ident:
 		return sizeOfIdent(t.Name)
 	case *ast.StarExpr:
+		// 指针类型，对于未导出类型如 *innerStruct，递归获取底层类型
+		if ident, ok := t.X.(*ast.Ident); ok {
+			if isUnexportedStructName(ident.Name) {
+				// 未导出结构体指针，返回指针大小但保持 8 字节对齐
+				return 8, 8
+			}
+		}
 		return 8, 8 // 指针
 	case *ast.ArrayType:
 		if t.Len == nil {
@@ -164,6 +172,7 @@ func estimateFieldSize(expr ast.Expr) (size, align int64) {
 }
 
 // sizeOfIdent 根据标识符名称估算大小
+// 对于未导出类型（小写字母开头），尝试识别是否是结构体类型
 func sizeOfIdent(name string) (int64, int64) {
 	switch name {
 	case "bool", "byte":
@@ -185,8 +194,40 @@ func sizeOfIdent(name string) (int64, int64) {
 	case "string":
 		return 16, 8
 	default:
+		// 对于未导出类型（小写字母开头），可能是结构体类型
+		// 返回一个合理的默认值，但标记为需要后续精确计算
+		if isUnexportedStructName(name) {
+			// 未导出结构体，返回 8 字节作为占位符
+			// 实际大小会在加载包后重新计算
+			return 8, 8
+		}
 		return 8, 8 // 未知类型
 	}
+}
+
+// isUnexportedStructName 判断是否是未导出类型名称（小写字母开头）
+// 注意：这个函数用于快速判断，基本类型虽然也是小写但在 sizeOfIdent 中已经处理
+func isUnexportedStructName(name string) bool {
+	if name == "" {
+		return false
+	}
+	// 小写字母开头可能是未导出类型
+	// 排除常见的基本类型
+	firstChar := name[0]
+	if firstChar < 'a' || firstChar > 'z' {
+		return false
+	}
+	
+	// 排除基本类型
+	basicTypes := map[string]bool{
+		"bool": true, "byte": true, "rune": true,
+		"int": true, "int8": true, "int16": true, "int32": true, "int64": true,
+		"uint": true, "uint8": true, "uint16": true, "uint32": true, "uint64": true,
+		"float32": true, "float64": true,
+		"uintptr": true, "string": true,
+	}
+	
+	return !basicTypes[name]
 }
 
 // extractFieldNames 提取字段名称
