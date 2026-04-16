@@ -97,6 +97,7 @@ func NewOptimizer(cfg *Config, analyzer *analyzer.Analyzer) *Optimizer {
 		pkgFileCache:     NewPackageCache("", true),  // 启用文件缓存
 		structCache:      make(map[string]*types.Struct),
 		filePathCache:    make(map[string]string),
+		memGuard:         NewMemoryGuard(512, true),  // 默认 512MB，启用自动 GC
 		report: &Report{
 			StructReports: make([]*StructReport, 0),
 		},
@@ -485,11 +486,26 @@ func (o *Optimizer) loadPackageCached(pkgPath string) (*packages.Package, error)
 		}
 	}
 
+	// 加载前内存检查
+	if o.memGuard != nil {
+		if err := o.memGuard.CheckMemory(); err != nil {
+			return nil, fmt.Errorf("加载包前内存检查失败：%s (%v)", pkgPath, err)
+		}
+	}
+
 	// 加载包
 	o.Log(3, "加载包（未缓存）：%s", pkgPath)
 	pkg, err := o.analyzer.LoadPackage(pkgPath)
 	if err != nil {
 		return nil, err
+	}
+
+	// 加载后内存检查
+	if o.memGuard != nil {
+		if err := o.memGuard.CheckMemory(); err != nil {
+			o.Log(2, "警告：加载包后内存使用过高：%s (%v)", pkgPath, err)
+			// 不返回错误，让程序继续运行
+		}
 	}
 
 	// 缓存到内存
@@ -500,9 +516,9 @@ func (o *Optimizer) loadPackageCached(pkgPath string) (*packages.Package, error)
 	o.pkgCache[pkgPath] = pkg
 	o.mu.Unlock()
 
-	// 保存到文件缓存
+	// 保存到文件缓存（异步）
 	if o.pkgFileCache != nil {
-		go o.savePackageCache(pkgPath, pkg) // 异步保存，不阻塞
+		go o.savePackageCache(pkgPath, pkg)
 	}
 
 	return pkg, nil

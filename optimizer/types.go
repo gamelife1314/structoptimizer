@@ -33,9 +33,12 @@ type Optimizer struct {
 
 	// 缓存优化
 	pkgCache      map[string]*packages.Package
-	pkgFileCache  *PackageCache  // 文件缓存
+	pkgFileCache  *PackageCache    // 文件缓存
 	structCache   map[string]*types.Struct
 	filePathCache map[string]string
+	
+	// 内存保护
+	memGuard      *MemoryGuard     // 内存保护器
 }
 
 // StructTask 结构体处理任务
