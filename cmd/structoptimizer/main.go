@@ -90,6 +90,13 @@ func main() {
 		ProjectType:   cfg.ProjectType,
 		GOPATH:        cfg.GOPATH,
 	}
+	
+	// GOPATH 模式下，使用 -pkg-scope 作为包的根范围
+	// 这样 vendorImporter 才能正确判断 isSameProject
+	if cfg.ProjectType == "gopath" && cfg.PkgScope != "" && analyzerCfg.Package == "" {
+		analyzerCfg.Package = cfg.PkgScope
+	}
+	
 	anlz := analyzer.NewAnalyzer(analyzerCfg)
 
 	// 创建优化器
