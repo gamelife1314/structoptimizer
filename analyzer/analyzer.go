@@ -288,7 +288,7 @@ func (a *Analyzer) loadPackageOnDemand(pkgPath string) (*packages.Package, error
 	}
 
 	conf := types.Config{
-		Importer: newFallbackImporter(), // 使用回退 importer，找不到 .a 文件时从源码导入
+		Importer: a.newVendorImporter(), // 使用支持 vendor 的 importer
 		Sizes:    types.SizesFor("gc", runtime.GOARCH),
 		Error: func(err error) {
 			// 只记录详细日志，不中断处理
@@ -456,6 +456,24 @@ func (a *Analyzer) getPackageDir(pkgPath string) string {
 	// 根据项目类型决定查找方式
 	if a.config.ProjectType == "gopath" {
 		// GOPATH 模式
+		
+		// 先检查是否是 vendor 中的包
+		// vendor 包路径示例：github.com/xxx/yyy
+		// 应该在项目的 vendor 目录中查找
+		if a.config.Package != "" && pkgPath != a.config.Package {
+			// 不同包，可能是 vendor 中的依赖
+			// 查找项目根目录
+			projectRoot := a.findProjectRootForPackage()
+			if projectRoot != "" {
+				vendorPath := filepath.Join(projectRoot, "vendor", pkgPath)
+				if info, err := os.Stat(vendorPath); err == nil && info.IsDir() {
+					a.Log(3, "找到 vendor 中的包：%s", vendorPath)
+					return vendorPath
+				}
+			}
+		}
+		
+		// 标准 GOPATH 模式：在 $GOPATH/src 中查找
 		gopath := a.config.GOPATH
 		if gopath == "" {
 			gopath = os.Getenv("GOPATH")
@@ -474,6 +492,44 @@ func (a *Analyzer) getPackageDir(pkgPath string) string {
 			return filepath.Join(a.config.TargetDir, relPath)
 		}
 		return a.config.TargetDir
+	}
+
+	return ""
+}
+
+// findProjectRootForPackage 查找项目根目录（包含 vendor 的目录）
+func (a *Analyzer) findProjectRootForPackage() string {
+	// 直接获取主包目录（不触发 vendor 查找）
+	gopath := a.config.GOPATH
+	if gopath == "" {
+		gopath = os.Getenv("GOPATH")
+	}
+	if gopath == "" || a.config.Package == "" {
+		return ""
+	}
+	
+	pkgDir := filepath.Join(gopath, "src", a.config.Package)
+	if pkgDir == "" {
+		return ""
+	}
+
+	// 向上查找，直到 GOPATH/src 或找到 vendor 目录
+	dir := pkgDir
+	gopathSrc := filepath.Join(gopath, "src")
+
+	for dir != "" && dir != gopathSrc && len(dir) > len(gopathSrc) {
+		// 检查是否有 vendor 目录
+		vendorDir := filepath.Join(dir, "vendor")
+		if info, err := os.Stat(vendorDir); err == nil && info.IsDir() {
+			return dir
+		}
+		
+		// 向上移动一级
+		parent := filepath.Dir(dir)
+		if parent == dir {
+			break
+		}
+		dir = parent
 	}
 
 	return ""
@@ -922,6 +978,172 @@ func (a *Analyzer) FindStructByIndex(pkgPath, structName string) (*StructLocatio
 	}
 
 	return loc, nil
+}
+
+// vendorImporter 支持 vendor 目录的导入器
+// GOPATH 模式下，依赖查找顺序：
+// 1. 当前项目 vendor 目录（$GOPATH/src/mycompany/myproject/vendor）
+// 2. 父级项目 vendor 目录（向上查找）
+// 3. 标准库
+// 4. GOPATH 中的其他包
+type vendorImporter struct {
+	analyzer       *Analyzer
+	projectRoot    string              // 项目根目录（用于查找 vendor）
+	sourceImporter types.Importer     // 源码导入器
+	cache          map[string]*types.Package // 缓存已导入的包
+}
+
+// newVendorImporter 创建支持 vendor 目录的导入器
+func (a *Analyzer) newVendorImporter() *vendorImporter {
+	// 确定项目根目录
+	// GOPATH 模式下，项目根目录是 $GOPATH/src/ 下的第一级目录
+	projectRoot := a.findProjectRoot()
+
+	return &vendorImporter{
+		analyzer:       a,
+		projectRoot:    projectRoot,
+		sourceImporter: importer.For("source", nil),
+		cache:          make(map[string]*types.Package),
+	}
+}
+
+// findProjectRoot 查找项目根目录（包含 vendor 目录的目录）
+func (a *Analyzer) findProjectRoot() string {
+	if a.config.ProjectType != "gopath" {
+		return a.config.TargetDir
+	}
+
+	// GOPATH 模式下，从包目录向上查找包含 vendor 的目录
+	pkgDir := a.getPackageDir(a.config.Package)
+	if pkgDir == "" {
+		return ""
+	}
+
+	// 向上查找，直到 GOPATH/src 或找到 vendor 目录
+	dir := pkgDir
+	gopathSrc := ""
+	
+	gopath := a.config.GOPATH
+	if gopath == "" {
+		gopath = os.Getenv("GOPATH")
+	}
+	if gopath != "" {
+		gopathSrc = filepath.Join(gopath, "src")
+	}
+
+	for dir != "" && dir != gopathSrc && len(dir) > len(gopathSrc) {
+		// 检查是否有 vendor 目录
+		vendorDir := filepath.Join(dir, "vendor")
+		if info, err := os.Stat(vendorDir); err == nil && info.IsDir() {
+			a.Log(3, "找到项目根目录（包含 vendor）：%s", dir)
+			return dir
+		}
+		
+		// 向上移动一级
+		parent := filepath.Dir(dir)
+		if parent == dir {
+			break
+		}
+		dir = parent
+	}
+
+	// 没找到 vendor，返回包目录的父目录
+	return filepath.Dir(pkgDir)
+}
+
+func (vi *vendorImporter) Import(path string) (*types.Package, error) {
+	// 检查缓存
+	if pkg, ok := vi.cache[path]; ok {
+		return pkg, nil
+	}
+
+	// 1. 尝试从 vendor 目录导入
+	if vi.projectRoot != "" && path != "" {
+		vendorPkgPath := filepath.Join(vi.projectRoot, "vendor", path)
+		if info, err := os.Stat(vendorPkgPath); err == nil && info.IsDir() {
+			// vendor 目录中有这个包，从源码导入
+			if pkg, err := vi.importFromDir(path, vendorPkgPath); err == nil {
+				vi.cache[path] = pkg
+				return pkg, nil
+			}
+			vi.analyzer.Log(3, "从 vendor 目录导入失败：%s (%v)", vendorPkgPath, err)
+		}
+	}
+
+	// 2. 尝试标准库（不包含 "." 的包路径）
+	if !strings.Contains(path, ".") || isGoStdLib(path) {
+		if pkg, err := vi.sourceImporter.Import(path); err == nil {
+			vi.cache[path] = pkg
+			return pkg, nil
+		}
+	}
+
+	// 3. 尝试从 GOPATH 导入（其他项目）
+	if vi.analyzer.config.ProjectType == "gopath" {
+		gopath := vi.analyzer.config.GOPATH
+		if gopath == "" {
+			gopath = os.Getenv("GOPATH")
+		}
+		if gopath != "" {
+			gopathPkgPath := filepath.Join(gopath, "src", path)
+			if info, err := os.Stat(gopathPkgPath); err == nil && info.IsDir() {
+				if pkg, err := vi.importFromDir(path, gopathPkgPath); err == nil {
+					vi.cache[path] = pkg
+					return pkg, nil
+				}
+			}
+		}
+	}
+
+	// 4. 都失败了
+	return nil, fmt.Errorf("无法导入包 %s", path)
+}
+
+// importFromDir 从指定目录导入包
+func (vi *vendorImporter) importFromDir(pkgPath, dir string) (*types.Package, error) {
+	// 查找目录中的所有 Go 文件
+	goFiles, err := vi.analyzer.findGoFiles(dir)
+	if err != nil {
+		return nil, err
+	}
+
+	if len(goFiles) == 0 {
+		return nil, fmt.Errorf("目录中没有 Go 文件：%s", dir)
+	}
+
+	// 解析文件
+	var astFiles []*ast.File
+	fset := token.NewFileSet()
+	for _, f := range goFiles {
+		astFile, err := parser.ParseFile(fset, f, nil, parser.ParseComments)
+		if err != nil {
+			continue // 跳过有问题的文件
+		}
+		astFiles = append(astFiles, astFile)
+	}
+
+	if len(astFiles) == 0 {
+		return nil, fmt.Errorf("没有可解析的 Go 文件：%s", dir)
+	}
+
+	// 类型检查
+	info := &types.Info{
+		Types:      make(map[ast.Expr]types.TypeAndValue),
+		Defs:       make(map[*ast.Ident]types.Object),
+		Uses:       make(map[*ast.Ident]types.Object),
+	}
+
+	conf := types.Config{
+		Importer: vi, // 递归使用当前导入器
+		Sizes:    types.SizesFor("gc", runtime.GOARCH),
+	}
+
+	pkg, err := conf.Check(pkgPath, fset, astFiles, info)
+	if err != nil {
+		return nil, err
+	}
+
+	return pkg, nil
 }
 
 // fallbackImporter 回退导入器
