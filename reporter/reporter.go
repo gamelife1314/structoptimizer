@@ -138,7 +138,16 @@ func (r *Reporter) GenerateTXT(report *optimizer.Report) (string, error) {
 					if sr.FieldTypes != nil {
 						if t, ok := sr.FieldTypes[origName]; ok {
 							origType = t
-							origSize = fmt.Sprintf("%d", getFieldSize(t))
+							// 使用准确的字段大小，如果有的话
+							if sr.FieldSizes != nil {
+								if s, ok := sr.FieldSizes[origName]; ok {
+									origSize = fmt.Sprintf("%d", s)
+								} else {
+									origSize = fmt.Sprintf("%d", getFieldSize(t))
+								}
+							} else {
+								origSize = fmt.Sprintf("%d", getFieldSize(t))
+							}
 						}
 					}
 				}
@@ -147,7 +156,16 @@ func (r *Reporter) GenerateTXT(report *optimizer.Report) (string, error) {
 					if sr.FieldTypes != nil {
 						if t, ok := sr.FieldTypes[optName]; ok {
 							optType = t
-							optSize = fmt.Sprintf("%d", getFieldSize(t))
+							// 使用准确的字段大小，如果有的话
+							if sr.FieldSizes != nil {
+								if s, ok := sr.FieldSizes[optName]; ok {
+									optSize = fmt.Sprintf("%d", s)
+								} else {
+									optSize = fmt.Sprintf("%d", getFieldSize(t))
+								}
+							} else {
+								optSize = fmt.Sprintf("%d", getFieldSize(t))
+							}
 						}
 					}
 				}

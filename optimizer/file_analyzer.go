@@ -201,7 +201,7 @@ func sizeOfIdent(name string) (int64, int64) {
 			// 实际大小会在加载包后重新计算
 			return 8, 8
 		}
-		return 8, 8 // 未知类型
+		return 8, 8 // 未知类型（包括重定义类型）
 	}
 }
 

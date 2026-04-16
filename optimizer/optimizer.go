@@ -326,21 +326,20 @@ func (o *Optimizer) optimizeStruct(pkgPath, structName, filePath string, depth i
 		if err != nil {
 			o.Log(3, "文件解析失败，加载包：%v", err)
 		} else {
-			// GOPATH 模式下，不强制加载包（因为可能失败）
-			if o.config.ProjectType != "gopath" {
-				// 快速路径成功，但需要检查是否有嵌套的未导出结构体
-				// 如果有，需要加载包来获取准确的大小信息
-				hasUnexportedStruct := false
-				for _, f := range info.Fields {
-					if isUnexportedStructName(f.TypeName) {
-						hasUnexportedStruct = true
-						break
-					}
+			// 检查是否有未知类型字段（不是基本类型）
+			// 包括重定义类型和未导出结构体
+			// 如果有，需要加载包来获取准确的大小信息
+			hasUnknownType := false
+			for _, f := range info.Fields {
+				// 如果不是基本类型，说明可能是重定义类型或结构体
+				if !isBasicType(f.TypeName) {
+					hasUnknownType = true
+					break
 				}
-				if hasUnexportedStruct {
-					o.Log(3, "检测到未导出结构体字段，加载包获取准确大小")
-					info = nil // 强制使用慢速路径
-				}
+			}
+			if hasUnknownType {
+				o.Log(3, "检测到重定义类型或结构体字段，加载包获取准确大小")
+				info = nil // 强制使用慢速路径
 			}
 		}
 	}
@@ -450,8 +449,9 @@ func (o *Optimizer) createSkippedInfo(key, filePath, reason string) *StructInfo 
 
 // addReport 添加报告
 func (o *Optimizer) addReport(info *StructInfo, skipReason string, depth int) {
-	// 构建字段类型映射
+	// 构建字段类型和大小映射
 	fieldTypes := make(map[string]string)
+	fieldSizes := make(map[string]int64)
 	hasEmbed := false
 	for _, f := range info.Fields {
 		key := f.Name
@@ -459,6 +459,7 @@ func (o *Optimizer) addReport(info *StructInfo, skipReason string, depth int) {
 			key = f.TypeName // 匿名字段使用类型名作为 key
 		}
 		fieldTypes[key] = f.TypeName
+		fieldSizes[key] = f.Size
 
 		// 检查是否是匿名字段
 		// 判断条件：字段名等于类型名，且类型是结构体类型（非基本类型）
@@ -477,6 +478,7 @@ func (o *Optimizer) addReport(info *StructInfo, skipReason string, depth int) {
 		OrigFields: info.OrigOrder,
 		OptFields:  info.OptOrder,
 		FieldTypes: fieldTypes,
+		FieldSizes: fieldSizes,
 		Skipped:    info.Skipped,
 		SkipReason: skipReason,
 		Depth:      depth,

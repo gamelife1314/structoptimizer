@@ -113,7 +113,9 @@ func CalcFieldSize(typ types.Type, info *types.Info) (size, align int64) {
 		return 16, 8
 
 	case *types.Named:
-		return CalcFieldSize(t.Underlying(), info)
+		// 重定义类型，获取底层类型的大小
+		underlying := t.Underlying()
+		return CalcFieldSize(underlying, info)
 
 	case *types.Struct:
 		return CalcStructSize(t, nil), 8
