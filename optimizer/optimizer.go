@@ -326,9 +326,7 @@ func (o *Optimizer) optimizeStruct(pkgPath, structName, filePath string, depth i
 		if err != nil {
 			o.Log(3, "文件解析失败，加载包：%v", err)
 		} else {
-			// 检查是否有未知类型字段（不是基本类型）
-			// 包括重定义类型和未导出结构体
-			// 如果有，需要加载包来获取准确的大小信息
+			// 快速路径成功，检查是否有未知类型字段
 			hasUnknownType := false
 			for _, f := range info.Fields {
 				// 如果不是基本类型，说明可能是重定义类型或结构体
@@ -337,9 +335,33 @@ func (o *Optimizer) optimizeStruct(pkgPath, structName, filePath string, depth i
 					break
 				}
 			}
+			
 			if hasUnknownType {
-				o.Log(3, "检测到重定义类型或结构体字段，加载包获取准确大小")
-				info = nil // 强制使用慢速路径
+				// 有未知类型，需要加载包获取准确大小
+				// 但使用缓存避免重复加载
+				o.Log(3, "检测到重定义类型或结构体字段，加载包获取准确大小（使用缓存）")
+				
+				// 加载包（使用缓存）
+				pkg, pkgErr := o.loadPackageCached(pkgPath)
+				if pkgErr != nil {
+					o.Log(3, "加载包失败，使用估算值：%v", pkgErr)
+					// 加载失败，继续使用估算值
+				} else {
+					// 包加载成功，查找结构体并重新分析字段
+					st2, _, err := o.findStructInPackage(pkg, structName)
+					if err != nil {
+						o.Log(3, "查找结构体失败，使用估算值：%v", err)
+					} else {
+						// 使用完整的类型信息重新分析
+						fa := NewFieldAnalyzer(pkg.TypesInfo, pkg.Fset)
+						info2 := fa.AnalyzeStruct(st2, structName, pkgPath, filePath)
+						
+						// 更新 info 中的字段和大小信息
+						info.Fields = info2.Fields
+						info.OrigSize = info2.OrigSize
+						o.fieldAnalyzer = fa
+					}
+				}
 			}
 		}
 	}
@@ -347,7 +369,7 @@ func (o *Optimizer) optimizeStruct(pkgPath, structName, filePath string, depth i
 	// 文件解析失败，加载包（慢速路径）
 	if info == nil {
 		o.Log(2, "加载包获取类型信息：%s", pkgPath)
-		pkg, err := o.analyzer.LoadPackage(pkgPath)
+		pkg, err := o.loadPackageCached(pkgPath)
 		if err != nil {
 			o.Log(1, "警告：加载包失败，跳过：%s (%v)", key, err)
 			info = &StructInfo{
@@ -433,6 +455,35 @@ func (o *Optimizer) optimizeStruct(pkgPath, structName, filePath string, depth i
 	o.addReport(info, "", depth)
 
 	return info, nil
+}
+
+// loadPackageCached 惰性加载包，使用缓存避免重复加载
+func (o *Optimizer) loadPackageCached(pkgPath string) (*packages.Package, error) {
+	// 检查缓存
+	o.mu.Lock()
+	if pkg, ok := o.pkgCache[pkgPath]; ok {
+		o.mu.Unlock()
+		o.Log(3, "使用缓存的包：%s", pkgPath)
+		return pkg, nil
+	}
+	o.mu.Unlock()
+
+	// 加载包
+	o.Log(3, "加载包（未缓存）：%s", pkgPath)
+	pkg, err := o.analyzer.LoadPackage(pkgPath)
+	if err != nil {
+		return nil, err
+	}
+
+	// 缓存包
+	o.mu.Lock()
+	if o.pkgCache == nil {
+		o.pkgCache = make(map[string]*packages.Package)
+	}
+	o.pkgCache[pkgPath] = pkg
+	o.mu.Unlock()
+
+	return pkg, nil
 }
 
 // createSkippedInfo 创建跳过的结构体信息
