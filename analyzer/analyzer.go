@@ -214,7 +214,7 @@ func (a *Analyzer) getModulePath() string {
 	return ""
 }
 
-// LoadPackage 加载包（线程安全，带错误处理）
+// LoadPackage 加载包（按需加载，不递归加载依赖包）
 func (a *Analyzer) LoadPackage(pkgPath string) (*packages.Package, error) {
 	// 检查缓存（读锁）
 	a.mu.RLock()
@@ -232,94 +232,130 @@ func (a *Analyzer) LoadPackage(pkgPath string) (*packages.Package, error) {
 	}
 	a.mu.RUnlock()
 
-	// 根据项目类型构建环境
-	isGoMod := a.config.ProjectType != "gopath"
+	// 按需加载：只解析当前包的文件，不加载依赖包
+	return a.loadPackageOnDemand(pkgPath)
+}
 
-	// 构建环境
-	env := os.Environ()
-	var loadDir string
-	if !isGoMod {
-		// GOPATH 模式
-		env = append(env, "GO111MODULE=off")
-
-		// 使用配置的 GOPATH 或环境变量
-		gopath := a.config.GOPATH
-		if gopath == "" {
-			gopath = os.Getenv("GOPATH")
-		}
-		if gopath != "" {
-			env = append(env, "GOPATH="+gopath)
-		}
-
-		loadDir = "" // GOPATH 模式下，使用 GOPATH 查找包
-		a.Log(1, "使用 GOPATH 模式加载包：%s (GOPATH=%s)", pkgPath, gopath)
-	} else {
-		// Go Module 模式
-		loadDir = a.config.TargetDir
-		a.Log(1, "使用 Go Module 模式加载包：%s", pkgPath)
+// loadPackageOnDemand 按需加载包（只解析当前包文件，不递归加载依赖）
+func (a *Analyzer) loadPackageOnDemand(pkgPath string) (*packages.Package, error) {
+	// 获取包目录
+	pkgDir := a.getPackageDir(pkgPath)
+	if pkgDir == "" {
+		return nil, fmt.Errorf("无法确定包目录：%s", pkgPath)
 	}
 
-	// 使用完整模式加载包，获取类型信息和 AST
-	// 为了避免 OOM，关键设置：
-	// 1. Tests=false - 不加载测试文件
-	// 2. 不递归加载依赖包的 TypesInfo（packages 默认行为）
-	cfg := &packages.Config{
-		Mode: packages.NeedName | packages.NeedFiles | packages.NeedCompiledGoFiles |
-			packages.NeedImports | packages.NeedTypes | packages.NeedTypesSizes |
-			packages.NeedTypesInfo | packages.NeedSyntax,
-		Dir:     loadDir,
-		Fset:    a.fset,
-		Env:     env,
-		Tests:   false,  // 不加载测试文件，节省内存
-	}
-
-	a.Log(2, "加载包：%s（完整模式：TypesInfo + Syntax）", pkgPath)
-	
-	// 加载包
-	pkgs, err := packages.Load(cfg, pkgPath)
+	// 查找所有 Go 文件（排除测试文件）
+	goFiles, err := a.findGoFiles(pkgDir)
 	if err != nil {
-		// 标记为已加载（避免重复尝试）
+		return nil, fmt.Errorf("查找 Go 文件失败：%v", err)
+	}
+
+	if len(goFiles) == 0 {
 		a.mu.Lock()
 		a.loadedPkgs[pkgPath] = true
 		a.mu.Unlock()
-		return nil, fmt.Errorf("load package %s failed: %v", pkgPath, err)
+		return nil, fmt.Errorf("包中没有 Go 文件：%s", pkgPath)
 	}
 
-	if len(pkgs) == 0 {
-		// 标记为已加载
+	a.Log(2, "按需加载包：%s（%d 个文件，不加载依赖）", pkgPath, len(goFiles))
+
+	// 解析所有 Go 文件
+	var astFiles []*ast.File
+	fset := token.NewFileSet()
+	for _, f := range goFiles {
+		astFile, err := parser.ParseFile(fset, f, nil, parser.ParseComments)
+		if err != nil {
+			a.Log(2, "解析文件失败：%s (%v)", f, err)
+			continue // 跳过有问题的文件
+		}
+		astFiles = append(astFiles, astFile)
+	}
+
+	if len(astFiles) == 0 {
 		a.mu.Lock()
 		a.loadedPkgs[pkgPath] = true
 		a.mu.Unlock()
-		return nil, fmt.Errorf("package not found: %s", pkgPath)
+		return nil, fmt.Errorf("没有可解析的 Go 文件：%s", pkgPath)
 	}
 
-	if len(pkgs) > 1 {
-		// 标记为已加载
-		a.mu.Lock()
-		a.loadedPkgs[pkgPath] = true
-		a.mu.Unlock()
-		return nil, fmt.Errorf("multiple packages found: %s", pkgPath)
+	// 类型检查（只检查当前包，不加载依赖包的完整信息）
+	info := &types.Info{
+		Types:      make(map[ast.Expr]types.TypeAndValue),
+		Defs:       make(map[*ast.Ident]types.Object),
+		Uses:       make(map[*ast.Ident]types.Object),
+		Implicits:  make(map[ast.Node]types.Object),
+		Selections: make(map[*ast.SelectorExpr]*types.Selection),
 	}
 
-	pkg := pkgs[0]
-
-	// 包有错误，记录但仍然缓存（避免重复尝试）
-	if len(pkg.Errors) > 0 {
-		a.Log(2, "包 %s 有错误：%v", pkgPath, pkg.Errors)
-		a.mu.Lock()
-		a.pkgMap[pkgPath] = pkg
-		a.loadedPkgs[pkgPath] = true
-		a.mu.Unlock()
-		return pkg, nil // 返回包但不报错
+	conf := types.Config{
+		Importer: importer.Default(), // 只用于解析导入路径
+		Sizes:    types.SizesFor("gc", runtime.GOARCH),
+		Error: func(err error) {
+			// 收集类型检查错误
+			if a.config.Verbose >= 2 {
+				a.Log(2, "类型检查错误：%s (%v)", pkgPath, err)
+			}
+		},
 	}
 
-	// 缓存包（写锁）
+	typesPkg, err := conf.Check(pkgPath, fset, astFiles, info)
+	if err != nil {
+		// Check 返回错误但仍然可能创建了部分类型信息
+		if typesPkg == nil {
+			a.mu.Lock()
+			a.loadedPkgs[pkgPath] = true
+			a.mu.Unlock()
+			return nil, fmt.Errorf("类型检查失败：%v", err)
+		}
+		// 有部分类型信息，继续处理
+		a.Log(2, "类型检查警告：%s (%v)", pkgPath, err)
+	}
+
+	// 构建 packages.Package（兼容现有的接口）
+	pkg := &packages.Package{
+		ID:              pkgPath,
+		Name:            typesPkg.Name(),
+		PkgPath:         pkgPath,
+		GoFiles:         goFiles,
+		CompiledGoFiles: goFiles,
+		Syntax:          astFiles,
+		Types:           typesPkg,
+		TypesInfo:       info,
+		TypesSizes:      conf.Sizes,
+		Fset:            fset,
+	}
+
+	// 缓存包
 	a.mu.Lock()
 	a.pkgMap[pkgPath] = pkg
 	a.loadedPkgs[pkgPath] = true
 	a.mu.Unlock()
 
 	return pkg, nil
+}
+
+// findGoFiles 查找目录中的所有 Go 文件（排除测试文件）
+func (a *Analyzer) findGoFiles(dir string) ([]string, error) {
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return nil, err
+	}
+
+	var files []string
+	for _, entry := range entries {
+		if entry.IsDir() {
+			continue
+		}
+		name := entry.Name()
+		// 只处理 .go 文件，排除测试文件和生成文件
+		if strings.HasSuffix(name, ".go") &&
+			!strings.HasSuffix(name, "_test.go") &&
+			!strings.HasPrefix(name, "zz_generated") {
+			files = append(files, filepath.Join(dir, name))
+		}
+	}
+
+	return files, nil
 }
 
 // FindStructByName 查找指定名称的结构体
@@ -415,25 +451,29 @@ func (a *Analyzer) findStructInLoadedPackage(pkg *packages.Package, structName s
 	return nil, "", fmt.Errorf("struct %s not found in package", structName)
 }
 
-// getPackageDir 获取包所在的目录
+// getPackageDir 获取包目录
 func (a *Analyzer) getPackageDir(pkgPath string) string {
+	// 根据项目类型决定查找方式
+	if a.config.ProjectType == "gopath" {
+		// GOPATH 模式
+		gopath := a.config.GOPATH
+		if gopath == "" {
+			gopath = os.Getenv("GOPATH")
+		}
+		if gopath != "" {
+			return filepath.Join(gopath, "src", pkgPath)
+		}
+		return ""
+	}
+
+	// Go Module 模式
 	if a.config.TargetDir != "" {
-		// Go Module 模式
 		relPath := strings.TrimPrefix(pkgPath, a.getModulePath())
 		relPath = strings.TrimPrefix(relPath, "/")
 		if relPath != "" {
 			return filepath.Join(a.config.TargetDir, relPath)
 		}
 		return a.config.TargetDir
-	}
-
-	// GOPATH 模式
-	gopath := a.config.GOPATH
-	if gopath == "" {
-		gopath = os.Getenv("GOPATH")
-	}
-	if gopath != "" {
-		return filepath.Join(gopath, "src", pkgPath)
 	}
 
 	return ""
