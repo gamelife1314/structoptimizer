@@ -97,7 +97,7 @@ func NewOptimizer(cfg *Config, analyzer *analyzer.Analyzer) *Optimizer {
 		pkgFileCache:     NewPackageCache("", true),  // 启用文件缓存
 		structCache:      make(map[string]*types.Struct),
 		filePathCache:    make(map[string]string),
-		memGuard:         NewMemoryGuard(512, true),  // 默认 512MB，启用自动 GC
+		memGuard:         NewMemoryGuard(1024, true),  // 默认 1GB，启用自动 GC
 		report: &Report{
 			StructReports: make([]*StructReport, 0),
 		},
