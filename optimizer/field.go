@@ -136,20 +136,26 @@ func (fa *FieldAnalyzer) getTypePkg(typ types.Type) string {
 	}
 }
 
-// getTypeName 获取类型名称
+// getTypeName 获取类型名称（保留包名前缀）
 func (fa *FieldAnalyzer) getTypeName(typ types.Type) string {
 	if typ == nil {
 		return ""
 	}
 	switch t := typ.(type) {
 	case *types.Named:
+		// 保留包名：pkg.TypeName
+		if pkg := t.Obj().Pkg(); pkg != nil {
+			return pkg.Path() + "." + t.Obj().Name()
+		}
 		return t.Obj().Name()
 	case *types.Pointer:
-		return fa.getTypeName(t.Elem())
+		return "*" + fa.getTypeName(t.Elem())
 	case *types.Slice:
-		return fa.getTypeName(t.Elem())
+		return "[]" + fa.getTypeName(t.Elem())
 	case *types.Array:
-		return fa.getTypeName(t.Elem())
+		return "[]" + fa.getTypeName(t.Elem())
+	case *types.Map:
+		return "map[" + fa.getTypeName(t.Key()) + "]" + fa.getTypeName(t.Elem())
 	default:
 		return typ.String()
 	}

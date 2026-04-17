@@ -116,7 +116,7 @@ func extractFieldsFromAST(ts *ast.TypeSpec, fset *token.FileSet, pkgDir string) 
 	return types.NewStruct(varFields, nil), fields
 }
 
-// extractTypeName 从 AST 提取类型名称
+// extractTypeName 从 AST 提取类型名称（保留包名前缀）
 func extractTypeName(expr ast.Expr) string {
 	switch t := expr.(type) {
 	case *ast.Ident:
@@ -124,6 +124,10 @@ func extractTypeName(expr ast.Expr) string {
 	case *ast.StarExpr:
 		return "*" + extractTypeName(t.X)
 	case *ast.SelectorExpr:
+		// 保留包名：pkg.TypeName
+		if ident, ok := t.X.(*ast.Ident); ok {
+			return ident.Name + "." + t.Sel.Name
+		}
 		return t.Sel.Name
 	case *ast.ArrayType:
 		return "[]" + extractTypeName(t.Elt)
