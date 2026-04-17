@@ -6,6 +6,8 @@ import (
 	"go/parser"
 	"go/token"
 	"go/types"
+	"os"
+	"path/filepath"
 	"strings"
 )
 
@@ -53,7 +55,13 @@ func analyzeStructFromFile(filePath, structName, pkgPath string) (*StructInfo, *
 		File:    filePath,
 	}
 
-	st, fields := extractFieldsFromAST(foundDecl, fset)
+	// 获取包目录（用于查找同包中的类型定义）
+	pkgDir := ""
+	if filePath != "" {
+		pkgDir = filepath.Dir(filePath)
+	}
+
+	st, fields := extractFieldsFromAST(foundDecl, fset, pkgDir)
 	info.Fields = fields
 	info.OrigOrder = extractFieldNames(fields)
 	info.OrigSize = CalcStructSizeFromFields(fields)
@@ -62,7 +70,7 @@ func analyzeStructFromFile(filePath, structName, pkgPath string) (*StructInfo, *
 }
 
 // extractFieldsFromAST 从 AST 提取字段信息
-func extractFieldsFromAST(ts *ast.TypeSpec, fset *token.FileSet) (*types.Struct, []FieldInfo) {
+func extractFieldsFromAST(ts *ast.TypeSpec, fset *token.FileSet, pkgDir string) (*types.Struct, []FieldInfo) {
 	st, ok := ts.Type.(*ast.StructType)
 	if !ok {
 		return nil, nil
@@ -73,11 +81,11 @@ func extractFieldsFromAST(ts *ast.TypeSpec, fset *token.FileSet) (*types.Struct,
 
 	for _, f := range st.Fields.List {
 		typeName := extractTypeName(f.Type)
-		size, align := estimateFieldSize(f.Type)
+		size, align := estimateFieldSizeWithLookup(f.Type, pkgDir)
 
 		// 判断是否是匿名字段
 		isEmbed := len(f.Names) == 0
-		
+
 		// 获取字段名（用于 FieldInfo）
 		fieldName := getFieldName(f)
 
@@ -160,6 +168,141 @@ func estimateFieldSize(expr ast.Expr) (size, align int64) {
 		return 16, 8 // interface
 	default:
 		return 8, 8
+	}
+}
+
+// estimateFieldSizeWithLookup 估算字段大小（带类型查找）
+func estimateFieldSizeWithLookup(expr ast.Expr, pkgDir string) (size, align int64) {
+	switch t := expr.(type) {
+	case *ast.Ident:
+		// 对于标识符，尝试在同包中查找类型定义
+		if pkgDir != "" {
+			underlyingKind := findTypeUnderlyingInPackage(pkgDir, t.Name)
+			if underlyingKind != types.Invalid {
+				return basicSize(underlyingKind)
+			}
+		}
+		return sizeOfIdent(t.Name)
+	case *ast.StarExpr:
+		return 8, 8 // 指针
+	case *ast.ArrayType:
+		if t.Len == nil {
+			return 24, 8 // slice
+		}
+		elemSize, elemAlign := estimateFieldSizeWithLookup(t.Elt, pkgDir)
+		return elemSize * 1, elemAlign // 假设长度为 1
+	case *ast.MapType:
+		return 8, 8 // map
+	case *ast.ChanType:
+		return 8, 8 // chan
+	case *ast.InterfaceType:
+		return 16, 8 // interface
+	default:
+		return 8, 8
+	}
+}
+
+// findTypeUnderlyingInPackage 在包中查找类型的底层类型
+// 返回 types.BasicKind 如果是基本类型，否则返回 types.Invalid
+func findTypeUnderlyingInPackage(pkgDir, typeName string) types.BasicKind {
+	entries, err := os.ReadDir(pkgDir)
+	if err != nil {
+		return types.Invalid
+	}
+
+	for _, entry := range entries {
+		if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".go") || strings.HasSuffix(entry.Name(), "_test.go") {
+			continue
+		}
+
+		filePath := filepath.Join(pkgDir, entry.Name())
+		if kind := findTypeUnderlyingInFile(filePath, typeName); kind != types.Invalid {
+			return kind
+		}
+	}
+
+	return types.Invalid
+}
+
+// findTypeUnderlyingInFile 在文件中查找类型的底层类型
+func findTypeUnderlyingInFile(filePath, typeName string) types.BasicKind {
+	fset := token.NewFileSet()
+	f, err := parser.ParseFile(fset, filePath, nil, 0)
+	if err != nil {
+		return types.Invalid
+	}
+
+	for _, decl := range f.Decls {
+		genDecl, ok := decl.(*ast.GenDecl)
+		if !ok || genDecl.Tok != token.TYPE {
+			continue
+		}
+
+		for _, spec := range genDecl.Specs {
+			ts, ok := spec.(*ast.TypeSpec)
+			if !ok || ts.Name.Name != typeName {
+				continue
+			}
+
+			// 检查底层类型
+			return getBasicKindFromExpr(ts.Type)
+		}
+	}
+
+	return types.Invalid
+}
+
+// getBasicKindFromExpr 从 AST 表达式获取基本类型种类
+func getBasicKindFromExpr(expr ast.Expr) types.BasicKind {
+	switch t := expr.(type) {
+	case *ast.Ident:
+		return identToBasicKind(t.Name)
+	case *ast.ArrayType:
+		// 数组/切片
+		return types.Invalid
+	case *ast.StarExpr:
+		// 指针
+		return types.Invalid
+	default:
+		return types.Invalid
+	}
+}
+
+// identToBasicKind 将标识符名称转换为基本类型种类
+func identToBasicKind(name string) types.BasicKind {
+	switch name {
+	case "bool":
+		return types.Bool
+	case "int8":
+		return types.Int8
+	case "uint8", "byte":
+		return types.Uint8
+	case "int16":
+		return types.Int16
+	case "uint16":
+		return types.Uint16
+	case "int32", "rune":
+		return types.Int32
+	case "uint32":
+		return types.Uint32
+	case "int64":
+		return types.Int64
+	case "uint64":
+		return types.Uint64
+	case "int":
+		return types.Int
+	case "uint":
+		return types.Uint
+	case "float32":
+		return types.Float32
+	case "float64":
+		return types.Float64
+	case "string":
+		return types.String
+	case "uintptr":
+		return types.Uintptr
+	default:
+		return types.Invalid
 	}
 }
 
