@@ -169,6 +169,9 @@ func (o *Optimizer) parseStructFields(filePath, structName, pkgPath string) ([]n
 	// 解析 import 映射
 	importMap := o.parseImports(f, pkgPath)
 
+	// 获取包目录（用于查找同包其他文件中的类型定义）
+	pkgDir := o.getPackageDir(pkgPath)
+
 	// 查找结构体（支持 type xxx struct 和 type ( ... ) 两种形式）
 	for _, decl := range f.Decls {
 		genDecl, ok := decl.(*ast.GenDecl)
@@ -187,10 +190,10 @@ func (o *Optimizer) parseStructFields(filePath, structName, pkgPath string) ([]n
 				return nil, "", fmt.Errorf("%s is not a struct", structName)
 			}
 
-			// 提取字段信息
+			// 提取字段信息（传入 pkgDir 以支持同包跨文件类型查找）
 			var nestedFields []nestedField
 			for _, field := range st.Fields.List {
-				fieldInfo := o.extractFieldInfo(field, importMap, pkgPath)
+				fieldInfo := o.extractFieldInfo(field, importMap, pkgPath, pkgDir)
 				if fieldInfo.IsStruct {
 					nestedFields = append(nestedFields, fieldInfo)
 				}
@@ -230,7 +233,7 @@ func (o *Optimizer) parseImports(f *ast.File, pkgPath string) map[string]string 
 }
 
 // extractFieldInfo 提取字段信息
-func (o *Optimizer) extractFieldInfo(field *ast.Field, importMap map[string]string, pkgPath string) nestedField {
+func (o *Optimizer) extractFieldInfo(field *ast.Field, importMap map[string]string, pkgPath string, pkgDir string) nestedField {
 	typeName, pkgAlias := o.extractTypeNameFromExpr(field.Type)
 
 	fieldPkg := pkgPath
@@ -240,11 +243,80 @@ func (o *Optimizer) extractFieldInfo(field *ast.Field, importMap map[string]stri
 		}
 	}
 
+	// 判断是否是结构体
+	isStruct := false
+	
+	// 1. 先检查是否是基本类型
+	if !isBasicType(typeName) {
+		// 2. 如果是同包的未导出类型，需要扫描同包文件查找定义
+		if fieldPkg == pkgPath && pkgDir != "" {
+			isStruct = o.isStructTypeInPackage(pkgDir, typeName, pkgPath)
+		} else {
+			// 跨包的情况，假设是结构体（后续会验证）
+			isStruct = true
+		}
+	}
+
 	return nestedField{
 		Name:     typeName,
 		PkgPath:  fieldPkg,
-		IsStruct: true, // 假设是结构体，后续会验证
+		IsStruct: isStruct,
 	}
+}
+
+// isStructTypeInPackage 检查类型是否是在包中定义的结构体
+func (o *Optimizer) isStructTypeInPackage(pkgDir, typeName, pkgPath string) bool {
+	// 查找包中所有 Go 文件
+	entries, err := os.ReadDir(pkgDir)
+	if err != nil {
+		return false
+	}
+
+	for _, entry := range entries {
+		if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".go") || strings.HasSuffix(entry.Name(), "_test.go") {
+			continue
+		}
+
+		filePath := filepath.Join(pkgDir, entry.Name())
+		if o.isStructTypeInFile(filePath, typeName, pkgPath) {
+			return true
+		}
+	}
+
+	return false
+}
+
+// isStructTypeInFile 检查文件中是否定义了指定的结构体类型
+func (o *Optimizer) isStructTypeInFile(filePath, typeName, pkgPath string) bool {
+	fset := token.NewFileSet()
+	f, err := parser.ParseFile(fset, filePath, nil, 0)
+	if err != nil {
+		return false
+	}
+
+	for _, decl := range f.Decls {
+		genDecl, ok := decl.(*ast.GenDecl)
+		if !ok || genDecl.Tok != token.TYPE {
+			continue
+		}
+
+		for _, spec := range genDecl.Specs {
+			ts, ok := spec.(*ast.TypeSpec)
+			if !ok || ts.Name.Name != typeName {
+				continue
+			}
+
+			// 检查是否是结构体
+			if _, ok := ts.Type.(*ast.StructType); ok {
+				return true
+			}
+
+			// 不是结构体
+			return false
+		}
+	}
+
+	return false
 }
 
 // extractTypeNameFromExpr 从 AST 表达式中提取类型名称和包别名
