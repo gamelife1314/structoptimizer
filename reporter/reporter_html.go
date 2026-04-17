@@ -36,8 +36,11 @@ func (r *Reporter) GenerateHTML(report *optimizer.Report) (string, error) {
 	sb.WriteString("        .stats { background: #27ae60; color: white; padding: 15px; border-radius: 8px; display: inline-block; }\n")
 	sb.WriteString("        .warning { background: #f39c12; color: white; padding: 10px; border-radius: 5px; margin: 10px 0; }\n")
 	sb.WriteString("        table { border-collapse: collapse; width: 100%%; margin: 15px 0; }\n")
-	sb.WriteString("        th, td { border: 1px solid #ddd; padding: 10px; text-align: left; }\n")
-	sb.WriteString("        th { background: #3498db; color: white; }\n")
+	sb.WriteString("        th, td { border: 1px solid #ddd; padding: 8px; text-align: left; font-size: 13px; }\n")
+	sb.WriteString("        th { background: #3498db; color: white; white-space: nowrap; }\n")
+	sb.WriteString("        td { word-break: break-all; }\n")
+	sb.WriteString("        .table-wrapper { overflow-x: auto; margin: 15px 0; border-radius: 8px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }\n")
+	sb.WriteString("        .table-wrapper table { margin: 0; min-width: 900px; }\n")
 	sb.WriteString("        tr:nth-child(even) { background: #f9f9f9; }\n")
 	sb.WriteString("        .changed { background: #d5f5e3 !important; }\n")
 	sb.WriteString("        .skipped { background: #fadbd8; }\n")
@@ -114,6 +117,7 @@ func (r *Reporter) GenerateHTML(report *optimizer.Report) (string, error) {
 
 			// 字段对比表格
 			sb.WriteString("                <h4>字段顺序对比:</h4>\n")
+			sb.WriteString("                <div class=\"table-wrapper\">\n")
 			sb.WriteString("                <table>\n")
 			sb.WriteString("                    <tr><th>序号</th><th>优化前 - 字段名</th><th>优化前 - 类型</th><th>大小</th><th>优化后 - 字段名</th><th>优化后 - 类型</th><th>大小</th><th>变化</th></tr>\n")
 
@@ -174,6 +178,7 @@ func (r *Reporter) GenerateHTML(report *optimizer.Report) (string, error) {
 					html.EscapeString(optName), html.EscapeString(optType), optSize, change))
 			}
 			sb.WriteString("                </table>\n")
+			sb.WriteString("                </div>\n")
 			sb.WriteString("            </div>\n\n")
 		}
 		sb.WriteString("        </div>\n\n")
@@ -212,6 +217,7 @@ func (r *Reporter) GenerateHTML(report *optimizer.Report) (string, error) {
 		sb.WriteString("        <div class=\"section\">\n")
 		sb.WriteString(fmt.Sprintf("            <h2>✔️ 未变化的结构体 (%d 个)</h2>\n\n", len(unchanged)))
 
+		sb.WriteString("            <div class=\"table-wrapper\">\n")
 		sb.WriteString("            <table>\n")
 		sb.WriteString("                <tr><th>结构体名</th><th>包路径</th><th>大小</th></tr>\n")
 		for _, sr := range unchanged {
@@ -219,6 +225,7 @@ func (r *Reporter) GenerateHTML(report *optimizer.Report) (string, error) {
 				html.EscapeString(sr.Name), html.EscapeString(sr.PkgPath), sr.OrigSize))
 		}
 		sb.WriteString("            </table>\n")
+		sb.WriteString("            </div>\n")
 		sb.WriteString("        </div>\n\n")
 	}
 
