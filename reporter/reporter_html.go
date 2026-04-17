@@ -103,19 +103,9 @@ func (r *Reporter) GenerateHTML(report *optimizer.Report) (string, error) {
 		sb.WriteString(fmt.Sprintf("            <h2>✏️ 调整的结构体 (%d 个)</h2>\n\n", len(optimized)))
 
 		for _, sr := range optimized {
-			warning := ""
-			if sr.HasEmbed {
-				warning = " ⚠️"
-			}
 			sb.WriteString(fmt.Sprintf("            <div class=\"struct-card\">\n"))
-			sb.WriteString(fmt.Sprintf("                <h3>📦 %s.%s%s</h3>\n", html.EscapeString(sr.PkgPath), html.EscapeString(sr.Name), warning))
+			sb.WriteString(fmt.Sprintf("                <h3>📦 %s.%s</h3>\n", html.EscapeString(sr.PkgPath), html.EscapeString(sr.Name)))
 			sb.WriteString(fmt.Sprintf("                <p><strong>📁 文件</strong>: <code>%s</code></p>\n", html.EscapeString(sr.File)))
-			if sr.HasEmbed {
-				sb.WriteString("                <div class=\"warning\">\n")
-				sb.WriteString("                    ⚠️  <strong>警告：包含匿名字段，优化后可能影响兼容性，请手动检查！</strong><br>\n")
-				sb.WriteString("                    ⚠️  <strong>提示：如果使用 -write 参数直接修改源码文件，建议人工审核！</strong>\n")
-				sb.WriteString("                </div>\n\n")
-			}
 
 			sb.WriteString("                <div class=\"stats\">\n")
 			sb.WriteString(fmt.Sprintf("                    优化前：%d 字节 → 优化后：%d 字节 → 节省：%d 字节 (%.1f%%)\n",

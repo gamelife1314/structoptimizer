@@ -99,17 +99,9 @@ func (r *Reporter) GenerateTXT(report *optimizer.Report) (string, error) {
 		sb.WriteString("└────────────────────────────────────────────────────────────────────────────────┘\n\n")
 
 		for _, sr := range optimized {
-			sb.WriteString(fmt.Sprintf("📦 %s.%s", sr.PkgPath, sr.Name))
-			if sr.HasEmbed {
-				sb.WriteString(" ⚠️")
-			}
-			sb.WriteString("\n")
+			sb.WriteString(fmt.Sprintf("📦 %s.%s\n", sr.PkgPath, sr.Name))
 			sb.WriteString(strings.Repeat("─", 120) + "\n")
 			sb.WriteString(fmt.Sprintf("   📁 文件：%s\n", sr.File))
-			if sr.HasEmbed {
-				sb.WriteString("   ⚠️  警告：包含匿名字段，优化后可能影响兼容性，请手动检查！\n")
-				sb.WriteString("   ⚠️  提示：如果使用 -write 参数直接修改源码文件，建议人工审核！\n")
-			}
 			sb.WriteString(fmt.Sprintf("   📏 优化前：%d 字节  →  📏 优化后：%d 字节  →  💰 节省：%d 字节 (%.1f%%)\n",
 				sr.OrigSize, sr.OptSize, sr.Saved, float64(sr.Saved)/float64(sr.OrigSize)*100))
 			sb.WriteString("\n")
