@@ -122,14 +122,10 @@ func (o *Optimizer) collectStructs(pkgPath, structName, filePath string, depth, 
 		}
 
 		if o.isProjectPackage(field.PkgPath) {
-			// 跨包时不传递 filePath，让 parseStructFromFileOnly 自己查找
-			var nextFilePath string
-			if field.PkgPath != pkgPath {
-				nextFilePath = "" // 跨包时清空 filePath
-			} else {
-				nextFilePath = filePath
-			}
-			o.collectStructs(field.PkgPath, field.Name, nextFilePath, depth+1, level+1)
+			// 无论同包还是跨包，都不传递 filePath
+			// 让 parseStructFromFileOnly 通过 findFilesWithStruct 自动查找包含该结构体的文件
+			// 这样可以正确处理同包不同文件中的嵌套结构体
+			o.collectStructs(field.PkgPath, field.Name, "", depth+1, level+1)
 		}
 	}
 }
