@@ -8,6 +8,7 @@ import (
 	"go/types"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 )
 
@@ -162,8 +163,12 @@ func estimateFieldSize(expr ast.Expr) (size, align int64) {
 		if t.Len == nil {
 			return 24, 8 // slice
 		}
+		// 解析固定长度数组
 		elemSize, elemAlign := estimateFieldSize(t.Elt)
-		return elemSize * 1, elemAlign // 假设长度为 1
+		if length := parseArrayLength(t.Len); length > 0 {
+			return elemSize * length, elemAlign
+		}
+		return elemSize, elemAlign // 无法解析时回退
 	case *ast.MapType:
 		return 8, 8 // map
 	case *ast.ChanType:
@@ -193,8 +198,12 @@ func estimateFieldSizeWithLookup(expr ast.Expr, pkgDir string) (size, align int6
 		if t.Len == nil {
 			return 24, 8 // slice
 		}
+		// 解析固定长度数组
 		elemSize, elemAlign := estimateFieldSizeWithLookup(t.Elt, pkgDir)
-		return elemSize * 1, elemAlign // 假设长度为 1
+		if length := parseArrayLength(t.Len); length > 0 {
+			return elemSize * length, elemAlign
+		}
+		return elemSize, elemAlign // 无法解析时回退
 	case *ast.MapType:
 		return 8, 8 // map
 	case *ast.ChanType:
@@ -334,6 +343,23 @@ func sizeOfIdent(name string) (int64, int64) {
 	default:
 		return 8, 8 // 未知类型
 	}
+}
+
+// parseArrayLength 解析数组长度
+func parseArrayLength(expr ast.Expr) int64 {
+	switch e := expr.(type) {
+	case *ast.BasicLit:
+		if e.Kind == token.INT {
+			// 移除数字后缀（如 10u）
+			value := strings.TrimRight(e.Value, "uU")
+			if n, err := strconv.ParseInt(value, 0, 64); err == nil {
+				return n
+			}
+		}
+	case *ast.ParenExpr:
+		return parseArrayLength(e.X)
+	}
+	return 0
 }
 
 // extractFieldNames 提取字段名称

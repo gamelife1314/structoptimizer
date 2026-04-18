@@ -354,7 +354,9 @@ func BackupAndWrite(filePath, content string, backup bool) error {
 
 		origContent, err := os.ReadFile(filePath)
 		if err == nil {
-			os.WriteFile(backupName, origContent, 0644)
+			if err := os.WriteFile(backupName, origContent, 0644); err != nil {
+				return fmt.Errorf("备份文件失败：%v", err)
+			}
 		}
 	}
 

@@ -421,8 +421,8 @@ func (o *Optimizer) addReport(info *StructInfo, skipReason string, depth int) {
 		fieldTypes[key] = f.TypeName
 
 		// 检查是否是匿名字段
-		// 判断条件：字段名等于类型名，且类型是结构体类型（非基本类型）
-		if f.Name == f.TypeName && !isBasicType(f.TypeName) {
+		// 判断条件：IsEmbed 为 true，且类型是结构体类型（非基本类型）
+		if f.IsEmbed && !isBasicType(f.TypeName) {
 			hasEmbed = true
 		}
 	}

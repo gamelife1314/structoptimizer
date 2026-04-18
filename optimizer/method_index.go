@@ -159,15 +159,7 @@ func extractRecvType(expr ast.Expr) string {
 func (mi *MethodIndex) getPkgDir(pkgPath string) (string, error) {
 	// 尝试 1: 使用 go list（Go Modules 模式）
 	cmd := exec.Command("go", "list", "-f", "{{.Dir}}", pkgPath)
-	cmd.Env = os.Environ()
-	// 确保在 GOPATH 模式下运行
-	for i, env := range cmd.Env {
-		if strings.HasPrefix(env, "GO111MODULE=") {
-			cmd.Env[i] = "GO111MODULE=off"
-			break
-		}
-	}
-	
+	// 不要修改环境，使用当前项目的模块模式
 	out, err := cmd.CombinedOutput()
 	if err == nil {
 		dir := strings.TrimSpace(string(out))
@@ -178,7 +170,7 @@ func (mi *MethodIndex) getPkgDir(pkgPath string) (string, error) {
 			}
 		}
 	}
-	
+
 	// 尝试 2: GOPATH 模式手动解析
 	return mi.getPkgDirFromGOPATH(pkgPath)
 }

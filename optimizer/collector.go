@@ -241,15 +241,16 @@ func (o *Optimizer) extractFieldInfo(field *ast.Field, importMap map[string]stri
 
 	// 判断是否是结构体
 	isStruct := false
-	
+
 	// 1. 先检查是否是基本类型
 	if !isBasicType(typeName) {
 		// 2. 如果是同包的未导出类型，需要扫描同包文件查找定义
 		if fieldPkg == pkgPath && pkgDir != "" {
 			isStruct = o.isStructTypeInPackage(pkgDir, typeName, pkgPath)
-		} else {
-			// 跨包的情况，假设是结构体（后续会验证）
-			isStruct = true
+		} else if fieldPkg != pkgPath {
+			// 跨包的情况，需要检查是否是接口类型
+			// 接口类型不应该被优化，所以标记为非结构体
+			isStruct = !o.isInterfaceTypeCrossPackage(fieldPkg, typeName)
 		}
 	}
 
@@ -258,6 +259,68 @@ func (o *Optimizer) extractFieldInfo(field *ast.Field, importMap map[string]stri
 		PkgPath:  fieldPkg,
 		IsStruct: isStruct,
 	}
+}
+
+// isInterfaceTypeCrossPackage 检查跨包类型是否是接口
+func (o *Optimizer) isInterfaceTypeCrossPackage(pkgPath, typeName string) bool {
+	// 获取包目录
+	pkgDir := o.getPackageDir(pkgPath)
+	if pkgDir == "" {
+		// 无法获取包目录，保守假设不是接口
+		return false
+	}
+
+	// 扫描包中的Go文件
+	entries, err := os.ReadDir(pkgDir)
+	if err != nil {
+		return false
+	}
+
+	for _, entry := range entries {
+		if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".go") || strings.HasSuffix(entry.Name(), "_test.go") {
+			continue
+		}
+
+		filePath := filepath.Join(pkgDir, entry.Name())
+		if o.isInterfaceTypeInFile(filePath, typeName) {
+			return true
+		}
+	}
+
+	return false
+}
+
+// isInterfaceTypeInFile 检查文件中是否定义了接口类型
+func (o *Optimizer) isInterfaceTypeInFile(filePath, typeName string) bool {
+	fset := token.NewFileSet()
+	f, err := parser.ParseFile(fset, filePath, nil, 0)
+	if err != nil {
+		return false
+	}
+
+	for _, decl := range f.Decls {
+		genDecl, ok := decl.(*ast.GenDecl)
+		if !ok || genDecl.Tok != token.TYPE {
+			continue
+		}
+
+		for _, spec := range genDecl.Specs {
+			ts, ok := spec.(*ast.TypeSpec)
+			if !ok || ts.Name.Name != typeName {
+				continue
+			}
+
+			// 检查是否是接口
+			if _, ok := ts.Type.(*ast.InterfaceType); ok {
+				return true
+			}
+
+			// 不是接口
+			return false
+		}
+	}
+
+	return false
 }
 
 // isStructTypeInPackage 检查类型是否是在包中定义的结构体
@@ -327,8 +390,46 @@ func (o *Optimizer) extractTypeNameFromExpr(expr ast.Expr) (typeName, pkgAlias s
 			return t.Sel.Name, ident.Name
 		}
 		return t.Sel.Name, ""
+	case *ast.ArrayType:
+		// 数组或切片: []Type 或 [10]Type
+		elemName, elemAlias := o.extractTypeNameFromExpr(t.Elt)
+		if t.Len != nil {
+			// 固定长度数组
+			return "[" + getArrayLengthString(t.Len) + "]" + elemName, elemAlias
+		}
+		return "[]" + elemName, elemAlias
+	case *ast.MapType:
+		// map[Key]Value
+		keyName, _ := o.extractTypeNameFromExpr(t.Key)
+		valueName, valueAlias := o.extractTypeNameFromExpr(t.Value)
+		return "map[" + keyName + "]" + valueName, valueAlias
+	case *ast.ChanType:
+		// chan Type
+		elemName, elemAlias := o.extractTypeNameFromExpr(t.Value)
+		return "chan " + elemName, elemAlias
+	case *ast.FuncType:
+		// 函数类型
+		return "func", ""
+	case *ast.InterfaceType:
+		// 接口类型
+		return "interface{}", ""
+	case *ast.StructType:
+		// 内嵌结构体
+		return "struct{}", ""
 	default:
 		return "", ""
+	}
+}
+
+// getArrayLengthString 获取数组长度的字符串表示
+func getArrayLengthString(expr ast.Expr) string {
+	switch e := expr.(type) {
+	case *ast.BasicLit:
+		return e.Value
+	case *ast.Ident:
+		return e.Name
+	default:
+		return "?"
 	}
 }
 
