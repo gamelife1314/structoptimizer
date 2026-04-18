@@ -158,12 +158,13 @@ structoptimizer -package=example.com/mypkg -write -backup ./myproject
   -skip-by-names string    跳过指定名称的结构体（逗号分隔）
   -reserved-fields string  始终排在最后的字段（逗号分隔）
   -sort-same-size       大小相同时也按字段大小重排
-  -max-depth int        最大递归深度（默认：50）
-  -timeout int          超时时间（秒，默认：1200）
+  -max-depth int        最大递归深度（默认 50）
+  -timeout int          超时时间（秒，默认 1200）
   -prj-type string      项目类型：gomod、gopath（默认：gomod）
-  -pkg-scope string     包范围限制（GOPATH 模式必填）
-  -pkg-limit int        包并发限制（默认：4）
-  -gopath string        GOPATH 路径（可选，默认使用环境变量）
+  -pkg-scope string     包范围限制（GOPATH 模式必填，只分析此包内的结构体）
+  -pkg-limit int        包并发限制（默认 4，降低可防止 OOM）
+  -gopath string        GOPATH 路径（GOPATH 项目可选）
+  -recursive            递归扫描子包（仅 -package 模式有效）
   -v, -vv, -vvv         详细输出级别
   -version              显示版本信息
 ```
@@ -185,6 +186,32 @@ structoptimizer -struct=github.com/myapp/models.User ./myproject
 # 优化 models 包中的所有结构体
 structoptimizer -package=github.com/myapp/models -write -backup ./myproject
 ```
+
+#### 2.1. 递归包扫描（新增）
+
+```bash
+# 递归扫描包及其所有子包
+structoptimizer -package=github.com/myapp/pkg -recursive -write -backup ./myproject
+
+# 示例输出：
+# - 扫描 github.com/myapp/pkg
+# - 扫描 github.com/myapp/pkg/apis
+# - 扫描 github.com/myapp/pkg/models
+# - 扫描 github.com/myapp/pkg/utils
+# - 自动跳过 vendor 和标准库
+```
+
+**工作原理：**
+- 使用 BFS（广度优先搜索）遍历包依赖图
+- 从根包开始，发现所有导入的子包
+- 自动跳过标准库和 vendor 包
+- 只扫描根包路径下的子包
+
+**使用场景：**
+- 大型项目，包含多个子包（50+ 包）
+- 深层嵌套的包层次结构（10+ 层）
+- GOPATH+vendor 项目
+- 想要一次性优化整个模块
 
 #### 3. 跳过第三方代码
 

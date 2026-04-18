@@ -164,6 +164,7 @@ Options:
   -pkg-scope string     Package scope limit (required for GOPATH mode)
   -pkg-limit int        Package concurrency limit (default: 4)
   -gopath string        GOPATH path (optional, uses env if not set)
+  -recursive            Recursively scan all sub-packages (-package mode only)
   -v, -vv, -vvv         Verbose output levels
   -version              Show version information
 ```
@@ -185,6 +186,32 @@ structoptimizer -struct=github.com/myapp/models.User ./myproject
 # Optimize all structs in the models package
 structoptimizer -package=github.com/myapp/models -write -backup ./myproject
 ```
+
+#### 2.1. Recursive Package Scanning (NEW)
+
+```bash
+# Scan package and ALL its sub-packages recursively
+structoptimizer -package=github.com/myapp/pkg -recursive -write -backup ./myproject
+
+# Example output:
+# - Scans github.com/myapp/pkg
+# - Scans github.com/myapp/pkg/apis
+# - Scans github.com/myapp/pkg/models
+# - Scans github.com/myapp/pkg/utils
+# - Automatically skips vendor and standard library
+```
+
+**How it works:**
+- Uses BFS (Breadth-First Search) to traverse package dependency graph
+- Starts from root package, discovers all imported sub-packages
+- Automatically skips standard library and vendor packages
+- Only scans sub-packages under the root package path
+
+**Use cases:**
+- Large projects with many sub-packages (50+ packages)
+- Deeply nested package hierarchies (10+ levels)
+- GOPATH+vendor projects
+- When you want to optimize entire module at once
 
 #### 3. Skip Third-Party Code
 
