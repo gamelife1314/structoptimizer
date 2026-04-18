@@ -10,6 +10,7 @@ import (
 	"go/token"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"time"
 
@@ -177,6 +178,12 @@ func getTypeString(expr ast.Expr) string {
 
 // RewriteFile 重写整个文件（使用优化后的结构体）
 func (w *SourceWriter) RewriteFile(filePath string, optimizedStructs map[string]*optimizer.StructInfo) error {
+	// 规范化文件路径（解决不同操作系统路径分隔符问题）
+	absFilePath, err := filepath.Abs(filePath)
+	if err != nil {
+		return fmt.Errorf("规范化文件路径失败：%v", err)
+	}
+
 	w.log(1, "重写文件：%s", filePath)
 
 	// 解析文件
@@ -188,8 +195,15 @@ func (w *SourceWriter) RewriteFile(filePath string, optimizedStructs map[string]
 	// 收集该文件中所有需要修改的结构体（按结构体名索引）
 	fileStructs := make(map[string]*optimizer.StructInfo)
 	for _, info := range optimizedStructs {
-		if info.File == filePath && info.Optimized {
-			fileStructs[info.Name] = info
+		if info.File != "" && info.Optimized {
+			// 规范化后比较路径
+			absInfoFile, err := filepath.Abs(info.File)
+			if err != nil {
+				continue // 跳过无法规范化的路径
+			}
+			if absInfoFile == absFilePath {
+				fileStructs[info.Name] = info
+			}
 		}
 	}
 
@@ -269,10 +283,14 @@ func (w *SourceWriter) WriteFiles(optimized map[string]*optimizer.StructInfo) er
 	for filePath := range fileStructs {
 		// 备份
 		if w.config.Backup {
-			_, err := w.BackupFile(filePath)
+			backupPath, err := w.BackupFile(filePath)
 			if err != nil {
 				w.log(0, "备份文件失败：%v", err)
 				continue
+			}
+			// 清理旧备份文件（保留最近 3 个）
+			if backupPath != "" {
+				w.cleanupOldBackups(filePath)
 			}
 		}
 
@@ -285,6 +303,27 @@ func (w *SourceWriter) WriteFiles(optimized map[string]*optimizer.StructInfo) er
 	}
 
 	return nil
+}
+
+// cleanupOldBackups 清理旧备份文件，保留最近 3 个
+func (w *SourceWriter) cleanupOldBackups(filePath string) {
+	// 查找所有备份文件：xxx.go.YYYYMMDD_HHMMSS.bak
+	pattern := filePath + ".*.bak"
+	matches, err := filepath.Glob(pattern)
+	if err != nil {
+		return // 忽略错误
+	}
+
+	// 如果备份文件超过 3 个，删除最旧的
+	if len(matches) > 3 {
+		// 按文件名排序（时间戳在文件名中，排序后最早的在前）
+		sort.Strings(matches)
+		// 删除最旧的文件
+		for i := 0; i < len(matches)-3; i++ {
+			os.Remove(matches[i])
+			w.log(2, "清理旧备份文件：%s", matches[i])
+		}
+	}
 }
 
 // log 日志输出

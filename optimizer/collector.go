@@ -50,7 +50,7 @@ func isStructType(typ types.Type) bool {
 func (o *Optimizer) collectStructs(pkgPath, structName, filePath string, depth, level int) {
 	key := pkgPath + "." + structName
 
-	// 快速去重
+	// 去重检查：在持有锁的情况下检查 optimized 和 collecting
 	o.mu.Lock()
 	if _, ok := o.optimized[key]; ok {
 		o.mu.Unlock()
@@ -60,6 +60,7 @@ func (o *Optimizer) collectStructs(pkgPath, structName, filePath string, depth, 
 		o.mu.Unlock()
 		return
 	}
+	// 标记为正在收集，防止其他 goroutine 重复处理
 	o.collecting[key] = true
 	o.mu.Unlock()
 

@@ -3,6 +3,7 @@ package optimizer
 import (
 	"fmt"
 	"runtime"
+	"runtime/debug"
 	"sync"
 )
 
@@ -76,7 +77,9 @@ func (o *Optimizer) processByPackageParallel(level int, pkgTasks map[string][]*S
 			// panic 恢复
 			defer func() {
 				if r := recover(); r != nil {
-					o.Log(0, "处理包 %s 时发生 panic: %v", pkg, r)
+					// 记录 panic 消息和完整堆栈跟踪
+					stack := debug.Stack()
+					o.Log(0, "处理包 %s 时发生 panic: %v\n堆栈跟踪:\n%s", pkg, r, stack)
 					// 标记该包所有剩余结构体为跳过
 					for _, task := range taskList {
 						key := task.PkgPath + "." + task.StructName

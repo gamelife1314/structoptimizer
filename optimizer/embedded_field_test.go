@@ -318,16 +318,26 @@ type Complex struct {
 	}
 
 	t.Logf("Complex: %d 字节", complexReport.OrigSize)
-	t.Logf("字段类型: %v", complexReport.FieldTypes)
+	t.Logf("字段类型：%v", complexReport.FieldTypes)
 
 	// 验证所有字段都被正确识别
-	expectedFields := []string{"Base", "Name", "Meta", "Data", "Enabled"}
-	for _, fieldName := range expectedFields {
+	// 注意：现在字段名带有前缀：命名字段使用 "field:FieldName"，匿名字段使用 "embed:TypeName"
+	expectedFields := map[string]string{
+		"embed:Base":    "Base",    // 匿名字段
+		"field:Name":    "string",  // 命名字段
+		"field:Meta":    "Meta",    // 命名字段（结构体类型）
+		"field:Data":    "*Base",   // 命名字段（指针类型）
+		"field:Enabled": "bool",    // 命名字段
+	}
+	for fieldKey, expectedType := range expectedFields {
 		if complexReport.FieldTypes != nil {
-			if fieldType, ok := complexReport.FieldTypes[fieldName]; ok {
-				t.Logf("✅ 字段 %s: %s", fieldName, fieldType)
+			if fieldType, ok := complexReport.FieldTypes[fieldKey]; ok {
+				t.Logf("✅ 字段 %s: %s", fieldKey, fieldType)
+				if fieldType != expectedType {
+					t.Errorf("字段 %s 类型错误：期望 %s, 得到 %s", fieldKey, expectedType, fieldType)
+				}
 			} else {
-				t.Errorf("未找到字段 %s", fieldName)
+				t.Errorf("未找到字段 %s", fieldKey)
 			}
 		}
 	}

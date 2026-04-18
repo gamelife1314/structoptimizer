@@ -219,10 +219,11 @@ func TestGOPATHTypeAliasSize(t *testing.T) {
 		t.Fatal("MainStruct report not found")
 	}
 
-	// 验证CustomInt类型字段存在
+	// 验证 CustomInt 类型字段存在
+	// 注意：字段名现在带有 "field:" 前缀
 	foundCustomInt := false
 	for fieldName, typeName := range mainReport.FieldTypes {
-		if fieldName == "TypeAlias" && typeName == "CustomInt" {
+		if (fieldName == "field:TypeAlias" || fieldName == "TypeAlias") && typeName == "CustomInt" {
 			foundCustomInt = true
 			break
 		}
