@@ -10,7 +10,7 @@ permissions:
 
 jobs:
   build:
-    name: Build ${{ matrix.os }} ${{ matrix.arch }}
+    name: Build ${{ matrix.os }} ${{ matrix.goarch }}
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
@@ -52,7 +52,7 @@ jobs:
       - name: Build binary
         env:
           GOOS: ${{ matrix.goos }}
-          GOARCH: ${{ matrix.arch }}
+          GOARCH: ${{ matrix.goarch }}
         run: |
           mkdir -p dist
           OUTPUT_NAME="${{ matrix.artifact_name }}"
