@@ -161,8 +161,8 @@ func (o *Optimizer) optimizeInternal() (*Report, error) {
 	o.report.TotalStructs = len(o.optimized)
 	o.report.OptimizedCount = 0
 	o.report.SkippedCount = 0
-	o.report.RootStructSize = 0
-	o.report.RootStructOptSize = 0
+	o.report.TotalOrigSize = 0
+	o.report.TotalOptSize = 0
 
 	for _, info := range o.optimized {
 		if info.Skipped {
@@ -173,9 +173,15 @@ func (o *Optimizer) optimizeInternal() (*Report, error) {
 			o.report.TotalSaved += info.OrigSize - info.OptSize
 		}
 
-		// 累计所有结构体的大小（用于总览等式）
-		o.report.RootStructSize += info.OrigSize
-		o.report.RootStructOptSize += info.OptSize
+		// 累计所有结构体的总大小
+		o.report.TotalOrigSize += info.OrigSize
+		o.report.TotalOptSize += info.OptSize
+
+		// 如果是主结构体，单独记录大小
+		if o.report.RootStruct != "" && info.PkgPath+"."+info.Name == o.report.RootStruct {
+			o.report.RootStructSize = info.OrigSize
+			o.report.RootStructOptSize = info.OptSize
+		}
 	}
 
 	o.Log(1, "优化完成：共处理 %d 个结构体，优化 %d 个，跳过 %d 个，节省 %d 字节",
@@ -213,7 +219,6 @@ func (o *Optimizer) optimizeStruct(pkgPath, structName, filePath string, depth i
 
 	// 检测循环引用：如果正在处理中，说明有循环引用
 	if o.processing[key] {
-		o.mu.Unlock()
 		o.Log(2, "检测到循环引用，跳过：%s", key)
 		info := &StructInfo{
 			Name:       structName,
@@ -223,6 +228,7 @@ func (o *Optimizer) optimizeStruct(pkgPath, structName, filePath string, depth i
 			SkipReason: "循环引用",
 		}
 		o.optimized[key] = info
+		o.mu.Unlock()
 		o.addReport(info, "循环引用", depth)
 		return info, nil
 	}

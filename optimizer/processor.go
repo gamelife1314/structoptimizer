@@ -1,6 +1,7 @@
 package optimizer
 
 import (
+	"fmt"
 	"runtime"
 	"sync"
 )
@@ -76,6 +77,21 @@ func (o *Optimizer) processByPackageParallel(level int, pkgTasks map[string][]*S
 			defer func() {
 				if r := recover(); r != nil {
 					o.Log(0, "处理包 %s 时发生 panic: %v", pkg, r)
+					// 标记该包所有剩余结构体为跳过
+					for _, task := range taskList {
+						key := task.PkgPath + "." + task.StructName
+						o.mu.Lock()
+						if _, exists := o.optimized[key]; !exists {
+							o.optimized[key] = &StructInfo{
+								Name:       task.StructName,
+								PkgPath:    task.PkgPath,
+								File:       task.FilePath,
+								Skipped:    true,
+								SkipReason: fmt.Sprintf("包处理时发生 panic: %v", r),
+							}
+						}
+						o.mu.Unlock()
+					}
 				}
 			}()
 

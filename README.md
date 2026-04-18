@@ -67,14 +67,17 @@ For legacy projects using GOPATH + vendor, use `-prj-type=gopath`:
 
 ```bash
 # Use -prj-type=gopath to specify project type
-./structoptimizer -prj-type=gopath -package example.com/myproject/pkg ./
+# -pkg-scope is required to limit analysis scope to your project
+./structoptimizer -prj-type=gopath -package example.com/myproject/pkg -pkg-scope example.com/myproject
 
 # Optional: specify GOPATH path (otherwise uses environment variable)
-./structoptimizer -prj-type=gopath -gopath=/path/to/gopath -struct=example.com/myproject/pkg.MyStruct
+./structoptimizer -prj-type=gopath -gopath=/path/to/gopath -struct=example.com/myproject/pkg.MyStruct -pkg-scope example.com/myproject
 ```
 
 **Note**:
 - GOPATH projects **do not need** to specify project directory
+- **`-pkg-scope` is required** to limit analysis scope and prevent analyzing other projects in GOPATH
+- `-pkg-scope` should be your project's package path prefix, e.g., `example.com/myproject`
 - Third-party structs in vendor **will not be optimized**
 - Fields referencing vendor structs retain original order
 - Attempting to optimize vendor structs directly will be skipped with reason

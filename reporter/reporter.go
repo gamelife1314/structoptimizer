@@ -44,7 +44,7 @@ func (r *Reporter) Generate(report *optimizer.Report) error {
 // GenerateTXT 生成 TXT 格式报告
 func (r *Reporter) GenerateTXT(report *optimizer.Report) (string, error) {
 	var sb strings.Builder
-
+	// 1. 优化总览
 	sb.WriteString("\n")
 	sb.WriteString("╔════════════════════════════════════════════════════════════════════════════════╗\n")
 	sb.WriteString("║                     StructOptimizer 优化报告                                   ║\n")
@@ -60,6 +60,12 @@ func (r *Reporter) GenerateTXT(report *optimizer.Report) (string, error) {
 	sb.WriteString(fmt.Sprintf("│  ✅ 优化的结构体：%-61d│\n", report.OptimizedCount))
 	sb.WriteString(fmt.Sprintf("│  ⏭️  跳过的结构体：%-61d│\n", report.SkippedCount))
 	sb.WriteString(fmt.Sprintf("│  💾 节省内存：     %-61d 字节│\n", report.TotalSaved))
+	if report.TotalOrigSize > 0 {
+		totalOptRate := float64(report.TotalOrigSize-report.TotalOptSize) / float64(report.TotalOrigSize) * 100
+		sb.WriteString(fmt.Sprintf("│  📈 总优化前大小：   %-61d 字节│\n", report.TotalOrigSize))
+		sb.WriteString(fmt.Sprintf("│  📉 总优化后大小：   %-61d 字节│\n", report.TotalOptSize))
+		sb.WriteString(fmt.Sprintf("│  📊 总优化率：       %-61.1f%%│\n", totalOptRate))
+	}
 	if report.RootStruct != "" {
 		sb.WriteString(fmt.Sprintf("│  🎯 主结构体：     %-61s│\n", report.RootStruct))
 		if report.RootStructSize > 0 {

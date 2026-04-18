@@ -11,6 +11,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/gamelife1314/structoptimizer/optimizer"
 )
@@ -35,14 +36,15 @@ func NewSourceWriter(cfg *Config) *SourceWriter {
 	}
 }
 
-// BackupFile 备份源文件
+// BackupFile 备份源文件（带时间戳，避免覆盖）
 func (w *SourceWriter) BackupFile(filePath string) (string, error) {
 	if !w.config.Backup {
 		return "", nil
 	}
 
-	// 创建备份文件名：xxx.go -> xxx.go.bak
-	backupName := filePath + ".bak"
+	// 创建备份文件名：xxx.go -> xxx.go.20060102_150405.bak（带时间戳）
+	timestamp := time.Now().Format("20060102_150405")
+	backupName := fmt.Sprintf("%s.%s.bak", filePath, timestamp)
 
 	// 读取原文件
 	content, err := os.ReadFile(filePath)

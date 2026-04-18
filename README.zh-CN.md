@@ -67,14 +67,17 @@ cd /path/to/project
 
 ```bash
 # 使用 -prj-type=gopath 指定项目类型
-./structoptimizer -prj-type=gopath -package example.com/myproject/pkg ./
+# -pkg-scope 用于限制分析范围，只分析指定包路径前缀的结构体
+./structoptimizer -prj-type=gopath -package example.com/myproject/pkg -pkg-scope example.com/myproject
 
 # 可选：指定 GOPATH 路径（否则使用环境变量）
-./structoptimizer -prj-type=gopath -gopath=/path/to/gopath -struct=example.com/myproject/pkg.MyStruct
+./structoptimizer -prj-type=gopath -gopath=/path/to/gopath -struct=example.com/myproject/pkg.MyStruct -pkg-scope example.com/myproject
 ```
 
 **注意**：
 - GOPATH 项目**不需要指定项目目录**参数
+- **`-pkg-scope` 是必填参数**，用于限制分析范围，防止分析到 GOPATH 下其他项目
+- `-pkg-scope` 填写你的项目包路径前缀，例如 `example.com/myproject`
 - vendor 目录中的第三方库结构体**不会被优化**（符合需求）
 - 项目中引用 vendor 结构体的字段会保留原顺序
 - 如果尝试直接优化 vendor 中的结构体，会被跳过并显示原因
