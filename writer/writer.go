@@ -23,7 +23,7 @@ type SourceWriter struct {
 
 // Config 写入器配置
 type Config struct {
-	Backup bool
+	Backup  bool
 	Verbose int
 }
 
@@ -140,7 +140,7 @@ func (w *SourceWriter) reorderStructFields(structType *ast.StructType, fields []
 
 	// 创建新的字段列表
 	newFields := make([]*ast.Field, 0, len(fields))
-	
+
 	for _, fi := range fields {
 		var key string
 		if fi.IsEmbed {

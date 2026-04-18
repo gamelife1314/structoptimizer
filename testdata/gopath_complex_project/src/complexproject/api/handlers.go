@@ -39,20 +39,20 @@ func (h *HandlerWithMarshal) UnmarshalJSON(data []byte) error {
 
 // HandlerNoMethods 没有方法的处理器（应该被优化）
 type HandlerNoMethods struct {
-	Name    string
-	Path    string
-	Timeout int64
-	Enabled bool
-	Retries int32
+	Name     string
+	Path     string
+	Timeout  int64
+	Enabled  bool
+	Retries  int32
 	Priority int32
 }
 
 // HandlerWithValidate 具有Validate方法的处理器
 type HandlerWithValidate struct {
-	Name     string
-	Strict   bool
-	Enabled  bool
-	Timeout  int64
+	Name    string
+	Strict  bool
+	Enabled bool
+	Timeout int64
 }
 
 // Validate 验证方法

@@ -248,14 +248,14 @@ func TestGOPATHSkipByMethods(t *testing.T) {
 	anlz := analyzer.NewAnalyzer(analyzerCfg)
 
 	optimizerCfg := &Config{
-		StructName:      "myproject/pkg.MainStruct",
-		ProjectType:     "gopath",
-		GOPATH:          gopath,
-		Verbose:         3,
-		MaxDepth:        50,
-		Timeout:         300,
-		PkgWorkerLimit:  4,
-		SkipByMethods:   []string{"Encode", "Decode"},
+		StructName:     "myproject/pkg.MainStruct",
+		ProjectType:    "gopath",
+		GOPATH:         gopath,
+		Verbose:        3,
+		MaxDepth:       50,
+		Timeout:        300,
+		PkgWorkerLimit: 4,
+		SkipByMethods:  []string{"Encode", "Decode"},
 	}
 	opt := NewOptimizer(optimizerCfg, anlz)
 
@@ -331,7 +331,7 @@ func TestGOPATHVendorPackageSkipped(t *testing.T) {
 	// 注意：vendor中的类型不会出现在StructReports中，因为它们在收集阶段就被跳过了
 	t.Logf("Total structs processed: %d", report.TotalStructs)
 	t.Logf("Optimized: %d, Skipped: %d", report.OptimizedCount, report.SkippedCount)
-	
+
 	// 验证收集到的结构体数量（应该不包含ExternalStruct）
 	if report.TotalStructs > 10 {
 		t.Errorf("Expected <=10 structs (excluding vendor), got %d", report.TotalStructs)
@@ -353,14 +353,14 @@ func TestGOPATHNoMethodsStructOptimized(t *testing.T) {
 	anlz := analyzer.NewAnalyzer(analyzerCfg)
 
 	optimizerCfg := &Config{
-		StructName:      "myproject/pkg.MainStruct",
-		ProjectType:     "gopath",
-		GOPATH:          gopath,
-		Verbose:         3,
-		MaxDepth:        50,
-		Timeout:         300,
-		PkgWorkerLimit:  4,
-		SkipByMethods:   []string{"Encode"},
+		StructName:     "myproject/pkg.MainStruct",
+		ProjectType:    "gopath",
+		GOPATH:         gopath,
+		Verbose:        3,
+		MaxDepth:       50,
+		Timeout:        300,
+		PkgWorkerLimit: 4,
+		SkipByMethods:  []string{"Encode"},
 	}
 	opt := NewOptimizer(optimizerCfg, anlz)
 

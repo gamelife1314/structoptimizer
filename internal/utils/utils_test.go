@@ -60,7 +60,7 @@ func TestMatchDirPattern(t *testing.T) {
 // TestFormatSize 测试文件大小格式化
 func TestFormatSize(t *testing.T) {
 	tests := []struct {
-		name string
+		name  string
 		bytes int64
 		want  string
 	}{
@@ -87,7 +87,7 @@ func TestGetGoModRoot(t *testing.T) {
 	if err := os.MkdirAll(goModDir, 0755); err != nil {
 		t.Fatalf("Failed to create test dir: %v", err)
 	}
-	
+
 	// 创建 go.mod 文件
 	goModPath := filepath.Join(goModDir, "go.mod")
 	if err := os.WriteFile(goModPath, []byte("module test"), 0644); err != nil {
@@ -112,18 +112,18 @@ func TestGetGoModRoot(t *testing.T) {
 // TestIsGoModProject 测试是否为 go.mod 项目
 func TestIsGoModProject(t *testing.T) {
 	tmpDir := t.TempDir()
-	
+
 	// 没有 go.mod
 	if IsGoModProject(tmpDir) {
 		t.Error("IsGoModProject() should return false without go.mod")
 	}
-	
+
 	// 创建 go.mod
 	goModPath := filepath.Join(tmpDir, "go.mod")
 	if err := os.WriteFile(goModPath, []byte("module test"), 0644); err != nil {
 		t.Fatalf("Failed to create go.mod: %v", err)
 	}
-	
+
 	if !IsGoModProject(tmpDir) {
 		t.Error("IsGoModProject() should return true with go.mod")
 	}
@@ -160,9 +160,9 @@ func TestShouldSkip(t *testing.T) {
 // TestSplitStructName 测试结构体名称分割
 func TestSplitStructName(t *testing.T) {
 	tests := []struct {
-		name      string
-		fullName  string
-		wantPkg   string
+		name       string
+		fullName   string
+		wantPkg    string
 		wantStruct string
 	}{
 		{"full path", "example.com/pkg.MyStruct", "example.com/pkg", "MyStruct"},
@@ -188,7 +188,7 @@ func TestSplitStructName(t *testing.T) {
 func TestPtr(t *testing.T) {
 	val := 42
 	ptr := Ptr(val)
-	
+
 	if ptr == nil {
 		t.Fatal("Ptr() returned nil")
 	}

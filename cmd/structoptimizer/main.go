@@ -68,12 +68,12 @@ func main() {
 	// 如果使用了 -skip-by-methods，需要用户确认
 	// 暂时注释掉用于测试
 	/*
-	if len(skipByMethods) > 0 {
-		if !confirmSkipByMethods() {
-			fmt.Println("已取消执行")
-			os.Exit(0)
+		if len(skipByMethods) > 0 {
+			if !confirmSkipByMethods() {
+				fmt.Println("已取消执行")
+				os.Exit(0)
+			}
 		}
-	}
 	*/
 
 	// 创建分析器
@@ -273,7 +273,7 @@ func parseCommaList(s string) []string {
 	if s == "" {
 		return nil
 	}
-	
+
 	var result []string
 	parts := strings.Split(s, ",")
 	for _, p := range parts {
@@ -295,13 +295,13 @@ func confirmSkipByMethods() bool {
 	fmt.Println("   - 大型项目建议使用 -skip-by-names 代替（极快）")
 	fmt.Println()
 	fmt.Print("是否继续执行？[y/N]: ")
-	
+
 	reader := bufio.NewReader(os.Stdin)
 	input, err := reader.ReadString('\n')
 	if err != nil {
 		return false
 	}
-	
+
 	input = strings.TrimSpace(strings.ToLower(input))
 	return input == "y" || input == "yes"
 }

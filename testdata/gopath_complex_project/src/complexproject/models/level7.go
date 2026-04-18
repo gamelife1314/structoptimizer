@@ -2,11 +2,11 @@ package models
 
 // Level7_ParentOf8 第7层
 type Level7_ParentOf8 struct {
-	Name     string
-	Child    Level8_ParentOf9
-	Config   Level8_ConfigLevel
-	Count    int64
-	Enabled  bool
+	Name    string
+	Child   Level8_ParentOf9
+	Config  Level8_ConfigLevel
+	Count   int64
+	Enabled bool
 }
 
 // Level7_DataParent 第7层-数据父级

@@ -11,9 +11,10 @@ import (
 
 // TestNestedStructCrossFile 测试同包不同文件中的嵌套结构体扫描
 // 场景：
-//   文件 A: main.go   - 定义 MainStruct，包含嵌套结构体字段 InternalConfig
-//   文件 B: config.go - 定义 InternalConfig 结构体（未导出）
-//   期望：能够正确扫描到 InternalConfig 并将其作为嵌套结构体处理
+//
+//	文件 A: main.go   - 定义 MainStruct，包含嵌套结构体字段 InternalConfig
+//	文件 B: config.go - 定义 InternalConfig 结构体（未导出）
+//	期望：能够正确扫描到 InternalConfig 并将其作为嵌套结构体处理
 func TestNestedStructCrossFile(t *testing.T) {
 	// 创建临时 GOPATH 目录
 	tmpDir, err := os.MkdirTemp("", "gopath_nested_crossfile_*")

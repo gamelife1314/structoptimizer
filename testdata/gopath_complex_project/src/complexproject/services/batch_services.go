@@ -499,4 +499,3 @@ type BatchService50 struct {
 	PoolSize int
 	MaxConns int64
 }
-

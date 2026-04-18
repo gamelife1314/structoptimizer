@@ -1,33 +1,33 @@
 package pkg
 
 import (
+	"github.com/external/lib"
 	"myproject/models"
 	"myproject/utils"
-	"github.com/external/lib"
 )
 
 // MainStruct 主结构体 - 包含多种场景
 type MainStruct struct {
-	Name       string
-	Count      int64
-	IsActive   bool
-	Model      models.UnexportedModel  // 跨文件未导出结构体
-	Helper     utils.HelperUtil        // 跨文件未导出结构体
-	External   lib.ExternalStruct      // vendor中的结构体（应跳过）
-	Data       []byte
-	Config     *Config
-	EmbeddedType                       // 匿名字段 - 测试1
-	TypeAlias   CustomInt               // 类型别名 - 测试2
-	MethodStruct HasMethods             // 用于测试skip-by-methods
-	NoMethodStruct NoMethods            // 用于测试无方法结构体
+	Name           string
+	Count          int64
+	IsActive       bool
+	Model          models.UnexportedModel // 跨文件未导出结构体
+	Helper         utils.HelperUtil       // 跨文件未导出结构体
+	External       lib.ExternalStruct     // vendor中的结构体（应跳过）
+	Data           []byte
+	Config         *Config
+	EmbeddedType              // 匿名字段 - 测试1
+	TypeAlias      CustomInt  // 类型别名 - 测试2
+	MethodStruct   HasMethods // 用于测试skip-by-methods
+	NoMethodStruct NoMethods  // 用于测试无方法结构体
 }
 
 // Config 配置结构体
 type Config struct {
-	Timeout   int64
-	Retries   int32
-	Enabled   bool
-	Name      string
+	Timeout int64
+	Retries int32
+	Enabled bool
+	Name    string
 }
 
 // EmbeddedType 匿名字段类型
@@ -59,8 +59,8 @@ func (h *HasMethods) Decode(data []byte) error {
 
 // NoMethods 没有方法的结构体（应被优化）
 type NoMethods struct {
-	Flag    bool
-	Data    int64
-	Name    string
-	Count   int32
+	Flag  bool
+	Data  int64
+	Name  string
+	Count int32
 }

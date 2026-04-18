@@ -2,13 +2,13 @@ package pkg
 
 // MainStructWithUnexported 主结构体 - 引用同包不同文件的未导出类型
 type MainStructWithUnexported struct {
-	Name       string
-	Count      int64
-	IsActive   bool
-	internal   *internalConfig      // 同包未导出类型（小写开头）
-	cache      localCache           // 同包未导出类型（小写开头）
-	Data       []byte
-	embeddedBase                      // 同包未导出匿名字段
+	Name         string
+	Count        int64
+	IsActive     bool
+	internal     *internalConfig // 同包未导出类型（小写开头）
+	cache        localCache      // 同包未导出类型（小写开头）
+	Data         []byte
+	embeddedBase // 同包未导出匿名字段
 }
 
 // internalConfig 同包中的未导出配置结构体（在另一个文件中定义）

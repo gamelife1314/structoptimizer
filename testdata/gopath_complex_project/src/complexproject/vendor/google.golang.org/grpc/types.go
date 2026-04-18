@@ -2,10 +2,10 @@ package grpc
 
 // GRPCConnection gRPC连接
 type GRPCConnection struct {
-	Target   string
-	Timeout  int64
-	Enabled  bool
-	Retries  int32
+	Target  string
+	Timeout int64
+	Enabled bool
+	Retries int32
 }
 
 // GRPCConfig gRPC配置

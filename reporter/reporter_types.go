@@ -5,15 +5,15 @@ type ReportLevel int
 
 const (
 	ReportLevelSummary ReportLevel = iota // 只显示优化总览
-	ReportLevelChanged                     // 显示优化总览 + 变化的结构体
-	ReportLevelFull                        // 显示所有结构体
+	ReportLevelChanged                    // 显示优化总览 + 变化的结构体
+	ReportLevelFull                       // 显示所有结构体
 )
 
 // Reporter 报告生成器
 type Reporter struct {
-	format  string      // txt, md, html
-	output  string      // 输出路径
-	level   ReportLevel // 详细程度
+	format string      // txt, md, html
+	output string      // 输出路径
+	level  ReportLevel // 详细程度
 }
 
 // NewReporter 创建报告生成器

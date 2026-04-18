@@ -11,9 +11,10 @@ import (
 
 // TestGopathUnexportedStructCrossFile 测试 GOPATH 模式下同包不同文件的未导出结构体识别
 // 场景：
-//   文件 A: main.go  - 定义 MainStruct，包含未导出字段 internalData
-//   文件 B: types.go - 定义 internalData 结构体（未导出）
-//   期望：能够识别 internalData 是同包中定义的结构体类型
+//
+//	文件 A: main.go  - 定义 MainStruct，包含未导出字段 internalData
+//	文件 B: types.go - 定义 internalData 结构体（未导出）
+//	期望：能够识别 internalData 是同包中定义的结构体类型
 func TestGopathUnexportedStructCrossFile(t *testing.T) {
 	// 创建临时 GOPATH 目录
 	tmpDir, err := os.MkdirTemp("", "gopath_unexported_crossfile_*")

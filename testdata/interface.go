@@ -15,11 +15,11 @@ type MultiInterface interface {
 
 // StructWithInterface 包含接口字段的结构体
 type StructWithInterface struct {
-	Name string
-	Proc Interface      // 接口字段
-	Count int64
+	Name   string
+	Proc   Interface // 接口字段
+	Count  int64
 	Writer MultiInterface // 另一个接口字段
-	Data []byte
+	Data   []byte
 }
 
 // StructWithEmptyInterface 包含空接口

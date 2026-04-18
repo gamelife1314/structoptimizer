@@ -3,10 +3,10 @@ package optimizer
 import (
 	"fmt"
 	"go/ast"
-	"os"
-	"os/exec"
 	"go/parser"
 	"go/token"
+	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -66,7 +66,7 @@ func (mi *MethodIndex) matchMethod(methodName, pattern string) bool {
 	if methodName == pattern {
 		return true
 	}
-	
+
 	// 通配符匹配
 	if strings.Contains(pattern, "*") || strings.Contains(pattern, "?") {
 		matched, _ := filepath.Match(pattern, methodName)
@@ -74,7 +74,7 @@ func (mi *MethodIndex) matchMethod(methodName, pattern string) bool {
 			return true
 		}
 	}
-	
+
 	return false
 }
 
@@ -187,20 +187,20 @@ func (mi *MethodIndex) getPkgDirFromGOPATH(pkgPath string) (string, error) {
 		}
 		gopath = filepath.Join(home, "go")
 	}
-	
+
 	// GOPATH 可能有多个路径，用分隔符分割
 	gopaths := filepath.SplitList(gopath)
-	
+
 	// 在每个 GOPATH 的 src 目录下查找
 	for _, gp := range gopaths {
 		srcDir := filepath.Join(gp, "src")
 		pkgDir := filepath.Join(srcDir, pkgPath)
-		
+
 		// 验证目录是否存在
 		if _, err := os.Stat(pkgDir); err == nil {
 			return pkgDir, nil
 		}
 	}
-	
+
 	return "", fmt.Errorf("在 GOPATH 中未找到包：%s", pkgPath)
 }

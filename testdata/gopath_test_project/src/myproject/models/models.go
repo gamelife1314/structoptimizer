@@ -12,7 +12,7 @@ type UnexportedModel struct {
 
 // AnotherModel 另一个模型
 type AnotherModel struct {
-	Title   string
-	Count   int64
-	Active  bool
+	Title  string
+	Count  int64
+	Active bool
 }

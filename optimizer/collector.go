@@ -540,7 +540,7 @@ func (o *Optimizer) fileContainsStruct(filePath, structName string) bool {
 	if bytes.Contains(data, pattern1) {
 		return true
 	}
-	
+
 	// 匹配 type ( ... StructName struct ... ) 形式
 	// 查找 structName 后面紧跟 struct 关键字（中间只有空白字符）
 	lines := bytes.Split(data, []byte("\n"))
@@ -557,7 +557,7 @@ func (o *Optimizer) fileContainsStruct(filePath, structName string) bool {
 			}
 		}
 	}
-	
+
 	return false
 }
 

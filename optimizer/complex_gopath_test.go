@@ -212,7 +212,7 @@ func TestComplexProjectUnexportedCrossFile(t *testing.T) {
 	}
 
 	t.Logf("\nFound %d/%d unexported structs", foundCount, len(unexportedStructs))
-	
+
 	// 至少找到3个未导出结构体
 	if foundCount < 3 {
 		t.Errorf("Expected at least 3 unexported structs, found %d", foundCount)
@@ -255,7 +255,7 @@ func TestComplexProjectTypeAliases(t *testing.T) {
 	foundTypeAliasStruct := false
 	var foundName string
 	var foundSize int64
-	
+
 	for _, sr := range report.StructReports {
 		// 检查是否有任何包含重定义类型的结构体
 		if sr.Name == "ComplexTypeStruct" || sr.Name == "AnotherTypeStruct" {
@@ -263,7 +263,7 @@ func TestComplexProjectTypeAliases(t *testing.T) {
 			foundName = sr.Name
 			foundSize = sr.OrigSize
 			t.Logf("✅ Found type alias struct: %s (%d bytes)", sr.Name, sr.OrigSize)
-			
+
 			// 验证大小合理（不应异常偏大）
 			if sr.OrigSize > 200 {
 				t.Errorf("%s size %d bytes seems too large, type alias may be miscalculated", sr.Name, sr.OrigSize)
@@ -352,14 +352,14 @@ func TestComplexProjectSkipByMethods(t *testing.T) {
 	anlz := analyzer.NewAnalyzer(analyzerCfg)
 
 	optimizerCfg := &Config{
-		StructName:      "complexproject/api.MainComplexStruct",
-		ProjectType:     "gopath",
-		GOPATH:          gopath,
-		Verbose:         2,
-		MaxDepth:        50,
-		Timeout:         300,
-		PkgWorkerLimit:  4,
-		SkipByMethods:   []string{"Encode", "Decode", "Marshal*"},
+		StructName:     "complexproject/api.MainComplexStruct",
+		ProjectType:    "gopath",
+		GOPATH:         gopath,
+		Verbose:        2,
+		MaxDepth:       50,
+		Timeout:        300,
+		PkgWorkerLimit: 4,
+		SkipByMethods:  []string{"Encode", "Decode", "Marshal*"},
 	}
 	opt := NewOptimizer(optimizerCfg, anlz)
 
@@ -379,7 +379,7 @@ func TestComplexProjectSkipByMethods(t *testing.T) {
 				t.Errorf("%s should be skipped by skip-by-methods", sr.Name)
 			}
 		}
-		
+
 		// 验证没有方法的结构体未被跳过
 		if sr.Name == "HandlerNoMethods" {
 			if sr.Skipped {
@@ -480,7 +480,7 @@ func TestComplexProjectBatchStructs(t *testing.T) {
 	}
 
 	t.Logf("Batch models in models package: %d", batchModels)
-	
+
 	// 验证收集了批量结构体（models包中有50个BatchModel）
 	if batchModels < 10 {
 		t.Errorf("Expected at least 10 batch models in models package, got %d", batchModels)

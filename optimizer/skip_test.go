@@ -8,11 +8,11 @@ import (
 // TestMatchMethod 测试方法名通配符匹配
 func TestMatchMethod(t *testing.T) {
 	o := &Optimizer{}
-	
+
 	tests := []struct {
-		name     string
-		method   string
-		pattern  string
+		name      string
+		method    string
+		pattern   string
 		wantMatch bool
 	}{
 		{"exact match", "Encode", "Encode", true},
@@ -29,7 +29,7 @@ func TestMatchMethod(t *testing.T) {
 		{"question mark wildcard", "Validate", "Validat?", true},
 		{"question mark wildcard no match", "Valid", "Validat?", false},
 	}
-	
+
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			if got := o.matchMethod(tt.method, tt.pattern); got != tt.wantMatch {
@@ -42,39 +42,39 @@ func TestMatchMethod(t *testing.T) {
 // TestMatchStructName 测试结构体名称通配符匹配
 func TestMatchStructName(t *testing.T) {
 	o := &Optimizer{}
-	
+
 	tests := []struct {
-		name     string
-		key      string
-		pattern  string
+		name      string
+		key       string
+		pattern   string
 		wantMatch bool
 	}{
 		// 完全匹配
 		{"full match", "github.com/pkg.Context", "github.com/pkg.Context", true},
 		{"full no match", "github.com/pkg.Context", "github.com/pkg.Config", false},
-		
+
 		// 简单名称匹配
 		{"simple name match", "github.com/pkg.Context", "Context", true},
 		{"simple name no match", "github.com/pkg.Context", "Config", false},
-		
+
 		// 通配符匹配 - 完整路径
 		{"wildcard full path", "github.com/pkg.Context", "github.com/pkg.*", true},
 		{"wildcard full path no match", "github.com/pkg.Context", "github.com/other.*", false},
-		
+
 		// 通配符匹配 - 结构体名
 		{"wildcard struct name prefix", "github.com/pkg.UserRequest", "*Request", true},
 		{"wildcard struct name prefix2", "github.com/pkg.Request", "*Request", true},
 		{"wildcard struct name prefix no match", "github.com/pkg.Response", "*Request", false},
-		
+
 		{"wildcard struct name suffix", "github.com/pkg.UserRequest", "User*", true},
 		{"wildcard struct name suffix2", "github.com/pkg.User", "User*", true},
 		{"wildcard struct name suffix no match", "github.com/pkg.Config", "User*", false},
-		
+
 		// 问号通配符
 		{"question mark wildcard", "github.com/pkg.Context", "Context?", false},
 		{"question mark wildcard2", "github.com/pkg.Context", "Context", true},
 	}
-	
+
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			if got := o.matchStructName(tt.key, tt.pattern); got != tt.wantMatch {
@@ -91,7 +91,7 @@ func TestShouldSkipDir(t *testing.T) {
 			SkipDirs: []string{"vendor", "generated_*", "datas"},
 		},
 	}
-	
+
 	tests := []struct {
 		name     string
 		dirPath  string
@@ -103,20 +103,20 @@ func TestShouldSkipDir(t *testing.T) {
 		{"basename generated_proto", "/project/generated_proto", true},
 		{"basename generated", "/project/generated", false},
 		{"basename datas", "/project/datas", true},
-		
+
 		// 路径包含匹配
 		{"path contains vendor", "/a/b/c/vendor/github.com/lib", true},
 		{"path contains generated_proto", "/src/generated_proto/api.go", true},
 		{"path contains generated", "/src/generated/api.go", false},
 		{"path contains datas", "/do/datas/ele", true},
-		
+
 		// 不匹配的情况
 		{"not match database", "/project/database", false},
 		{"not match vendor_backup", "/project/vendor_backup", false},
 		{"not match normal", "/project/pkg", false},
 		{"not match test", "/project/test", false},
 	}
-	
+
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			if got := o.shouldSkipDir(tt.dirPath); got != tt.wantSkip {
@@ -133,7 +133,7 @@ func TestShouldSkipFile(t *testing.T) {
 			SkipFiles: []string{"*_test.go", "*.pb.go", "*_mock.go"},
 		},
 	}
-	
+
 	tests := []struct {
 		name     string
 		fileName string
@@ -146,7 +146,7 @@ func TestShouldSkipFile(t *testing.T) {
 		{"go file", "test.go", false},
 		{"backup file", "api.go.bak", false},
 	}
-	
+
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			if got := o.shouldSkipFile(tt.fileName); got != tt.wantSkip {
@@ -159,9 +159,9 @@ func TestShouldSkipFile(t *testing.T) {
 // TestFilepathMatch 测试 filepath.Match 的行为（作为参考）
 func TestFilepathMatch(t *testing.T) {
 	tests := []struct {
-		name     string
-		pattern  string
-		name2    string
+		name      string
+		pattern   string
+		name2     string
 		wantMatch bool
 	}{
 		// 星号通配符
@@ -172,23 +172,23 @@ func TestFilepathMatch(t *testing.T) {
 		{"star suffix", "*test", "test", true},
 		{"star suffix2", "*test", "mytest", true},
 		{"star middle", "test*go", "testing.go", true},
-		
+
 		// 问号通配符
 		{"question match one", "test?", "test1", true},
 		{"question match one2", "test?", "testa", true},
 		{"question no match", "test?", "test", false},
 		{"question no match2", "test?", "test12", false},
-		
+
 		// 字符组
 		{"char class", "test[0-9]", "test1", true},
 		{"char class no match", "test[0-9]", "testa", false},
-		
+
 		// 实际使用场景
 		{"generated pattern", "generated_*", "generated_proto", true},
 		{"generated pattern no match", "generated_*", "generated", false},
 		{"generated pattern no match2", "generated_*", "generate", false},
 	}
-	
+
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			matched, err := filepath.Match(tt.pattern, tt.name2)

@@ -2,12 +2,12 @@ package lib2
 
 // Externallib2Struct 第三方库结构体
 type Externallib2Struct struct {
-	ID       int64
-	Name     string
-	Data     []byte
-	Enabled  bool
-	Version  uint32
-	Config   map[string]string
+	ID      int64
+	Name    string
+	Data    []byte
+	Enabled bool
+	Version uint32
+	Config  map[string]string
 }
 
 // Externallib2Config 第三方库配置

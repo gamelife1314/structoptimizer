@@ -23,9 +23,9 @@ type CrossPkgRef2 struct {
 
 // ComplexWithCrossPkg 包含跨包引用的复杂结构体
 type ComplexWithCrossPkg struct {
-	Name     string
-	Pkg1     CrossPkgRef1
-	Pkg2     CrossPkgRef2
-	Count    int64
-	Active   bool
+	Name   string
+	Pkg1   CrossPkgRef1
+	Pkg2   CrossPkgRef2
+	Count  int64
+	Active bool
 }

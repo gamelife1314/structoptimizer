@@ -55,28 +55,28 @@ func IsGoModProject(dir string) bool {
 // ShouldSkip 检查是否应该跳过某个文件或目录
 func ShouldSkip(path string, skipDirs, skipFiles, skipPatterns []string) bool {
 	name := filepath.Base(path)
-	
+
 	// 检查目录跳过
 	for _, pattern := range skipDirs {
 		if matched, _ := filepath.Match(pattern, name); matched {
 			return true
 		}
 	}
-	
+
 	// 检查文件跳过
 	for _, pattern := range skipFiles {
 		if matched, _ := filepath.Match(pattern, name); matched {
 			return true
 		}
 	}
-	
+
 	// 检查通用跳过模式
 	for _, pattern := range skipPatterns {
 		if matched, _ := filepath.Match(pattern, name); matched {
 			return true
 		}
 	}
-	
+
 	return false
 }
 

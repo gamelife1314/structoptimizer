@@ -7,33 +7,33 @@ import (
 // TestParseStructName 测试结构体名称解析
 func TestParseStructName(t *testing.T) {
 	tests := []struct {
-		name      string
-		fullName  string
-		wantPkg   string
+		name       string
+		fullName   string
+		wantPkg    string
 		wantStruct string
 	}{
 		{
-			name:      "full path",
-			fullName:  "example.com/pkg.MyStruct",
-			wantPkg:   "example.com/pkg",
+			name:       "full path",
+			fullName:   "example.com/pkg.MyStruct",
+			wantPkg:    "example.com/pkg",
 			wantStruct: "MyStruct",
 		},
 		{
-			name:      "simple path",
-			fullName:  "pkg.MyStruct",
-			wantPkg:   "pkg",
+			name:       "simple path",
+			fullName:   "pkg.MyStruct",
+			wantPkg:    "pkg",
 			wantStruct: "MyStruct",
 		},
 		{
-			name:      "no package",
-			fullName:  "MyStruct",
-			wantPkg:   "",
+			name:       "no package",
+			fullName:   "MyStruct",
+			wantPkg:    "",
 			wantStruct: "MyStruct",
 		},
 		{
-			name:      "nested package",
-			fullName:  "example.com/pkg/subpkg.MyStruct",
-			wantPkg:   "example.com/pkg/subpkg",
+			name:       "nested package",
+			fullName:   "example.com/pkg/subpkg.MyStruct",
+			wantPkg:    "example.com/pkg/subpkg",
 			wantStruct: "MyStruct",
 		},
 	}
@@ -80,10 +80,10 @@ func TestAnalyzerLog(t *testing.T) {
 // TestNewAnalyzer 测试分析器创建
 func TestNewAnalyzer(t *testing.T) {
 	cfg := &Config{
-		TargetDir:  "/tmp/test",
-		Verbose:    1,
-		SkipDirs:   []string{"vendor", "generated"},
-		SkipFiles:  []string{"*_test.go"},
+		TargetDir: "/tmp/test",
+		Verbose:   1,
+		SkipDirs:  []string{"vendor", "generated"},
+		SkipFiles: []string{"*_test.go"},
 	}
 
 	a := NewAnalyzer(cfg)
@@ -105,8 +105,8 @@ func TestNewAnalyzer(t *testing.T) {
 // TestShouldSkipFile 测试文件跳过逻辑
 func TestShouldSkipFile(t *testing.T) {
 	cfg := &Config{
-		SkipDirs:   []string{"vendor", "generated_*"},
-		SkipFiles:  []string{"*_test.go", "*.pb.go"},
+		SkipDirs:  []string{"vendor", "generated_*"},
+		SkipFiles: []string{"*_test.go", "*.pb.go"},
 	}
 	_ = NewAnalyzer(cfg)
 

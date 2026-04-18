@@ -10,7 +10,7 @@ func TestMethodIndexBasic(t *testing.T) {
 
 	// 测试 structoptimizer 自身的 analyzer 包
 	pkgPath := "github.com/gamelife1314/structoptimizer/analyzer"
-	
+
 	// analyzer.Config 应该没有方法
 	if mi.HasMethod(pkgPath, "Config", "LoadPackage") {
 		t.Error("analyzer.Config should not have LoadPackage method")
@@ -40,15 +40,15 @@ func TestMethodIndexBasic(t *testing.T) {
 func TestMethodIndexCaching(t *testing.T) {
 	mi := NewMethodIndex()
 	pkgPath := "github.com/gamelife1314/structoptimizer/optimizer"
-	
+
 	// 第一次查询
 	mi.HasMethod(pkgPath, "Optimizer", "Optimize")
-	
+
 	// 检查缓存是否建立
 	mi.mu.RLock()
 	_, exists := mi.cache[pkgPath]
 	mi.mu.RUnlock()
-	
+
 	if !exists {
 		t.Error("Cache should be populated after first query")
 	}

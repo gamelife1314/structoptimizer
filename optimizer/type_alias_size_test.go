@@ -117,7 +117,7 @@ type StructWithTypeAlias struct {
 	// Value (Int64Type/int64): 8 字节
 	// Name (string): 16 字节
 	// 考虑对齐后，总大小应该合理（不会超过 50 字节）
-	
+
 	if structReport.OrigSize > 50 {
 		t.Errorf("结构体大小 %d 字节异常偏大，可能重定义类型被错误计算为 8 字节", structReport.OrigSize)
 	} else {

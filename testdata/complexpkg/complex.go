@@ -14,14 +14,14 @@ type InnerForComplex struct {
 
 // ComplexWithSlice 包含 slice 的复杂结构体
 type ComplexWithSlice struct {
-	A     bool
-	B     []int64
-	C     int32
-	D     bool
-	E     []byte
-	F     int64
-	G     []InnerForComplex
-	H     int32
+	A bool
+	B []int64
+	C int32
+	D bool
+	E []byte
+	F int64
+	G []InnerForComplex
+	H int32
 }
 
 // ComplexWithMap 包含 map 的复杂结构体
@@ -38,25 +38,25 @@ type ComplexWithMap struct {
 
 // ComplexWithSliceAndMap 同时包含 slice 和 map
 type ComplexWithSliceAndMap struct {
-	Name     string
-	IDs      []int64
-	Data     map[string]int64
-	Inner    InnerForComplex
-	Count    int64
-	Items    []InnerForComplex
-	Config   map[string][]byte
-	Active   bool
-	Refs     []*subpkg1.SubPkg1
-	Cache    map[int32]*subpkg1.SubPkg1
+	Name   string
+	IDs    []int64
+	Data   map[string]int64
+	Inner  InnerForComplex
+	Count  int64
+	Items  []InnerForComplex
+	Config map[string][]byte
+	Active bool
+	Refs   []*subpkg1.SubPkg1
+	Cache  map[int32]*subpkg1.SubPkg1
 }
 
 // NestedSlice 嵌套 slice
 type NestedSlice struct {
-	A       bool
-	Matrix  [][]int64
-	B       int64
-	Items   []InnerForComplex
-	C       int32
+	A      bool
+	Matrix [][]int64
+	B      int64
+	Items  []InnerForComplex
+	C      int32
 }
 
 // NestedMap 嵌套 map
@@ -70,13 +70,13 @@ type NestedMap struct {
 
 // ComplexPointer 包含指针的复杂结构体
 type ComplexPointer struct {
-	A      bool
-	P1     *InnerForComplex
-	B      int64
-	P2     **InnerForComplex
-	C      int32
-	Slice  []*InnerForComplex
-	D      bool
+	A     bool
+	P1    *InnerForComplex
+	B     int64
+	P2    **InnerForComplex
+	C     int32
+	Slice []*InnerForComplex
+	D     bool
 }
 
 // VeryComplex 非常复杂的结构体
@@ -85,29 +85,29 @@ type VeryComplex struct {
 	Name   string
 	ID     int64
 	Active bool
-	
+
 	// Slice 字段
-	IDs      []int64
-	Names    []string
-	Inners   []InnerForComplex
-	
+	IDs    []int64
+	Names  []string
+	Inners []InnerForComplex
+
 	// Map 字段
 	Data       map[string]int64
 	Config     map[string][]byte
 	ComplexMap map[int32]InnerForComplex
-	
+
 	// 跨包引用
-	Refs    []*subpkg1.SubPkg1
-	Cache   map[int32]*subpkg1.SubPkg1
-	
+	Refs  []*subpkg1.SubPkg1
+	Cache map[int32]*subpkg1.SubPkg1
+
 	// 嵌套结构体
-	Inner   InnerForComplex
-	
+	Inner InnerForComplex
+
 	// 指针
-	Ptr     *InnerForComplex
-	
+	Ptr *InnerForComplex
+
 	// 计数
-	Count   int64
-	Size    int32
-	Flags   bool
+	Count int64
+	Size  int32
+	Flags bool
 }

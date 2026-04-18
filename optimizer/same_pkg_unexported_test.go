@@ -124,8 +124,8 @@ func TestUnexportedStructsNaming(t *testing.T) {
 	// 已导出类型 = 大写字母开头
 
 	testCases := []struct {
-		name      string
-		typeName  string
+		name       string
+		typeName   string
 		isExported bool
 	}{
 		{"exported type", "Config", true},

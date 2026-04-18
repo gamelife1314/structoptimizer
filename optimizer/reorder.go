@@ -15,12 +15,12 @@ func ReorderFields(fields []FieldInfo, sortSameSize bool, reservedFields []strin
 	// 分离预留字段和普通字段
 	var reserved []FieldInfo
 	var normal []FieldInfo
-	
+
 	reservedMap := make(map[string]bool)
 	for _, name := range reservedFields {
 		reservedMap[name] = true
 	}
-	
+
 	for _, f := range fields {
 		if reservedMap[f.Name] {
 			reserved = append(reserved, f)
@@ -31,10 +31,10 @@ func ReorderFields(fields []FieldInfo, sortSameSize bool, reservedFields []strin
 
 	// 对普通字段排序
 	sorted := reorderFieldsInternal(normal, sortSameSize)
-	
+
 	// 预留字段追加到末尾
 	sorted = append(sorted, reserved...)
-	
+
 	return sorted
 }
 

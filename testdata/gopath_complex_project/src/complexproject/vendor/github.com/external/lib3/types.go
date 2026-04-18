@@ -2,12 +2,12 @@ package lib3
 
 // Externallib3Struct 第三方库结构体
 type Externallib3Struct struct {
-	ID       int64
-	Name     string
-	Data     []byte
-	Enabled  bool
-	Version  uint32
-	Config   map[string]string
+	ID      int64
+	Name    string
+	Data    []byte
+	Enabled bool
+	Version uint32
+	Config  map[string]string
 }
 
 // Externallib3Config 第三方库配置

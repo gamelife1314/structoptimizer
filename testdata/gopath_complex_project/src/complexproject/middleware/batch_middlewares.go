@@ -269,4 +269,3 @@ type BatchMiddleware30 struct {
 	Timeout  int64
 	Priority int32
 }
-

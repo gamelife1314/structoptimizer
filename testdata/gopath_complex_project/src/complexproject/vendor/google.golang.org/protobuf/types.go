@@ -2,10 +2,10 @@ package protobuf
 
 // ProtoMessage 协议消息
 type ProtoMessage struct {
-	Data     []byte
-	Size     int64
-	Version  int32
-	Enabled  bool
+	Data    []byte
+	Size    int64
+	Version int32
+	Enabled bool
 }
 
 // ProtoField 协议字段

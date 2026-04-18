@@ -25,9 +25,9 @@ type internalCache struct {
 
 // internalPool 未导出的连接池配置（同包不同文件）
 type internalPool struct {
-	MinConns  int32
-	MaxConns  int64
-	Timeout   int64
-	Enabled   bool
-	IdleTime  int64
+	MinConns int32
+	MaxConns int64
+	Timeout  int64
+	Enabled  bool
+	IdleTime int64
 }

@@ -141,11 +141,11 @@ type TestStringType struct {
 	// 但我们应该能看出类型大小的差异
 
 	tests := []struct {
-		structName    string
-		expectedMin   int64 // 期望的最小大小
-		expectedMax   int64 // 期望的最大大小
-		typeName      string
-		actualType    string
+		structName  string
+		expectedMin int64 // 期望的最小大小
+		expectedMax int64 // 期望的最大大小
+		typeName    string
+		actualType  string
 	}{
 		{"TestByteType", 1, 8, "ByteType", "uint8 (1 byte)"},
 		{"TestBoolType", 1, 8, "BoolType", "bool (1 byte)"},

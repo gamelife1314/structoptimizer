@@ -12,10 +12,10 @@ type internalBase struct {
 
 // internalAudit 未导出的审计匿名字段
 type internalAudit struct {
-	CreatedBy  string
-	UpdatedBy  string
-	CreatedAt  int64
-	UpdatedAt  int64
-	IPAddress  string
-	UserAgent  string
+	CreatedBy string
+	UpdatedBy string
+	CreatedAt int64
+	UpdatedAt int64
+	IPAddress string
+	UserAgent string
 }

@@ -7,9 +7,9 @@ import (
 // TestIsVendorPackage 测试 vendor 包判断
 func TestIsVendorPackage(t *testing.T) {
 	tests := []struct {
-		name   string
+		name    string
 		pkgPath string
-		want   bool
+		want    bool
 	}{
 		{"empty", "", true},
 		{"vendor with slash", "vendor/github.com/pkg", true},
@@ -29,9 +29,9 @@ func TestIsVendorPackage(t *testing.T) {
 // TestIsStandardLibraryPkg 测试标准库判断
 func TestIsStandardLibraryPkg(t *testing.T) {
 	tests := []struct {
-		name   string
+		name    string
 		pkgPath string
-		want   bool
+		want    bool
 	}{
 		{"empty", "", true},
 		{"fmt", "fmt", true},
@@ -53,9 +53,9 @@ func TestIsStandardLibraryPkg(t *testing.T) {
 // TestIsStandardLibrary 测试标准库判断（完整）
 func TestIsStandardLibrary(t *testing.T) {
 	tests := []struct {
-		name   string
+		name    string
 		pkgPath string
-		want   bool
+		want    bool
 	}{
 		{"empty", "", true},
 		{"fmt", "fmt", true},

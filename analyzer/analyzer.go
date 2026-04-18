@@ -18,13 +18,13 @@ import (
 
 // Analyzer 分析器（参考 gopls 设计）
 type Analyzer struct {
-	config     *Config
-	fset       *token.FileSet
-	info       *types.Info
-	pkg        *packages.Package
-	pkgMap     map[string]*packages.Package // 已加载的包缓存（线程安全）
-	loadedPkgs map[string]bool
-	mu         sync.RWMutex                 // 保护包缓存
+	config      *Config
+	fset        *token.FileSet
+	info        *types.Info
+	pkg         *packages.Package
+	pkgMap      map[string]*packages.Package // 已加载的包缓存（线程安全）
+	loadedPkgs  map[string]bool
+	mu          sync.RWMutex               // 保护包缓存
 	structIndex map[string]*StructLocation // 结构体位置索引（包路径。结构体名 -> 文件路径）
 }
 
@@ -831,8 +831,8 @@ func (a *Analyzer) LoadPackages(pkgPaths []string) error {
 	cfg := &packages.Config{
 		Mode: packages.NeedName | packages.NeedFiles | packages.NeedCompiledGoFiles |
 			packages.NeedImports | packages.NeedTypes | packages.NeedTypesInfo | packages.NeedSyntax,
-		Env:  env,
-		Dir:  loadDir,
+		Env: env,
+		Dir: loadDir,
 	}
 
 	// 批量加载

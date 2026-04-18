@@ -59,33 +59,33 @@ func TestParseArrayLength(t *testing.T) {
 // TestEstimateFieldSizeArray 测试数组大小估算（Bug #1 修复）
 func TestEstimateFieldSizeArray(t *testing.T) {
 	tests := []struct {
-		name         string
-		input        string
-		expectedSize int64
+		name          string
+		input         string
+		expectedSize  int64
 		expectedAlign int64
 	}{
 		{
-			name:         "slice",
-			input:        "[]int64",
-			expectedSize: 24,
+			name:          "slice",
+			input:         "[]int64",
+			expectedSize:  24,
 			expectedAlign: 8,
 		},
 		{
-			name:         "array of 10 int64",
-			input:        "[10]int64",
-			expectedSize: 80,
+			name:          "array of 10 int64",
+			input:         "[10]int64",
+			expectedSize:  80,
 			expectedAlign: 8,
 		},
 		{
-			name:         "array of 5 int32",
-			input:        "[5]int32",
-			expectedSize: 20,
+			name:          "array of 5 int32",
+			input:         "[5]int32",
+			expectedSize:  20,
 			expectedAlign: 4,
 		},
 		{
-			name:         "array of 3 bool",
-			input:        "[3]bool",
-			expectedSize: 3,
+			name:          "array of 3 bool",
+			input:         "[3]bool",
+			expectedSize:  3,
 			expectedAlign: 1,
 		},
 	}
@@ -111,45 +111,45 @@ func TestEstimateFieldSizeArray(t *testing.T) {
 // TestExtractTypeNameExtended 测试扩展的类型提取（Bug #6 修复）
 func TestExtractTypeNameExtended(t *testing.T) {
 	tests := []struct {
-		name         string
-		input        string
-		expectedType string
+		name          string
+		input         string
+		expectedType  string
 		expectedAlias string
 	}{
 		{
-			name:         "array type",
-			input:        "[10]int64",
-			expectedType: "[10]int64",
+			name:          "array type",
+			input:         "[10]int64",
+			expectedType:  "[10]int64",
 			expectedAlias: "",
 		},
 		{
-			name:         "slice type",
-			input:        "[]string",
-			expectedType: "[]string",
+			name:          "slice type",
+			input:         "[]string",
+			expectedType:  "[]string",
 			expectedAlias: "",
 		},
 		{
-			name:         "map type",
-			input:        "map[string]int",
-			expectedType: "map[string]int",
+			name:          "map type",
+			input:         "map[string]int",
+			expectedType:  "map[string]int",
 			expectedAlias: "",
 		},
 		{
-			name:         "chan type",
-			input:        "chan int",
-			expectedType: "chan int",
+			name:          "chan type",
+			input:         "chan int",
+			expectedType:  "chan int",
 			expectedAlias: "",
 		},
 		{
-			name:         "func type",
-			input:        "func()",
-			expectedType: "func",
+			name:          "func type",
+			input:         "func()",
+			expectedType:  "func",
 			expectedAlias: "",
 		},
 		{
-			name:         "interface type",
-			input:        "interface{}",
-			expectedType: "interface{}",
+			name:          "interface type",
+			input:         "interface{}",
+			expectedType:  "interface{}",
 			expectedAlias: "",
 		},
 	}
@@ -229,4 +229,3 @@ func TestCalcStructSizeWithArray(t *testing.T) {
 		t.Errorf("CalcStructSizeFromFields() = %v, want 88", totalSize)
 	}
 }
-

@@ -59,11 +59,6 @@ func NewOptimizer(cfg *Config, analyzer *analyzer.Analyzer) *Optimizer {
 		maxDepth = 50 // 默认 50 层
 	}
 
-	timeout := cfg.Timeout
-	if timeout <= 0 {
-		timeout = 1200 // 默认 20 分钟
-	}
-
 	pkgWorkerLimit := cfg.PkgWorkerLimit
 	if pkgWorkerLimit <= 0 {
 		pkgWorkerLimit = 4 // 默认 4 个并发包，防止 OOM
@@ -80,8 +75,8 @@ func NewOptimizer(cfg *Config, analyzer *analyzer.Analyzer) *Optimizer {
 		structQueue:      make([]*StructTask, 0),
 		structByLevel:    make(map[int][]*StructTask),
 		structByPkgLevel: make(map[int]map[string][]*StructTask),
-		workerLimit:      10,  // 结构体并发限制
-		pkgWorkerLimit:   pkgWorkerLimit,  // 包并发限制（防止 OOM）
+		workerLimit:      10,             // 结构体并发限制
+		pkgWorkerLimit:   pkgWorkerLimit, // 包并发限制（防止 OOM）
 		pkgCache:         make(map[string]*packages.Package),
 		structCache:      make(map[string]*types.Struct),
 		filePathCache:    make(map[string]string),
@@ -93,8 +88,9 @@ func NewOptimizer(cfg *Config, analyzer *analyzer.Analyzer) *Optimizer {
 
 // Optimize 执行优化（入口函数）
 // 两阶段处理：
-//   阶段 1: 只收集结构体位置信息（不加载包，不分析字段）
-//   阶段 2: 并行优化所有收集的结构体（按需加载包）
+//
+//	阶段 1: 只收集结构体位置信息（不加载包，不分析字段）
+//	阶段 2: 并行优化所有收集的结构体（按需加载包）
 func (o *Optimizer) Optimize() (*Report, error) {
 	o.Log(1, "开始优化...")
 	o.Log(1, "配置：最大深度=%d, 超时=%d 秒", o.maxDepth, o.config.Timeout)
@@ -176,7 +172,7 @@ func (o *Optimizer) optimizeInternal() (*Report, error) {
 			o.report.OptimizedCount++
 			o.report.TotalSaved += info.OrigSize - info.OptSize
 		}
-		
+
 		// 累计所有结构体的大小（用于总览等式）
 		o.report.RootStructSize += info.OrigSize
 		o.report.RootStructOptSize += info.OptSize
@@ -263,10 +259,10 @@ func (o *Optimizer) optimizeStruct(pkgPath, structName, filePath string, depth i
 	if !o.isProjectPackage(pkgPath) {
 		o.Log(3, "跳过非项目内部包结构体：%s", key)
 		info := &StructInfo{
-			Name:       structName,
-			PkgPath:    pkgPath,
-			File:       filePath,
-			Skipped:    true,
+			Name:    structName,
+			PkgPath: pkgPath,
+			File:    filePath,
+			Skipped: true,
 			SkipReason: func() string {
 				if isStandardLibrary(pkgPath) {
 					return "Go 标准库结构体"

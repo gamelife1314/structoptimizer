@@ -86,7 +86,7 @@ func TestParseFlags(t *testing.T) {
 // TestConfigDefaults 测试配置默认值
 func TestConfigDefaults(t *testing.T) {
 	cfg := &Config{
-		Backup:   true,
+		Backup:    true,
 		TargetDir: ".",
 	}
 
@@ -171,11 +171,11 @@ func TestSkipDirsParsing(t *testing.T) {
 	// 测试逗号分隔的 skip-dirs
 	input := "vendor,testdata,generated_*"
 	parts := strings.Split(input, ",")
-	
+
 	if len(parts) != 3 {
 		t.Errorf("Expected 3 parts, got %d", len(parts))
 	}
-	
+
 	expected := []string{"vendor", "testdata", "generated_*"}
 	for i, part := range parts {
 		if part != expected[i] {
@@ -188,11 +188,11 @@ func TestSkipDirsParsing(t *testing.T) {
 func TestSkipFilesParsing(t *testing.T) {
 	input := "*_test.go,*.pb.go,*_mock.go"
 	parts := strings.Split(input, ",")
-	
+
 	if len(parts) != 3 {
 		t.Errorf("Expected 3 parts, got %d", len(parts))
 	}
-	
+
 	expected := []string{"*_test.go", "*.pb.go", "*_mock.go"}
 	for i, part := range parts {
 		if part != expected[i] {
@@ -205,7 +205,7 @@ func TestSkipFilesParsing(t *testing.T) {
 func TestSkipByNamesParsing(t *testing.T) {
 	input := "BadStruct,*Request,*Response"
 	parts := strings.Split(input, ",")
-	
+
 	if len(parts) != 3 {
 		t.Errorf("Expected 3 parts, got %d", len(parts))
 	}
@@ -215,7 +215,7 @@ func TestSkipByNamesParsing(t *testing.T) {
 func TestSkipByMethodsParsing(t *testing.T) {
 	input := "Encode,Decode,*JSON"
 	parts := strings.Split(input, ",")
-	
+
 	if len(parts) != 3 {
 		t.Errorf("Expected 3 parts, got %d", len(parts))
 	}
