@@ -1,130 +1,156 @@
 # StructOptimizer
 
-Golang 结构体对齐优化工具 - 通过重新排列结构体字段顺序，减少内存填充，降低内存占用。
+[![Test](https://github.com/gamelife1314/structoptimizer/actions/workflows/test.yml/badge.svg)](https://github.com/gamelife1314/structoptimizer/actions/workflows/test.yml)
+[![Release](https://github.com/gamelife1314/structoptimizer/actions/workflows/release.yml/badge.svg)](https://github.com/gamelife1314/structoptimizer/actions/workflows/release.yml)
+[![Go Report Card](https://goreportcard.com/badge/github.com/gamelife1314/structoptimizer)](https://goreportcard.com/report/github.com/gamelife1314/structoptimizer)
+[![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
-## 背景
+**English** | [中文文档](README.zh-CN.md)
 
-在大型 Go 项目中，开发人员可能没有充分考虑结构体字段对齐问题，导致浪费大量内存。在内存价格昂贵的今天，这种优化显得尤为重要。
+Go struct alignment optimizer - reduces memory padding by rearranging struct field order.
 
-参考：[golang/tools fieldalignment](https://github.com/golang/tools/blob/master/go/analysis/passes/fieldalignment/fieldalignment.go)
+## Background
 
-但官方工具过于简单，无法处理：
-- 嵌套结构体优化
-- 跨包引用的结构体优化
-- 深度优先的多层嵌套优化
+In large Go projects, developers may not fully consider struct field alignment, wasting significant memory. With expensive memory costs, this optimization becomes crucial.
 
-本工具旨在解决这些问题。
+Reference: [golang/tools fieldalignment](https://github.com/golang/tools/blob/master/go/analysis/passes/fieldalignment/fieldalignment.go)
 
-## 功能特性
+The official tool is too simple, unable to handle:
+- Nested struct optimization
+- Cross-package referenced structs
+- Deep-first multi-level nested optimization
 
-### 核心功能
+This tool aims to solve these issues.
 
-- ✅ 对 Go 语言定义的结构体进行字段对齐优化
-- ✅ 支持结构体中的命名字段和匿名字段
-- ✅ 支持跨包引用的结构体优化
-- ✅ 深度优先优化嵌套结构体（支持多层嵌套）
-- ✅ 相同结构体只优化一次（去重）
+## Features
 
-### 高级功能
+### Core Features
 
-- ✅ 支持备份源文件（`-backup`）
-- ✅ 支持通过目录和结构体名联合限定优化目标
-- ✅ 支持跳过某些目录或文件（通配符匹配）
-- ✅ 支持通过方法名跳过特定结构体（`-skip-by-methods`）
-- ✅ 生成优化报告（TXT/MD/HTML 格式）
-- ✅ 支持详细日志输出（`-v`, `-vv`, `-vvv`）
-- ✅ 支持就地修改源文件（`-write`）
-- ✅ 支持大小相同时按字段大小重排（`-sort-same-size`）
-  - 当优化前后结构体大小相同时，可以使用此参数将字段按从大到小排序
-  - 有助于保持代码风格一致，提高可读性
-- ✅ 支持分析指定包下的所有结构体（`-package`）
-- ✅ 支持 go.mod 项目和 GOPATH+vendor 项目
-- ✅ 自动跳过 vendor 中的第三方库结构体（不优化）
-- ✅ 自动跳过 Go 标准库结构体（不优化）
-- ✅ 智能识别项目包，只优化用户自己的代码
+- ✅ Optimize Go struct field alignment
+- ✅ Support named and embedded fields
+- ✅ Cross-package struct optimization
+- ✅ Deep-first nested struct optimization (multi-level)
+- ✅ Optimize each struct only once (deduplication)
 
-## 项目支持
+### Advanced Features
 
-### Go Modules 项目（推荐）
+- ✅ Source file backup (`-backup`)
+- ✅ Limit targets by directory and struct name
+- ✅ Skip directories or files (wildcard matching)
+- ✅ Skip structs by method name (`-skip-by-methods`)
+- ✅ Generate optimization reports (TXT/MD/HTML)
+- ✅ Verbose logging (`-v`, `-vv`, `-vvv`)
+- ✅ In-place source modification (`-write`)
+- ✅ Sort by field size when optimization savings are equal (`-sort-same-size`)
+- ✅ Analyze all structs in a specified package (`-package`)
+- ✅ Support go.mod and GOPATH+vendor projects
+- ✅ Auto-skip vendor third-party structs
+- ✅ Auto-skip Go standard library structs
+- ✅ Smart project package detection
+
+## Project Support
+
+### Go Modules (Recommended)
 
 ```bash
-# 指定项目根目录（包含 go.mod）
+# Specify project root (contains go.mod)
 ./structoptimizer -struct=example.com/myapp/pkg.Context /path/to/project
 
-# 或在项目目录内执行（可省略目录参数）
+# Or execute in project directory (directory parameter can be omitted)
 cd /path/to/project
 ./structoptimizer -struct=example.com/myapp/pkg.Context
 ```
 
-### GOPATH + Vendor 项目
+### GOPATH + Vendor Projects
 
-对于使用 GOPATH + vendor 的早期项目，需要使用 `-prj-type=gopath` 参数指定：
+For legacy projects using GOPATH + vendor, use `-prj-type=gopath`:
 
 ```bash
-# 使用 -prj-type=gopath 指定项目类型
+# Use -prj-type=gopath to specify project type
 ./structoptimizer -prj-type=gopath -package example.com/myproject/pkg ./
 
-# 可选：指定 GOPATH 路径（否则使用环境变量）
+# Optional: specify GOPATH path (otherwise uses environment variable)
 ./structoptimizer -prj-type=gopath -gopath=/path/to/gopath -struct=example.com/myproject/pkg.MyStruct
 ```
 
-**注意**：
-- GOPATH 项目**不需要指定项目目录**参数
-- vendor 目录中的第三方库结构体**不会被优化**（符合需求）
-- 项目中引用 vendor 结构体的字段会保留原顺序
-- 如果尝试直接优化 vendor 中的结构体，会被跳过并显示原因
+**Note**:
+- GOPATH projects **do not need** to specify project directory
+- Third-party structs in vendor **will not be optimized**
+- Fields referencing vendor structs retain original order
+- Attempting to optimize vendor structs directly will be skipped with reason
 
-## 安装
+## Installation
+
+### Option 1: Download Pre-compiled Binaries (Recommended)
+
+Download pre-compiled binaries from [GitHub Releases](https://github.com/gamelife1314/structoptimizer/releases):
+
+| Platform | Architecture | Filename |
+|----------|-------------|----------|
+| Linux | amd64 | `structoptimizer-linux-amd64.tar.gz` |
+| Linux | arm64 | `structoptimizer-linux-arm64.tar.gz` |
+| macOS | amd64 | `structoptimizer-darwin-amd64.tar.gz` |
+| macOS | arm64 (Apple Silicon) | `structoptimizer-darwin-arm64.tar.gz` |
+| Windows | amd64 | `structoptimizer-windows-amd64.zip` |
+
+Extract and add to PATH:
 
 ```bash
-go install github.com/yourusername/structoptimizer/cmd/structoptimizer@latest
+# Linux/macOS
+tar -xzf structoptimizer-*.tar.gz
+sudo mv structoptimizer-* /usr/local/bin/structoptimizer
+
+# Windows
+# Extract and add to PATH
 ```
 
-或从源码构建：
+### Option 2: Install via go install
 
 ```bash
-git clone https://github.com/yourusername/structoptimizer.git
+go install github.com/gamelife1314/structoptimizer/cmd/structoptimizer@latest
+```
+
+### Option 3: Build from Source
+
+```bash
+git clone https://github.com/gamelife1314/structoptimizer.git
 cd structoptimizer
 go build -o structoptimizer ./cmd/structoptimizer
 ```
 
-## 快速开始
+## Quick Start
 
-### 基本用法
+### Basic Usage
 
-优化单个结构体（Go Module 项目）：
+Optimize single struct (Go Module):
 
 ```bash
-# 指定项目目录
+# Specify project directory
 ./structoptimizer -struct=pkg.Context /path/to/project
-
-# 或在项目目录内执行（可省略目录参数）
-cd /path/to/project
-./structoptimizer -struct=pkg.Context
 ```
 
-### 常用命令
+### Common Commands
 
 ```bash
-# 1. 优化单个结构体（生成报告，不修改源码）
+# 1. Optimize single struct (generate report, no source modification)
 ./structoptimizer -struct=pkg.Context /path/to/project
 
-# 2. 优化并直接写入源文件（默认备份）
-./structoptimizer -struct=pkg.Context -write /path/to/project
-
-# 3. 优化并备份源文件
+# 2. Optimize and write source (backup enabled by default)
 ./structoptimizer -struct=pkg.Context -write -backup /path/to/project
 
-# 4. 优化并写入源文件，不备份
+# 3. Optimize and backup source
+./structoptimizer -struct=pkg.Context -write -backup /path/to/project
+
+# 4. Optimize and write source without backup
 ./structoptimizer -struct=pkg.Context -write -backup=false /path/to/project
 
-# 5. 优化指定包中的所有结构体
+# 5. Optimize all structs in specified package
 ./structoptimizer -package pkg /path/to/project
 
-# 6. 优化指定包并写入源文件
+# 6. Optimize package and write source
 ./structoptimizer -package pkg -write -backup /path/to/project
 
-# 7. 跳过某些目录和文件
+# 7. Skip certain directories and files
 ./structoptimizer -struct=pkg.Context \
     -skip-dir alpha \
     -skip-dir generated_* \
@@ -132,99 +158,83 @@ cd /path/to/project
     -skip-file *_pb.go \
     /path/to/project
 
-# 7.1 跳过 vendor 目录（松散匹配）
+# 7.1 Skip vendor directory (loose match)
 ./structoptimizer -package pkg -skip-dir vendor /path/to/project
 
-# 8. 跳过具有特定方法的结构体
+# 8. Skip structs with specific methods
 ./structoptimizer -struct=pkg.Context \
     -skip-by-methods "Encode_By_KKK,Encode_By_KKK1" \
     /path/to/project
 
-# 9. 跳过指定名称的结构体
+# 9. Skip structs by name
 ./structoptimizer -package pkg \
     -skip-by-names "BadStruct,UnusedStruct" \
     /path/to/project
 
-# 10. 生成报告到指定文件
+# 10. Generate report to file
 ./structoptimizer -struct=pkg.Context \
     -output report.md \
     /path/to/project
 
-# 11. 显示详细执行过程
+# 11. Show verbose execution
 ./structoptimizer -struct=pkg.Context -vvv /path/to/project
 
-# 12. 优化前后大小相同时按字段大小重排
+# 12. Sort by field size when sizes are equal
 ./structoptimizer -struct=pkg.Context -sort-same-size /path/to/project
 
-# 13. GOPATH 项目
+# 13. GOPATH project
 ./structoptimizer -prj-type=gopath -struct=example.com/pkg.MyStruct
 
-# 14. GOPATH 项目，指定 GOPATH 路径
+# 14. GOPATH project with GOPATH path
 ./structoptimizer -prj-type=gopath -gopath=/path/to/gopath -struct=example.com/pkg.MyStruct
 ```
 
-### 原地修改和备份
+### In-place Modification and Backup
 
-使用 `-write` 参数可以直接将优化结果写入源文件，`-backup` 参数（默认启用）会在修改前备份源文件。
+Use `-write` to write optimization results to source files. `-backup` (enabled by default) creates backups before modification.
 
 ```bash
-# 优化并写入源文件，同时创建备份
+# Optimize and write source with backup
 ./structoptimizer -package pkg -write -backup /path/to/project
 
-# 备份文件示例：
-#   原文件：pkg/context.go
-#   备份文件：pkg/context.backup.go
+# Backup file example:
+#   Original: pkg/context.go
+#   Backup:   pkg/context.go.bak
 
-# 优化并写入源文件，不创建备份
+# Optimize and write source without backup
 ./structoptimizer -package pkg -write -backup=false /path/to/project
 ```
 
-**注意**：
-- 备份文件名为 `原文件名.backup.go`
-- 建议始终启用备份功能（默认），以便在需要时恢复原始代码
-- 优化后的代码会使用 `go/printer` 格式化，保持代码风格一致
+**Note**:
+- Backup files are named `original.go.bak`
+- Keeping backup (default) is recommended for easy recovery
+- Optimized code is formatted with `go/printer` for consistent style
 
-### 指定源文件
+## Command Line Flags
 
-使用 `-source-file` 参数可以限定工具只在指定的源文件中查找结构体：
+### -skip-dirs Flag
 
-```bash
-# 只在指定的源文件中查找结构体
-./structoptimizer -package pkg -source-file=context.go /path/to/project
+`-skip-dirs` skips directories with struct support for **dual matching**.
 
-# 结合 -struct 使用，优化特定文件中的特定结构体
-./structoptimizer -struct=pkg.Context -source-file=context.go /path/to/project
-```
+#### Matching Rules
 
-**注意**：
-- `-source-file` 参数接受文件名（如 `context.go`）
-- 该参数用于限定查找范围，不会优化文件本身
+`-skip-dirs` uses dual matching:
 
-## 命令行参数
+1. **basename matching**: Match directory basename (last component)
+2. **path inclusion matching**: Match if full path contains directory name as complete path component
 
-### -skip-dirs 参数说明
-
-`-skip-dirs` 参数用于跳过指定目录中的结构体，支持**双重匹配机制**。
-
-#### 匹配规则
-
-`-skip-dirs` 使用**双重匹配机制**：
-
-1. **basename 匹配**：匹配目录的 basename（最后一部分）
-2. **路径包含匹配**：匹配完整路径中是否包含该目录名（作为完整路径组件）
-
-**匹配逻辑**：
+**Logic**:
 ```go
 func shouldSkipDir(dirPath string) bool {
     baseName := filepath.Base(dirPath)
     normalizedPath := filepath.ToSlash(dirPath)
-    
+
     for _, pattern := range SkipDirs {
-        // 1. basename 匹配
+        // 1. basename matching
         if matched, _ := filepath.Match(pattern, baseName); matched {
             return true
         }
-        // 2. 路径包含匹配（要求完整路径组件）
+        // 2. path inclusion (complete path component)
         if strings.Contains(normalizedPath, "/"+pattern+"/") ||
            strings.Contains(normalizedPath, "/"+pattern) ||
            strings.HasSuffix(normalizedPath, "/"+pattern) {
@@ -235,142 +245,82 @@ func shouldSkipDir(dirPath string) bool {
 }
 ```
 
-#### 使用示例
+#### Examples
 
 ```bash
-# 跳过所有 vendor 目录
+# Skip all vendor directories
 ./structoptimizer -package writer/config -skip-dirs vendor ./
 
-# 以下路径都会被跳过：
-# ✓ /project/vendor/lib.go                  # basename 匹配
-# ✓ /project/pkg/vendor/lib.go              # basename 匹配
-# ✓ /a/b/c/vendor/github.com/lib/lib.go     # 路径包含匹配
+# Following paths will be skipped:
+# ✓ /project/vendor/lib.go                  # basename match
+# ✓ /project/pkg/vendor/lib.go              # basename match
+# ✓ /a/b/c/vendor/github.com/lib/lib.go     # path inclusion match
 
-# 使用通配符
+# With wildcards
 ./structoptimizer -package writer/config -skip-dirs "generated_*" ./
 
-# 以下路径都会被跳过：
-# ✓ /project/generated/proto.go             # basename 匹配 generated
-# ✓ /project/generated_proto/api.go         # basename 匹配 generated_*
-# ✓ /src/generated/proto/api.go             # 路径包含匹配
-
-# 跳过多个目录（逗号分隔）
+# Skip multiple directories (comma separated)
 ./structoptimizer -package writer/config -skip-dirs "vendor,generated_*,datas" ./
 ```
 
-#### 匹配示例详解
+### Complete Flags Table
 
-**示例 1：basename 匹配**
-```bash
-# 命令
-./structoptimizer -skip-dirs datas ./
+| Flag | Description | Default |
+|------|-------------|---------|
+| `<project_dir>` | Go Module project root (GOPATH can omit) | - |
+| `-struct` | Struct name (format: pkg_path.StructName) | - |
+| `-package` | Package path (mutually exclusive with `-struct`) | - |
+| `-source-file` | Source file path (limit struct search to file) | - |
+| `-write` | Write to source file | false |
+| `-backup` | Backup source before modification | true |
+| `-skip-dir` | Skip directories (wildcard, match any path component) | - |
+| `-skip-file` | Skip files (wildcard) | - |
+| `-skip` | Skip file pattern | - |
+| `-skip-by-methods` | Skip structs with these methods (wildcard) | - |
+| `-skip-by-names` | Skip structs by name (wildcard) | - |
+| `-output` | Report output path | stdout |
+| `-v`, `-vv`, `-vvv` | Verbosity level | 0 |
+| `-sort-same-size` | Sort by field size when equal | false |
+| `-prj-type` | Project type (gomod/gopath) | gomod |
+| `-gopath` | GOPATH path (GOPATH project optional) | GOPATH env var |
+| `-help` | Show help | - |
 
-# 文件路径                                    # 是否跳过  # 匹配方式
-/project/datas/config.go                      ✓         basename 匹配
-/project/pkg/datas/config.go                  ✓         basename 匹配
-/project/do/datas/ele/config.go               ✓         路径包含匹配
-/project/datas_backup/config.go               ✗         不匹配
-```
+## Example
 
-**示例 2：路径包含匹配**
-```bash
-# 命令
-./structoptimizer -skip-dirs vendor ./
-
-# 文件路径                                    # 是否跳过  # 说明
-/vendor/lib.go                                ✓         包含 /vendor
-/pkg/vendor/lib.go                            ✓         包含 /vendor
-/vendor_backup/lib.go                         ✗         不包含 /vendor
-/pkg/vendor_lib.go                            ✗         文件名不匹配
-```
-
-**示例 3：通配符匹配**
-```bash
-# 命令
-./structoptimizer -skip-dirs "test_*" ./
-
-# 文件路径                                    # 是否跳过  # 说明
-/project/test_unit/api.go                     ✓         test_* 匹配 test_unit
-/project/test/api.go                          ✗         test 不匹配 test_*
-/project/testing/api.go                       ✗         testing 不匹配 test_*
-```
-
-#### 注意事项
-
-1. **路径分隔符**：自动处理 Windows (`\`) 和 Unix (`/`) 路径分隔符
-2. **部分匹配**：`-skip-dirs datas` 会匹配 `datas` 但不匹配 `database`
-3. **完整路径组件**：匹配时要求是完整的目录名，`/vendor` 不会匹配 `/vendor_backup`
-4. **多个目录**：使用逗号分隔多个目录模式
-5. **参数名称**：使用复数形式 `-skip-dirs`（不是 `-skip-dir`）
-
-#### 与 -skip-files 配合使用
-
-```bash
-# 跳过 vendor 目录和所有测试文件
-./structoptimizer -package writer/config \
-    -skip-dirs "vendor" \
-    -skip-files "*_test.go" \
-    ./
-```
-
-### 完整参数列表
-
-| 参数 | 说明 | 默认值 |
-|------|------|--------|
-| `<项目目录>` | Go Module 项目的根目录（GOPATH 项目可省略） | - |
-| `-struct` | 结构体名称（格式：包路径。结构体名） | - |
-| `-package` | 包路径（与 `-struct` 互斥） | - |
-| `-source-file` | 源文件路径（限定在指定文件中查找结构体） | - |
-| `-write` | 直接写入源文件 | false |
-| `-backup` | 修改前备份源文件 | true |
-| `-skip-dir` | 跳过的目录（支持通配符，匹配路径中任意目录组件） | - |
-| `-skip-file` | 跳过的文件（支持通配符） | - |
-| `-skip` | 跳过的文件模式 | - |
-| `-skip-by-methods` | 具有这些方法的结构体跳过（支持通配符） | - |
-| `-skip-by-names` | 指定名称的结构体跳过（支持通配符） | - |
-| `-output` | 报告输出路径 | stdout |
-| `-v`, `-vv`, `-vvv` | 详细程度 | 0 |
-| `-sort-same-size` | 大小相同时按字段大小重排 | false |
-| `-prj-type` | 项目类型（gomod/gopath） | gomod |
-| `-gopath` | GOPATH 路径（GOPATH 项目可选） | 环境变量 GOPATH |
-| `-help` | 显示帮助 | - |
-
-## 示例
-
-### 优化前
+### Before Optimization
 
 ```go
 type BadStruct struct {
-    A bool   // 1 字节
-    // [填充 7 字节]
-    B int64  // 8 字节
-    C int32  // 4 字节
-    D bool   // 1 字节
-    // [填充 3 字节]
-    E int32  // 4 字节
-    // [末尾填充 4 字节]
+    A bool   // 1 byte
+    // [7 bytes padding]
+    B int64  // 8 bytes
+    C int32  // 4 bytes
+    D bool   // 1 byte
+    // [3 bytes padding]
+    E int32  // 4 bytes
+    // [4 bytes tail padding]
 }
-// 总计：32 字节
+// Total: 32 bytes
 ```
 
-### 优化后
+### After Optimization
 
 ```go
 type GoodStruct struct {
-    B int64  // 8 字节（偏移量 0）
-    C int32  // 4 字节（偏移量 8）
-    E int32  // 4 字节（偏移量 12）
-    A bool   // 1 字节（偏移量 16）
-    D bool   // 1 字节（偏移量 17）
-    // [末尾填充 6 字节]
+    B int64  // 8 bytes (offset 0)
+    C int32  // 4 bytes (offset 8)
+    E int32  // 4 bytes (offset 12)
+    A bool   // 1 byte (offset 16)
+    D bool   // 1 byte (offset 17)
+    // [6 bytes tail padding]
 }
-// 总计：24 字节（节省 8 字节）
+// Total: 24 bytes (saved 8 bytes)
 ```
 
-### 嵌套结构体优化
+### Nested Struct Optimization
 
 ```go
-// 主结构体：project/testdata.NestedOuter
+// Main struct: project/testdata.NestedOuter
 type NestedOuter struct {
     Name   string
     Inner  Inner
@@ -382,14 +332,14 @@ type NestedOuter struct {
     pkg2s  map[uint32]*subpkg1.SubPkg1
 }
 
-// 同包中的结构体
+// Structs in same package
 type Inner struct {
     Y int64
     X int32
     Z int32
 }
 
-// 跨包结构体（project/testdata/subpkg1.SubPkg1）
+// Cross-package struct (project/testdata/subpkg1.SubPkg1)
 type SubPkg1 struct {
     Y  int64
     N2 bool
@@ -403,96 +353,105 @@ type SubPkg1 struct {
 }
 ```
 
-工具会深度优先地优化所有嵌套的结构体。
+Tool deeply optimizes all nested structs.
 
-## 输出报告
+## Output Report
 
-### Markdown 格式示例
+### Markdown Format Example
 
 ```markdown
 # StructOptimizer Report
 
-## 摘要
-- 总结构体数：5
-- 已优化：3
-- 跳过：2
-- 节省内存：128 字节
+## Summary
+- Total structs: 5
+- Optimized: 3
+- Skipped: 2
+- Memory saved: 128 bytes
 
-## 优化详情
+## Optimization Details
 
 ### writer/config.Context
-- 文件：writer/config/context.go
-- 优化前大小：64 字节
-- 优化后大小：48 字节
-- 节省：16 字节
+- File: writer/config/context.go
+- Before: 64 bytes
+- After: 48 bytes
+- Saved: 16 bytes
 
-**优化前字段顺序：**
-1. A (bool, 1 字节)
-2. B (int64, 8 字节)
-3. C (int32, 4 字节)
-4. D (bool, 1 字节)
-5. E (int32, 4 字节)
+**Before:**
+1. A (bool, 1 byte)
+2. B (int64, 8 bytes)
+3. C (int32, 4 bytes)
+4. D (bool, 1 byte)
+5. E (int32, 4 bytes)
 
-**优化后字段顺序：**
-1. B (int64, 8 字节)
-2. C (int32, 4 字节)
-3. E (int32, 4 字节)
-4. A (bool, 1 字节)
-5. D (bool, 1 字节)
+**After:**
+1. B (int64, 8 bytes)
+2. C (int32, 4 bytes)
+3. E (int32, 4 bytes)
+4. A (bool, 1 byte)
+5. D (bool, 1 byte)
 ```
 
-## 项目结构
+## Project Structure
 
 ```
 structoptimizer/
 ├── cmd/
 │   └── structoptimizer/
-│       └── main.go          # 入口程序
+│       └── main.go          # Entry point
 ├── analyzer/
-│   └── analyzer.go          # 包和类型分析
+│   └── analyzer.go          # Package and type analysis
 ├── optimizer/
-│   ├── optimizer.go         # 核心优化逻辑
-│   ├── field.go             # 字段分析
-│   └── size.go              # 大小计算
+│   ├── optimizer.go         # Core optimization logic
+│   ├── field.go             # Field analysis
+│   └── size.go              # Size calculation
 ├── reporter/
-│   └── reporter.go          # 报告生成
+│   └── reporter.go          # Report generation
 ├── writer/
-│   └── writer.go            # 源码写入
+│   └── writer.go            # Source writing
 ├── internal/
 │   └── utils/
-│       └── utils.go         # 工具函数
-├── testdata/                 # 测试数据
-├── design.md                # 设计文档
-└── README.md                # 使用说明
+│       └── utils.go         # Utility functions
+├── testdata/                 # Test data
+├── VERIFICATION_CHECKLIST.md # Verification checklist
+├── design.md                # Design document
+└── README.md                # Usage guide
 ```
 
-## 技术原理
+## Technical Details
 
-### Go 结构体内存对齐规则
+### Go Struct Memory Alignment Rules
 
-1. 每个字段根据其类型大小进行对齐（如 `int64` 需要 8 字节对齐）
-2. 结构体总大小必须是其最大字段对齐要求的倍数
-3. 不当的字段顺序会导致大量内存填充
+1. Each field aligns to its type size (`int64` requires 8-byte alignment)
+2. Struct total size must be multiple of largest field alignment
+3. Poor field order causes significant padding
 
-### 优化策略
+### Optimization Strategy
 
-1. **字段重排**：按字段大小从大到小排序
-2. **深度优先**：递归优化嵌套结构体
-3. **去重优化**：相同结构体只优化一次
+1. **Field reordering**: Sort by size descending
+2. **Deep-first**: Recursively optimize nested structs
+3. **Deduplication**: Each struct optimized only once
 
-## 边界情况处理
+## Edge Cases
 
-- 泛型结构体：跳过不优化
-- 外部包结构体：跳过不优化（跨库）
-- 循环引用：检测并避免无限递归
-- 字段有 tag：保留原有 tag
-- 空结构体：跳过
-- 只有一个字段：跳过
+- Generic structs: Skipped
+- External package structs: Skipped (cross-library)
+- Circular references: Detected and avoided
+- Fields with tags: Tags preserved
+- Empty structs: Skipped
+- Single-field structs: Skipped
 
-## 许可证
+## CI/CD
+
+This project uses GitHub Actions for:
+- **Test**: Run on push to main/master and PRs
+- **Release**: Auto-build multi-platform binaries on tag push
+
+See `.github/workflows/` for configuration.
+
+## License
 
 MIT License
 
-## 贡献
+## Contributing
 
-欢迎提交 Issue 和 Pull Request！
+Issues and Pull Requests are welcome!
