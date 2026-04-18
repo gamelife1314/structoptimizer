@@ -560,7 +560,7 @@ type StructDef struct {
 	File    string
 	Type    *types.Struct
 }
-
+// FindAllStructs 查找指定包中的所有结构体
 func (a *Analyzer) FindAllStructs(pkgPath string) ([]StructDef, error) {
 	pkg, err := a.LoadPackage(pkgPath)
 	if err != nil {
@@ -630,6 +630,109 @@ func (a *Analyzer) FindAllStructs(pkgPath string) ([]StructDef, error) {
 	}
 
 	return structs, nil
+}
+
+// FindAllStructsRecursive 递归查找指定包及其所有子包中的结构体
+func (a *Analyzer) FindAllStructsRecursive(rootPkgPath string) ([]StructDef, error) {
+	a.Log(1, "递归扫描包：%s 及其所有子包", rootPkgPath)
+
+	// 收集所有子包路径
+	var allPkgPaths []string
+	visited := make(map[string]bool)
+
+	// 使用 BFS 遍历所有导入的包
+	queue := []string{rootPkgPath}
+	visited[rootPkgPath] = true
+
+	for len(queue) > 0 {
+		currentPkg := queue[0]
+		queue = queue[1:]
+
+		// 加载当前包以获取其导入
+		pkg, err := a.LoadPackage(currentPkg)
+		if err != nil {
+			a.Log(2, "加载包 %s 失败：%v", currentPkg, err)
+			// 即使加载失败，也添加到扫描列表
+			allPkgPaths = append(allPkgPaths, currentPkg)
+			continue
+		}
+
+		// 添加当前包到扫描列表
+		allPkgPaths = append(allPkgPaths, currentPkg)
+
+		// 获取所有导入的包
+		for _, imp := range pkg.Imports {
+			impPath := imp.PkgPath
+			if !visited[impPath] {
+				// 只添加项目内部的包（跳过标准库和 vendor）
+				if a.isProjectPackage(impPath) && !isVendorPackage(impPath) {
+					// 检查是否在根包的子路径下
+					if strings.HasPrefix(impPath, rootPkgPath+"/") {
+						visited[impPath] = true
+						queue = append(queue, impPath)
+					}
+				}
+			}
+		}
+	}
+
+	a.Log(2, "找到 %d 个子包", len(allPkgPaths))
+
+	// 收集所有包中的结构体
+	var allStructs []StructDef
+	for _, pkgPath := range allPkgPaths {
+		structs, err := a.FindAllStructs(pkgPath)
+		if err != nil {
+			a.Log(2, "扫描包 %s 失败：%v", pkgPath, err)
+			continue
+		}
+		allStructs = append(allStructs, structs...)
+		a.Log(3, "包 %s: 找到 %d 个结构体", pkgPath, len(structs))
+	}
+
+	a.Log(1, "递归扫描完成：共找到 %d 个结构体", len(allStructs))
+	return allStructs, nil
+}
+
+// isProjectPackage 判断是否是项目内部的包
+func (a *Analyzer) isProjectPackage(pkgPath string) bool {
+	if pkgPath == "" {
+		return false
+	}
+	if isVendorPackage(pkgPath) {
+		return false
+	}
+	if isStandardLibrary(pkgPath) {
+		return false
+	}
+	return true
+}
+
+// isVendorPackage 判断是否是 vendor 中的包或第三方包
+func isVendorPackage(pkgPath string) bool {
+	// 1. 空包路径（通常是标准库或内置类型）
+	if pkgPath == "" {
+		return true
+	}
+
+	// 2. 检查是否包含 vendor 目录
+	if strings.Contains(pkgPath, "/vendor/") || strings.HasPrefix(pkgPath, "vendor/") {
+		return true
+	}
+
+	return false
+}
+
+// isStandardLibrary 判断是否是 Go 标准库
+func isStandardLibrary(pkgPath string) bool {
+	if pkgPath == "" {
+		return true
+	}
+	// 标准库不包含点号
+	if strings.Contains(pkgPath, ".") {
+		return false
+	}
+	return true
 }
 
 // HasMethod 检查结构体是否有指定方法

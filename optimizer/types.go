@@ -68,6 +68,7 @@ type Config struct {
 	PkgScope       string
 	PkgWorkerLimit int      // 包并发限制（默认 4，防止 OOM）
 	ReservedFields []string // 预留字段名称（始终排在最后）
+	Recursive      bool     // 递归扫描子包（-package 模式）
 }
 
 // StructInfo 结构体信息

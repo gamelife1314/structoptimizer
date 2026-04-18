@@ -136,7 +136,19 @@ func (o *Optimizer) optimizeInternal() (*Report, error) {
 	} else if o.config.Package != "" {
 		// 优化包中所有结构体
 		o.Log(1, "收集包：%s", o.config.Package)
-		structs, err := o.analyzer.FindAllStructs(o.config.Package)
+		
+		var structs []analyzer.StructDef
+		var err error
+		
+		if o.config.Recursive {
+			// 递归扫描所有子包
+			o.Log(1, "递归模式：扫描 %s 及其所有子包", o.config.Package)
+			structs, err = o.analyzer.FindAllStructsRecursive(o.config.Package)
+		} else {
+			// 只扫描当前包
+			structs, err = o.analyzer.FindAllStructs(o.config.Package)
+		}
+		
 		if err != nil {
 			return nil, err
 		}

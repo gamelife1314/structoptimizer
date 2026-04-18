@@ -39,6 +39,7 @@ type Config struct {
 	PkgWorkerLimit int    // 包并发限制
 	ShowVersion    bool   // 显示版本
 	ReservedFields string // 预留字段名称（逗号分隔）
+	Recursive      bool   // 递归扫描子包（-package 模式）
 }
 
 func main() {
@@ -114,6 +115,7 @@ func main() {
 		PkgScope:       cfg.PkgScope,
 		PkgWorkerLimit: cfg.PkgWorkerLimit,
 		ReservedFields: reservedFields,
+		Recursive:      cfg.Recursive,
 	}
 	opt := optimizer.NewOptimizer(optimizerCfg, anlz)
 
@@ -182,6 +184,7 @@ func parseFlags() *Config {
 	flag.StringVar(&cfg.PkgScope, "pkg-scope", "", "包范围限制（GOPATH 模式必填，只分析此包内的结构体）")
 	flag.IntVar(&cfg.PkgWorkerLimit, "pkg-limit", 4, "包并发限制（默认 4，降低可防止 OOM）")
 	flag.StringVar(&cfg.ReservedFields, "reserved-fields", "", "预留字段名称（逗号分隔，始终排在最后，如：reserved,padding,XXX）")
+	flag.BoolVar(&cfg.Recursive, "recursive", false, "递归扫描子包（仅 -package 模式有效）")
 
 	// 详细程度
 	v := flag.Bool("v", false, "显示详细信息")
