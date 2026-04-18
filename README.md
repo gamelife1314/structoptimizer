@@ -1,5 +1,10 @@
 # StructOptimizer
 
+[![Test](https://github.com/gamelife1314/structoptimizer/actions/workflows/test.yml/badge.svg)](https://github.com/gamelife1314/structoptimizer/actions/workflows/test.yml)
+[![Release](https://github.com/gamelife1314/structoptimizer/actions/workflows/release.yml/badge.svg)](https://github.com/gamelife1314/structoptimizer/actions/workflows/release.yml)
+[![Go Report Card](https://goreportcard.com/badge/github.com/gamelife1314/structoptimizer)](https://goreportcard.com/report/github.com/gamelife1314/structoptimizer)
+[![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+
 Golang 结构体对齐优化工具 - 通过重新排列结构体字段顺序，减少内存填充，降低内存占用。
 
 ## 背景
@@ -76,14 +81,39 @@ cd /path/to/project
 
 ## 安装
 
+### 方式 1: 下载预编译二进制（推荐）
+
+从 [GitHub Releases](https://github.com/gamelife1314/structoptimizer/releases) 下载适合您平台的预编译二进制文件：
+
+| 平台 | 架构 | 文件名 |
+|------|------|--------|
+| Linux | amd64 | `structoptimizer-linux-amd64.tar.gz` |
+| Linux | arm64 | `structoptimizer-linux-arm64.tar.gz` |
+| macOS | amd64 | `structoptimizer-darwin-amd64.tar.gz` |
+| macOS | arm64 (Apple Silicon) | `structoptimizer-darwin-arm64.tar.gz` |
+| Windows | amd64 | `structoptimizer-windows-amd64.zip` |
+
+下载后解压并添加到 PATH：
+
 ```bash
-go install github.com/yourusername/structoptimizer/cmd/structoptimizer@latest
+# Linux/macOS
+tar -xzf structoptimizer-*.tar.gz
+sudo mv structoptimizer-* /usr/local/bin/structoptimizer
+
+# Windows
+# 解压后添加到 PATH
 ```
 
-或从源码构建：
+### 方式 2: 使用 go install
 
 ```bash
-git clone https://github.com/yourusername/structoptimizer.git
+go install github.com/gamelife1314/structoptimizer/cmd/structoptimizer@latest
+```
+
+### 方式 3: 从源码构建
+
+```bash
+git clone https://github.com/gamelife1314/structoptimizer.git
 cd structoptimizer
 go build -o structoptimizer ./cmd/structoptimizer
 ```
