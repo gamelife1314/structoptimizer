@@ -213,6 +213,74 @@ structoptimizer -package=github.com/myapp/pkg -recursive -write -backup ./myproj
 - GOPATH+vendor 项目
 - 想要一次性优化整个模块
 
+#### 2.2. GOPATH 项目：`-pkg-scope` 参数（重要）
+
+**仅 GOPATH 模式**下，`-pkg-scope` 参数是**必填的**：
+
+```bash
+# GOPATH 项目 - 必须指定 -pkg-scope
+structoptimizer -prj-type=gopath \
+  -package=github.com/myproject/pkg \
+  -pkg-scope=github.com/myproject \
+  -recursive -write -backup
+```
+
+**`-pkg-scope` 是什么？**
+- 限制分析范围到指定路径前缀下的包
+- 防止分析 GOPATH 中不相关的项目
+- 与 `-recursive` 配合使用，发现范围内所有子包
+
+**如何设置 `-pkg-scope`：**
+1. 确定项目的模块路径（例如：`github.com/myproject`）
+2. 使用根路径作为范围（例如：`-pkg-scope=github.com/myproject`）
+3. 所有此前缀开头的包都会被包含
+
+**示例：**
+```bash
+# 项目结构：
+# $GOPATH/src/github.com/myproject/
+# ├── pkg/
+# │   ├── apis/
+# │   ├── models/
+# │   └── utils/
+# └── vendor/
+
+# 正确用法：
+structoptimizer -prj-type=gopath \
+  -package=github.com/myproject/pkg \
+  -pkg-scope=github.com/myproject \
+  -recursive
+
+# 这将扫描：
+# ✅ github.com/myproject/pkg
+# ✅ github.com/myproject/pkg/apis
+# ✅ github.com/myproject/pkg/models
+# ✅ github.com/myproject/pkg/utils
+# ❌ github.com/otherproject/pkg (超出范围)
+# ❌ vendor/* (自动跳过)
+```
+
+**常见错误：**
+```bash
+# ❌ 缺少 -pkg-scope（GOPATH 模式下会失败）
+structoptimizer -prj-type=gopath -package=github.com/myproject/pkg
+
+# ❌ 范围太窄（找不到子包）
+structoptimizer -prj-type=gopath \
+  -package=github.com/myproject/pkg \
+  -pkg-scope=github.com/myproject/pkg  # 太具体了！
+
+# ✅ 正确：使用项目根路径作为范围
+structoptimizer -prj-type=gopath \
+  -package=github.com/myproject/pkg \
+  -pkg-scope=github.com/myproject
+```
+
+**何时使用：**
+- 传统 GOPATH 项目（Go Modules 之前）
+- 使用 vendor 目录的项目
+- 同一 GOPATH 工作区中的多个项目
+
 #### 3. 跳过第三方代码
 
 ```bash

@@ -213,6 +213,74 @@ structoptimizer -package=github.com/myapp/pkg -recursive -write -backup ./myproj
 - GOPATH+vendor projects
 - When you want to optimize entire module at once
 
+#### 2.2. GOPATH Project: `-pkg-scope` Parameter (IMPORTANT)
+
+**For GOPATH mode only**, the `-pkg-scope` parameter is **REQUIRED**:
+
+```bash
+# GOPATH project - MUST specify -pkg-scope
+structoptimizer -prj-type=gopath \
+  -package=github.com/myproject/pkg \
+  -pkg-scope=github.com/myproject \
+  -recursive -write -backup
+```
+
+**What is `-pkg-scope`?**
+- Limits the analysis scope to packages under the specified path prefix
+- Prevents analyzing unrelated projects in your GOPATH
+- Works with `-recursive` to discover all sub-packages within scope
+
+**How to set `-pkg-scope`:**
+1. Identify your project's module path (e.g., `github.com/myproject`)
+2. Use the root path as scope (e.g., `-pkg-scope=github.com/myproject`)
+3. All packages starting with this prefix will be included
+
+**Example:**
+```bash
+# Project structure:
+# $GOPATH/src/github.com/myproject/
+# ├── pkg/
+# │   ├── apis/
+# │   ├── models/
+# │   └── utils/
+# └── vendor/
+
+# Correct usage:
+structoptimizer -prj-type=gopath \
+  -package=github.com/myproject/pkg \
+  -pkg-scope=github.com/myproject \
+  -recursive
+
+# This will scan:
+# ✅ github.com/myproject/pkg
+# ✅ github.com/myproject/pkg/apis
+# ✅ github.com/myproject/pkg/models
+# ✅ github.com/myproject/pkg/utils
+# ❌ github.com/otherproject/pkg (outside scope)
+# ❌ vendor/* (automatically skipped)
+```
+
+**Common mistakes:**
+```bash
+# ❌ Missing -pkg-scope (will fail in GOPATH mode)
+structoptimizer -prj-type=gopath -package=github.com/myproject/pkg
+
+# ❌ Too narrow scope (won't find sub-packages)
+structoptimizer -prj-type=gopath \
+  -package=github.com/myproject/pkg \
+  -pkg-scope=github.com/myproject/pkg  # Too specific!
+
+# ✅ Correct: use project root as scope
+structoptimizer -prj-type=gopath \
+  -package=github.com/myproject/pkg \
+  -pkg-scope=github.com/myproject
+```
+
+**When to use:**
+- Legacy GOPATH projects (pre-Go Modules)
+- Projects using vendor directory
+- Multiple projects in same GOPATH workspace
+
 #### 3. Skip Third-Party Code
 
 ```bash
