@@ -36,6 +36,15 @@ func (r *Reporter) GenerateMD(report *optimizer.Report) (string, error) {
 		sb.WriteString(fmt.Sprintf("| 📉 总优化后大小 | **%d 字节** |\n", report.TotalOptSize))
 		sb.WriteString(fmt.Sprintf("| 📊 总优化率 | **%.1f%%** |\n", totalOptRate))
 	}
+	if report.RootStruct != "" {
+		sb.WriteString(fmt.Sprintf("| 🎯 主结构体 | `%s` |\n", report.RootStruct))
+		if report.RootStructSize > 0 {
+			optRate := float64(report.RootStructSize-report.RootStructOptSize) / float64(report.RootStructSize) * 100
+			sb.WriteString(fmt.Sprintf("| 📏 优化前大小 | **%d 字节** |\n", report.RootStructSize))
+			sb.WriteString(fmt.Sprintf("| 📏 优化后大小 | **%d 字节** |\n", report.RootStructOptSize))
+			sb.WriteString(fmt.Sprintf("| 📈 优化率 | **%.1f%%** |\n", optRate))
+		}
+	}
 	sb.WriteString("\n")
 
 	// 分类结构体

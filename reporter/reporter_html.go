@@ -74,6 +74,15 @@ func (r *Reporter) GenerateHTML(report *optimizer.Report) (string, error) {
 		sb.WriteString(fmt.Sprintf("                <tr><td>📉 总优化后大小</td><td><strong>%d 字节</strong></td></tr>\n", report.TotalOptSize))
 		sb.WriteString(fmt.Sprintf("                <tr><td>📊 总优化率</td><td><strong>%.1f%%</strong></td></tr>\n", totalOptRate))
 	}
+	if report.RootStruct != "" {
+		sb.WriteString(fmt.Sprintf("                <tr><td>🎯 主结构体</td><td><code>%s</code></td></tr>\n", html.EscapeString(report.RootStruct)))
+		if report.RootStructSize > 0 {
+			optRate := float64(report.RootStructSize-report.RootStructOptSize) / float64(report.RootStructSize) * 100
+			sb.WriteString(fmt.Sprintf("                <tr><td>📏 优化前大小</td><td><strong>%d 字节</strong></td></tr>\n", report.RootStructSize))
+			sb.WriteString(fmt.Sprintf("                <tr><td>📏 优化后大小</td><td><strong>%d 字节</strong></td></tr>\n", report.RootStructOptSize))
+			sb.WriteString(fmt.Sprintf("                <tr><td>📈 优化率</td><td><strong>%.1f%%</strong></td></tr>\n", optRate))
+		}
+	}
 	sb.WriteString("            </table>\n")
 	sb.WriteString("        </div>\n\n")
 

@@ -66,6 +66,15 @@ func (r *Reporter) GenerateTXT(report *optimizer.Report) (string, error) {
 		sb.WriteString(fmt.Sprintf("│  📉 总优化后大小：   %-61d 字节│\n", report.TotalOptSize))
 		sb.WriteString(fmt.Sprintf("│  📊 总优化率：       %-61.1f%%│\n", totalOptRate))
 	}
+	if report.RootStruct != "" {
+		sb.WriteString(fmt.Sprintf("│  🎯 主结构体：     %-61s│\n", report.RootStruct))
+		if report.RootStructSize > 0 {
+			optRate := float64(report.RootStructSize-report.RootStructOptSize) / float64(report.RootStructSize) * 100
+			sb.WriteString(fmt.Sprintf("│     优化前大小：   %-61d 字节│\n", report.RootStructSize))
+			sb.WriteString(fmt.Sprintf("│     优化后大小：   %-61d 字节│\n", report.RootStructOptSize))
+			sb.WriteString(fmt.Sprintf("│     优化率：       %-61.1f%%│\n", optRate))
+		}
+	}
 	sb.WriteString("└────────────────────────────────────────────────────────────────────────────────┘\n\n")
 
 	// 分类结构体

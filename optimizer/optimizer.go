@@ -128,6 +128,9 @@ func (o *Optimizer) optimizeInternal() (*Report, error) {
 			return nil, fmt.Errorf("invalid struct name format: %s", o.config.StructName)
 		}
 
+		// 设置主结构体
+		o.report.RootStruct = o.config.StructName
+
 		o.Log(1, "收集结构体：%s.%s", pkgPath, structName)
 		o.collectStructs(pkgPath, structName, "", 0, 0)
 	} else if o.config.Package != "" {
@@ -187,6 +190,12 @@ func (o *Optimizer) optimizeInternal() (*Report, error) {
 		// 累计所有结构体的总大小
 		o.report.TotalOrigSize += info.OrigSize
 		o.report.TotalOptSize += info.OptSize
+
+		// 如果是主结构体，单独记录大小
+		if o.report.RootStruct != "" && info.PkgPath+"."+info.Name == o.report.RootStruct {
+			o.report.RootStructSize = info.OrigSize
+			o.report.RootStructOptSize = info.OptSize
+		}
 	}
 
 	o.Log(1, "优化完成：共处理 %d 个结构体，优化 %d 个，跳过 %d 个，节省 %d 字节",
