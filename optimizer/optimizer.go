@@ -427,18 +427,18 @@ func (o *Optimizer) createSkippedInfo(key, filePath, reason string) *StructInfo 
 // addReport 添加报告
 func (o *Optimizer) addReport(info *StructInfo, skipReason string, depth int) {
 	// 构建字段类型映射
+	// 注意：key 使用与 OrigOrder/OptOrder 一致的格式（纯字段名，匿名字段用类型名）
 	fieldTypes := make(map[string]string)
 	hasEmbed := false
 	for _, f := range info.Fields {
-		// 为 key 添加前缀以避免匿名字段和命名字段冲突
-		// 匿名字段使用 "embed:" 前缀，命名字段使用 "field:" 前缀
+		// key 与 extractFieldNames 保持一致
 		var key string
-		if f.Name == "" {
-			// 匿名字段：使用 "embed:TypeName" 格式
-			key = "embed:" + f.TypeName
+		if f.Name != "" {
+			// 命名字段：使用字段名
+			key = f.Name
 		} else {
-			// 命名字段：使用 "field:FieldName" 格式
-			key = "field:" + f.Name
+			// 匿名字段：使用类型名
+			key = f.TypeName
 		}
 		fieldTypes[key] = f.TypeName
 

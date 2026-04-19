@@ -321,13 +321,13 @@ type Complex struct {
 	t.Logf("字段类型：%v", complexReport.FieldTypes)
 
 	// 验证所有字段都被正确识别
-	// 注意：现在字段名带有前缀：命名字段使用 "field:FieldName"，匿名字段使用 "embed:TypeName"
+	// 注意：字段名使用纯名称（与 OrigFields/OptFields 一致）
 	expectedFields := map[string]string{
-		"embed:Base":    "Base",    // 匿名字段
-		"field:Name":    "string",  // 命名字段
-		"field:Meta":    "Meta",    // 命名字段（结构体类型）
-		"field:Data":    "*Base",   // 命名字段（指针类型）
-		"field:Enabled": "bool",    // 命名字段
+		"Base":    "Base",    // 匿名字段
+		"Name":    "string",  // 命名字段
+		"Meta":    "Meta",    // 命名字段（结构体类型）
+		"Data":    "*Base",   // 命名字段（指针类型）
+		"Enabled": "bool",    // 命名字段
 	}
 	for fieldKey, expectedType := range expectedFields {
 		if complexReport.FieldTypes != nil {
