@@ -106,14 +106,11 @@ type StructReport struct {
 
 // Report 优化报告
 type Report struct {
-	TotalStructs      int
-	OptimizedCount    int
-	SkippedCount      int
-	TotalSaved        int64
-	StructReports     []*StructReport
-	RootStruct        string // 主结构体名称（-struct 模式）
-	RootStructSize    int64  // 主结构体优化前大小（仅主结构体）
-	RootStructOptSize int64  // 主结构体优化后大小（仅主结构体）
-	TotalOrigSize     int64  // 所有结构体优化前总大小
-	TotalOptSize      int64  // 所有结构体优化后总大小
+	TotalStructs   int
+	OptimizedCount int
+	SkippedCount   int
+	TotalSaved     int64
+	StructReports  []*StructReport
+	TotalOrigSize  int64 // 所有结构体优化前总大小
+	TotalOptSize   int64 // 所有结构体优化后总大小
 }
