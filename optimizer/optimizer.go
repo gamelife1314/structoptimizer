@@ -426,9 +426,10 @@ func (o *Optimizer) createSkippedInfo(key, filePath, reason string) *StructInfo 
 
 // addReport 添加报告
 func (o *Optimizer) addReport(info *StructInfo, skipReason string, depth int) {
-	// 构建字段类型映射
+	// 构建字段类型映射和字段大小映射
 	// 注意：key 使用与 OrigOrder/OptOrder 一致的格式（纯字段名，匿名字段用类型名）
 	fieldTypes := make(map[string]string)
+	fieldSizes := make(map[string]int64)
 	hasEmbed := false
 	for _, f := range info.Fields {
 		// key 与 extractFieldNames 保持一致
@@ -441,6 +442,7 @@ func (o *Optimizer) addReport(info *StructInfo, skipReason string, depth int) {
 			key = f.TypeName
 		}
 		fieldTypes[key] = f.TypeName
+		fieldSizes[key] = f.Size
 
 		// 检查是否是匿名字段
 		// 判断条件：IsEmbed 为 true，且类型是结构体类型（非基本类型）
@@ -459,6 +461,7 @@ func (o *Optimizer) addReport(info *StructInfo, skipReason string, depth int) {
 		OrigFields: info.OrigOrder,
 		OptFields:  info.OptOrder,
 		FieldTypes: fieldTypes,
+		FieldSizes: fieldSizes,
 		Skipped:    info.Skipped,
 		SkipReason: skipReason,
 		Depth:      depth,

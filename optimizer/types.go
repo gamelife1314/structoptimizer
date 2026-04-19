@@ -97,6 +97,7 @@ type StructReport struct {
 	OrigFields []string
 	OptFields  []string
 	FieldTypes map[string]string // 字段名 -> 类型名
+	FieldSizes map[string]int64  // 字段名 -> 大小（字节）
 	Skipped    bool
 	SkipReason string
 	Depth      int

@@ -530,3 +530,130 @@ type Config struct {
 		}
 	}
 }
+
+// TestNestedStructSizeCalculation 测试嵌套结构体大小计算
+// 确保优化前大小 = 优化后大小 + 节省内存
+func TestNestedStructSizeCalculation(t *testing.T) {
+	tmpDir, err := os.MkdirTemp("", "nested_struct_size_*")
+	if err != nil {
+		t.Fatalf("创建临时目录失败：%v", err)
+	}
+	defer os.RemoveAll(tmpDir)
+
+	// 创建 Go Module 项目
+	goModContent := `module testnested
+
+go 1.21
+`
+	if err := os.WriteFile(filepath.Join(tmpDir, "go.mod"), []byte(goModContent), 0644); err != nil {
+		t.Fatalf("写入 go.mod 失败：%v", err)
+	}
+
+	pkgDir := filepath.Join(tmpDir, "pkg")
+	if err := os.MkdirAll(pkgDir, 0755); err != nil {
+		t.Fatalf("创建包目录失败：%v", err)
+	}
+
+	// 创建包含嵌套结构体的测试文件
+	testFile := filepath.Join(pkgDir, "types.go")
+	content := `package pkg
+
+// Inner 嵌套结构体
+type Inner struct {
+	A int64  // 8 字节
+	B bool   // 1 字节
+	C int32  // 4 字节
+	// 原始：8 + 1 + 4 = 13，对齐后 16 字节
+}
+
+// Outer 外层结构体
+type Outer struct {
+	Flag bool    // 1 字节
+	Name string  // 16 字节
+	Data Inner   // 16 字节（嵌套结构体）
+	Age  int32   // 4 字节
+	// 原始顺序：1 + (padding 7) + 16 + 16 + 4 = 44，对齐后 48 字节
+	// 优化后：16 + 16 + 4 + (padding 3) + 1 = 40 字节
+}
+`
+	if err := os.WriteFile(testFile, []byte(content), 0644); err != nil {
+		t.Fatalf("写入测试文件失败：%v", err)
+	}
+
+	// 创建 analyzer 和优化器
+	anlzCfg := &analyzer.Config{
+		TargetDir:   tmpDir,
+		ProjectType: "gomod",
+		Verbose:     0,
+	}
+	anlz := analyzer.NewAnalyzer(anlzCfg)
+
+	optCfg := &optimizer.Config{
+		TargetDir:      tmpDir,
+		StructName:     "testnested/pkg.Outer",
+		ProjectType:    "gomod",
+		Verbose:        0,
+		MaxDepth:       50,
+		Timeout:        300,
+		PkgWorkerLimit: 4,
+	}
+	opt := optimizer.NewOptimizer(optCfg, anlz)
+
+	// 执行优化
+	report, err := opt.Optimize()
+	if err != nil {
+		t.Fatalf("优化失败：%v", err)
+	}
+
+	// 查找 Outer 结构体的报告
+	var outerReport *optimizer.StructReport
+	for _, sr := range report.StructReports {
+		if sr.Name == "Outer" {
+			outerReport = sr
+			break
+		}
+	}
+	if outerReport == nil {
+		t.Fatal("未找到 Outer 结构体的报告")
+	}
+
+	t.Logf("Outer 结构体大小：优化前=%d, 优化后=%d, 节省=%d",
+		outerReport.OrigSize, outerReport.OptSize, outerReport.Saved)
+
+	// 验证：优化前大小 = 优化后大小 + 节省内存
+	if outerReport.OrigSize != outerReport.OptSize+outerReport.Saved {
+		t.Errorf("大小计算错误：优化前 (%d) != 优化后 (%d) + 节省 (%d)",
+			outerReport.OrigSize, outerReport.OptSize, outerReport.Saved)
+	} else {
+		t.Logf("✅ 大小计算正确：%d = %d + %d",
+			outerReport.OrigSize, outerReport.OptSize, outerReport.Saved)
+	}
+
+	// 验证嵌套结构体 Inner 的大小被正确计算（应该是 16 字节）
+	if innerSize, ok := outerReport.FieldSizes["Data"]; !ok {
+		t.Error("字段 'Data' 在 FieldSizes 中不存在")
+	} else if innerSize != 16 {
+		t.Errorf("嵌套结构体 'Data' (Inner) 大小错误：期望 16 字节，得到 %d 字节", innerSize)
+	} else {
+		t.Logf("✅ 嵌套结构体 'Data' (Inner) 大小正确：%d 字节", innerSize)
+	}
+
+	// 验证所有字段大小
+	expectedSizes := map[string]int64{
+		"Flag": 1,
+		"Name": 16,
+		"Data": 16,
+		"Age":  4,
+	}
+
+	for fieldName, expectedSize := range expectedSizes {
+		if actualSize, ok := outerReport.FieldSizes[fieldName]; !ok {
+			t.Errorf("字段 '%s' 在 FieldSizes 中不存在", fieldName)
+		} else if actualSize != expectedSize {
+			t.Errorf("字段 '%s' 大小错误：期望 %d 字节，得到 %d 字节",
+				fieldName, expectedSize, actualSize)
+		} else {
+			t.Logf("✅ 字段 '%s' 大小正确：%d 字节", fieldName, actualSize)
+		}
+	}
+}

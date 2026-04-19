@@ -190,6 +190,10 @@ func estimateFieldSizeWithLookup(expr ast.Expr, pkgDir string) (size, align int6
 			if underlyingKind != types.Invalid {
 				return basicSize(underlyingKind)
 			}
+			// 如果不是基本类型，尝试查找是否是结构体类型
+			if structSize := findStructSizeInPackage(pkgDir, t.Name); structSize > 0 {
+				return structSize, 8
+			}
 		}
 		return sizeOfIdent(t.Name)
 	case *ast.StarExpr:
@@ -210,9 +214,94 @@ func estimateFieldSizeWithLookup(expr ast.Expr, pkgDir string) (size, align int6
 		return 8, 8 // chan
 	case *ast.InterfaceType:
 		return 16, 8 // interface
+	case *ast.StructType:
+		// 直接处理内联结构体（匿名嵌套结构体）
+		size := calcInlineStructSize(t, pkgDir)
+		return size, 8
 	default:
 		return 8, 8
 	}
+}
+
+// findStructSizeInPackage 在包中查找结构体类型的大小
+func findStructSizeInPackage(pkgDir, typeName string) int64 {
+	entries, err := os.ReadDir(pkgDir)
+	if err != nil {
+		return 0
+	}
+
+	for _, entry := range entries {
+		if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".go") || strings.HasSuffix(entry.Name(), "_test.go") {
+			continue
+		}
+
+		filePath := filepath.Join(pkgDir, entry.Name())
+		if size := findStructSizeInFile(filePath, typeName); size > 0 {
+			return size
+		}
+	}
+
+	return 0
+}
+
+// findStructSizeInFile 在文件中查找结构体类型的大小
+func findStructSizeInFile(filePath, typeName string) int64 {
+	fset := token.NewFileSet()
+	f, err := parser.ParseFile(fset, filePath, nil, 0)
+	if err != nil {
+		return 0
+	}
+
+	for _, decl := range f.Decls {
+		genDecl, ok := decl.(*ast.GenDecl)
+		if !ok || genDecl.Tok != token.TYPE {
+			continue
+		}
+
+		for _, spec := range genDecl.Specs {
+			ts, ok := spec.(*ast.TypeSpec)
+			if !ok || ts.Name.Name != typeName {
+				continue
+			}
+
+			if st, ok := ts.Type.(*ast.StructType); ok {
+				return calcInlineStructSize(st, filepath.Dir(filePath))
+			}
+		}
+	}
+
+	return 0
+}
+
+// calcInlineStructSize 计算内联结构体的大小
+func calcInlineStructSize(st *ast.StructType, pkgDir string) int64 {
+	if st == nil || st.Fields == nil {
+		return 0
+	}
+
+	var offset int64 = 0
+	var maxAlign int64 = 1
+
+	for _, field := range st.Fields.List {
+		size, align := estimateFieldSizeWithLookup(field.Type, pkgDir)
+
+		// 对齐
+		if offset%align != 0 {
+			offset += align - (offset % align)
+		}
+
+		offset += size
+		if align > maxAlign {
+			maxAlign = align
+		}
+	}
+
+	// 末尾填充
+	if offset%maxAlign != 0 {
+		offset += maxAlign - (offset % maxAlign)
+	}
+
+	return offset
 }
 
 // findTypeUnderlyingInPackage 在包中查找类型的底层类型

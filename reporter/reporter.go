@@ -122,33 +122,41 @@ func (r *Reporter) GenerateTXT(report *optimizer.Report) (string, error) {
 				maxLen = len(sr.OptFields)
 			}
 
-			for i := 0; i < maxLen; i++ {
-				origName := "-"
-				origType := "-"
-				origSize := ""
-				optName := "-"
-				optType := "-"
-				optSize := ""
-				change := ""
+		for i := 0; i < maxLen; i++ {
+			origName := "-"
+			origType := "-"
+			origSize := ""
+			optName := "-"
+			optType := "-"
+			optSize := ""
+			change := ""
 
-				if i < len(sr.OrigFields) {
-					origName = sr.OrigFields[i]
-					if sr.FieldTypes != nil {
-						if t, ok := sr.FieldTypes[origName]; ok {
-							origType = t
-							origSize = fmt.Sprintf("%d", getFieldSize(t))
-						}
+			if i < len(sr.OrigFields) {
+				origName = sr.OrigFields[i]
+				if sr.FieldTypes != nil {
+					if t, ok := sr.FieldTypes[origName]; ok {
+						origType = t
 					}
 				}
-				if i < len(sr.OptFields) {
-					optName = sr.OptFields[i]
-					if sr.FieldTypes != nil {
-						if t, ok := sr.FieldTypes[optName]; ok {
-							optType = t
-							optSize = fmt.Sprintf("%d", getFieldSize(t))
-						}
+				if sr.FieldSizes != nil {
+					if size, ok := sr.FieldSizes[origName]; ok {
+						origSize = fmt.Sprintf("%d", size)
 					}
 				}
+			}
+			if i < len(sr.OptFields) {
+				optName = sr.OptFields[i]
+				if sr.FieldTypes != nil {
+					if t, ok := sr.FieldTypes[optName]; ok {
+						optType = t
+					}
+				}
+				if sr.FieldSizes != nil {
+					if size, ok := sr.FieldSizes[optName]; ok {
+						optSize = fmt.Sprintf("%d", size)
+					}
+				}
+			}
 
 				// 比较变化时使用完整字段信息（包括类型名）
 				origKey := origName + ":" + origType
