@@ -65,6 +65,8 @@ func analyzeStructFromFile(filePath, structName, pkgPath string) (*StructInfo, *
 	st, fields := extractFieldsFromAST(foundDecl, fset, pkgDir)
 	info.Fields = fields
 	info.OrigOrder = extractFieldNames(fields)
+	// 使用 CalcStructSizeFromFields 计算大小（基于字段的 size 和 align）
+	// 注意：不使用 types.Sizes，因为 st 是简化的 Struct，字段类型是 Invalid
 	info.OrigSize = CalcStructSizeFromFields(fields)
 
 	return info, st, nil
@@ -180,7 +182,12 @@ func estimateFieldSize(expr ast.Expr) (size, align int64) {
 	}
 }
 
-// estimateFieldSizeWithLookup 估算字段大小（带类型查找）
+// EstimateFieldSizeWithLookup 估算字段大小（带类型查找）- 导出用于测试
+func EstimateFieldSizeWithLookup(expr ast.Expr, pkgDir string) (size, align int64) {
+	return estimateFieldSizeWithLookup(expr, pkgDir)
+}
+
+// estimateFieldSizeWithLookupInternal 估算字段大小（带类型查找）- 内部实现
 func estimateFieldSizeWithLookup(expr ast.Expr, pkgDir string) (size, align int64) {
 	switch t := expr.(type) {
 	case *ast.Ident:
@@ -196,6 +203,17 @@ func estimateFieldSizeWithLookup(expr ast.Expr, pkgDir string) (size, align int6
 			}
 		}
 		return sizeOfIdent(t.Name)
+	case *ast.SelectorExpr:
+		// 处理带包前缀的类型（如 time.Time）
+		if ident, ok := t.X.(*ast.Ident); ok {
+			pkgName := ident.Name
+			typeName := t.Sel.Name
+			// 尝试查找标准库或已知外部包的结构体大小
+			if size := getExternalStructSize(pkgName, typeName, pkgDir); size > 0 {
+				return size, 8
+			}
+		}
+		return 8, 8 // 未知外部类型
 	case *ast.StarExpr:
 		return 8, 8 // 指针
 	case *ast.ArrayType:
@@ -221,6 +239,108 @@ func estimateFieldSizeWithLookup(expr ast.Expr, pkgDir string) (size, align int6
 	default:
 		return 8, 8
 	}
+}
+
+// getExternalStructSize 获取外部包（标准库/第三方库）中结构体的大小
+func getExternalStructSize(pkgName, typeName, localPkgDir string) int64 {
+	// 标准库常见类型的大小
+	if pkgName == "time" {
+		switch typeName {
+		case "Time":
+			return 24 // time.Time 的实际大小
+		case "Duration":
+			return 8
+		case "Location":
+			return 8 // 指针
+		}
+	}
+	if pkgName == "sync" {
+		switch typeName {
+		case "Mutex":
+			return 8
+		case "RWMutex":
+			return 16
+		case "WaitGroup":
+			return 16
+		case "Cond":
+			return 16
+		case "Once":
+			return 8
+		}
+	}
+	if pkgName == "context" {
+		switch typeName {
+		case "Context":
+			return 16 // interface
+		case "CancelFunc":
+			return 8 // 函数指针
+		}
+	}
+	if pkgName == "bytes" {
+		switch typeName {
+		case "Buffer":
+			return 72
+		}
+	}
+	if pkgName == "strings" {
+		switch typeName {
+		case "Builder":
+			return 24
+		}
+	}
+	if pkgName == "net" {
+		switch typeName {
+		case "IP":
+			return 24 // slice
+		case "IPMask":
+			return 24 // slice
+		}
+	}
+	if pkgName == "url" {
+		switch typeName {
+		case "URL":
+			return 120
+		}
+	}
+	if pkgName == "http" {
+		switch typeName {
+		case "Request":
+			return 480
+		case "Response":
+			return 320
+		case "Header":
+			return 24 // map
+		}
+	}
+	if pkgName == "json" {
+		switch typeName {
+		case "RawMessage":
+			return 24 // slice
+		}
+	}
+	
+	// 如果不是标准库，尝试在 GOPATH 或 module cache 中查找
+	if localPkgDir != "" {
+		// 尝试在同级目录或 vendor 中查找
+		if size := findStructSizeInVendorOrDep(pkgName, typeName, localPkgDir); size > 0 {
+			return size
+		}
+	}
+	
+	return 0
+}
+
+// findStructSizeInVendorOrDep 在 vendor 或依赖目录中查找结构体大小
+func findStructSizeInVendorOrDep(pkgName, typeName, localPkgDir string) int64 {
+	// 尝试在 vendor 目录查找
+	vendorDir := filepath.Join(localPkgDir, "..", "..", "vendor", pkgName)
+	if size := findStructSizeInPackage(vendorDir, typeName); size > 0 {
+		return size
+	}
+	
+	// 尝试在 GOPATH/pkg/mod 中查找（简化处理，只检查常见路径）
+	// 实际项目中可能需要更复杂的路径解析
+	return 0
 }
 
 // findStructSizeInPackage 在包中查找结构体类型的大小

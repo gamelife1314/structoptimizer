@@ -364,6 +364,12 @@ func (o *Optimizer) optimizeStruct(pkgPath, structName, filePath string, depth i
 
 		// 分析结构体
 		info = o.fieldAnalyzer.AnalyzeStruct(st, structName, pkgPath, filePath)
+		
+		// 使用 types.Sizes 重新计算大小（与 unsafe.Sizeof 一致）
+		sizes := types.SizesFor("gc", "amd64")
+		if sizes != nil {
+			info.OrigSize = sizes.Sizeof(st)
+		}
 	}
 
 	// 检查是否应该跳过
