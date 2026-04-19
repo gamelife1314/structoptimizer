@@ -29,6 +29,13 @@ func (r *Reporter) GenerateMD(report *optimizer.Report) (string, error) {
 	} else {
 		sb.WriteString("| 💾 节省内存 | 0 字节 |\n")
 	}
+	// 显示总优化前/后大小
+	if report.TotalOrigSize > 0 {
+		totalOptRate := float64(report.TotalOrigSize-report.TotalOptSize) / float64(report.TotalOrigSize) * 100
+		sb.WriteString(fmt.Sprintf("| 📈 总优化前大小 | **%d 字节** |\n", report.TotalOrigSize))
+		sb.WriteString(fmt.Sprintf("| 📉 总优化后大小 | **%d 字节** |\n", report.TotalOptSize))
+		sb.WriteString(fmt.Sprintf("| 📊 总优化率 | **%.1f%%** |\n", totalOptRate))
+	}
 	if report.RootStruct != "" {
 		sb.WriteString(fmt.Sprintf("| 🎯 主结构体 | `%s` |\n", report.RootStruct))
 		if report.RootStructSize > 0 {

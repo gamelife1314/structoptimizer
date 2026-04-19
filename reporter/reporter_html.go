@@ -67,6 +67,13 @@ func (r *Reporter) GenerateHTML(report *optimizer.Report) (string, error) {
 	} else {
 		sb.WriteString("                <tr><td>💾 节省内存</td><td><strong>0 字节</strong></td></tr>\n")
 	}
+	// 显示总优化前/后大小
+	if report.TotalOrigSize > 0 {
+		totalOptRate := float64(report.TotalOrigSize-report.TotalOptSize) / float64(report.TotalOrigSize) * 100
+		sb.WriteString(fmt.Sprintf("                <tr><td>📈 总优化前大小</td><td><strong>%d 字节</strong></td></tr>\n", report.TotalOrigSize))
+		sb.WriteString(fmt.Sprintf("                <tr><td>📉 总优化后大小</td><td><strong>%d 字节</strong></td></tr>\n", report.TotalOptSize))
+		sb.WriteString(fmt.Sprintf("                <tr><td>📊 总优化率</td><td><strong>%.1f%%</strong></td></tr>\n", totalOptRate))
+	}
 	if report.RootStruct != "" {
 		sb.WriteString(fmt.Sprintf("                <tr><td>🎯 主结构体</td><td><code>%s</code></td></tr>\n", html.EscapeString(report.RootStruct)))
 		if report.RootStructSize > 0 {
