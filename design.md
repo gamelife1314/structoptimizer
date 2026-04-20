@@ -1,107 +1,100 @@
-# StructOptimizer 设计文档
+# StructOptimizer Design Document
 
-## 1. 概述
+## 1. Overview
 
-StructOptimizer 是一个用于优化 Go 项目结构体字段对齐的静态分析工具。通过重新排列结构体字段顺序，减少内存填充（padding），从而降低内存占用。
+StructOptimizer is a static analysis tool for optimizing Go struct field alignment. By reordering struct fields, it reduces memory padding and lowers memory consumption.
 
-### 1.1 问题背景
+### 1.1 Problem Statement
 
-在大型 Go 项目中，开发人员可能没有充分考虑结构体字段对齐问题，导致浪费大量内存：
+In large Go projects, developers may not fully consider struct field alignment, leading to significant memory waste:
 
 ```go
-// 优化前：32 字节
+// Before: 32 bytes
 type BadStruct struct {
-    A bool   // 1 字节 + 7 字节填充
-    B int64  // 8 字节
-    C int32  // 4 字节
-    D bool   // 1 字节 + 3 字节填充
-    E int32  // 4 字节
-    // 4 字节末尾填充
+    A bool   // 1 byte + 7 bytes padding
+    B int64  // 8 bytes
+    C int32  // 4 bytes
+    D bool   // 1 byte + 3 bytes padding
+    E int32  // 4 bytes
+    // 4 bytes trailing padding
 }
 
-// 优化后：24 字节（节省 25%）
+// After: 24 bytes (25% savings)
 type GoodStruct struct {
-    B int64  // 8 字节
-    C int32  // 4 字节
-    E int32  // 4 字节
-    A bool   // 1 字节
-    D bool   // 1 字节
-    // 6 字节末尾填充
+    B int64  // 8 bytes
+    C int32  // 4 bytes
+    E int32  // 4 bytes
+    A bool   // 1 byte
+    D bool   // 1 byte
+    // 6 bytes trailing padding
 }
 ```
 
-### 1.2 解决方案
+### 1.2 Solution
 
-- 自动分析结构体字段布局
-- 智能重排字段顺序
-- 支持嵌套结构体优化
-- 支持跨包引用优化
-- 生成详细优化报告
+- Automatically analyze struct field layout
+- Intelligently reorder fields to minimize padding
+- Support nested struct optimization (depth-first)
+- Support cross-package reference optimization
+- Support both Go Modules and GOPATH projects
+- Generate detailed optimization reports (Markdown, TXT, HTML) with bilingual support (Chinese/English)
+- Optionally rewrite source files with optimized field order
 
-## 2. 核心原理
+## 2. Core Principles
 
-### 2.1 Go 结构体内存对齐规则
+### 2.1 Go Struct Memory Alignment Rules
 
-1. **字段对齐**：每个字段根据其类型大小进行对齐
-   - `bool`, `int8`: 1 字节对齐
-   - `int16`: 2 字节对齐
-   - `int32`, `float32`: 4 字节对齐
-   - `int64`, `float64`: 8 字节对齐
+1. **Field Alignment**: Each field is aligned according to its type size:
+   - `bool`, `int8`: 1-byte alignment
+   - `int16`: 2-byte alignment
+   - `int32`, `float32`: 4-byte alignment
+   - `int64`, `float64`: 8-byte alignment
 
-2. **结构体对齐**：结构体总大小必须是其最大字段对齐要求的倍数
+2. **Struct Alignment**: The total size of a struct must be a multiple of its largest field's alignment requirement.
 
-3. **填充计算**：
+3. **Padding Calculation**:
    ```
-   偏移量 = (当前偏移 + 对齐 - 1) / 对齐 * 对齐
-   总大小 = (总大小 + 最大对齐 - 1) / 最大对齐 * 最大对齐
+   offset = (current_offset + alignment - 1) / alignment * alignment
+   total_size = (total_size + max_alignment - 1) / max_alignment * max_alignment
    ```
 
-### 2.2 优化策略
+### 2.2 Optimization Strategy
 
-| 策略 | 说明 | 实现 |
-|------|------|------|
-| 字段重排 | 按字段大小从大到小排序 | `ReorderFields()` |
-| 深度优先 | 递归优化嵌套结构体 | `optimizeStruct()` |
-| 去重优化 | 相同结构体只优化一次 | `optimized` map |
-| 跳过规则 | 支持多种跳过条件 | `shouldSkip()` |
+| Strategy | Description | Implementation |
+|----------|-------------|----------------|
+| Field Reordering | Sort fields from largest to smallest | `ReorderFields()` |
+| Depth-First | Recursively optimize nested structs | `optimizeStruct()` |
+| Deduplication | Optimize each struct only once | `optimized` map |
+| Skip Rules | Multiple skip conditions supported | `shouldSkip()` |
+| Reserved Fields | Designated fields always placed last | `ReservedFields` config |
 
-## 3. 系统架构
+### 2.3 Skip Rules
 
-### 3.1 整体架构图
+Structs are skipped under these conditions:
+- Empty structs (no fields)
+- Single-field structs (no optimization possible)
+- Structs with specified methods (`-skip-by-methods`)
+- Structs with specified names (`-skip-by-names`)
+- Files matching skip patterns (`-skip-files`, `-skip-dirs`)
+- External package structs that cannot be resolved
 
-```
-┌─────────────────────────────────────────────────────────────────────────┐
-│                         StructOptimizer                                  │
-│                    Go 结构体对齐优化工具                                  │
-└─────────────────────────────────────────────────────────────────────────┘
-                                    │
-        ┌───────────────────────────┼───────────────────────────┐
-        │                           │                           │
-        ▼                           ▼                           ▼
-┌───────────────────┐   ┌───────────────────┐   ┌───────────────────┐
-│    输入层          │   │    处理层          │   │    输出层          │
-│                   │   │                   │   │                   │
-│  - 命令行参数      │   │  - 包分析         │   │  - 优化报告       │
-│  - 项目目录        │   │  - 结构体查找     │   │  - 源码修改       │
-│  - 配置选项        │   │  - 字段优化       │   │  - 文件备份       │
-└───────────────────┘   └───────────────────┘   └───────────────────┘
-```
+## 3. System Architecture
 
-### 3.2 模块架构图
+### 3.1 Module Architecture
 
 ```
-┌─────────────────────────────────────────────────────────────────────────┐
-│  main.go (CLI 入口)                                                      │
-│  - 参数解析 (flag)                                                       │
-│  - 模块协调                                                              │
-└─────────────────────────────────────────────────────────────────────────┘
+┌─────────────────────────────────────────────────────────────────────┐
+│  main.go (CLI Entry)                                                 │
+│  - Flag parsing (flag)                                               │
+│  - Module coordination                                               │
+└─────────────────────────────────────────────────────────────────────┘
          │
          ├──────────────────┬──────────────────┬──────────────────┐
          │                  │                  │                  │
          ▼                  ▼                  ▼                  ▼
 ┌─────────────────┐ ┌─────────────────┐ ┌─────────────────┐ ┌─────────────┐
 │   analyzer      │ │   optimizer     │ │   reporter      │ │   writer    │
-│   分析器模块     │ │   优化器模块     │ │   报告模块      │ │   写入模块  │
+│   Analyzer      │ │   Optimizer     │ │   Reporter      │ │   Writer    │
 │                 │ │                 │ │                 │ │             │
 │ • LoadPackage   │ │ • Optimize      │ │ • GenerateMD    │ │ • Backup    │
 │ • FindStruct    │ │ • ReorderFields │ │ • GenerateTXT   │ │ • Rewrite   │
@@ -113,8 +106,8 @@ type GoodStruct struct {
          ▼                  ▼                             ▼
 ┌─────────────────┐ ┌─────────────────┐         ┌─────────────────┐
 │   internal/     │ │   optimizer/    │         │   testdata/     │
-│   utils         │ │   • field.go    │         │   测试数据       │
-│   工具函数       │ │   • size.go     │         │                 │
+│   utils         │ │   • field.go    │         │   Test data     │
+│   Utilities     │ │   • size.go     │         │                 │
 │                 │ │   • optimizer   │         │ • basic/        │
 │ • MatchPattern  │ │                 │         │ • nested/       │
 │ • FormatSize    │ │                 │         │ • crosspkg/     │
@@ -122,18 +115,18 @@ type GoodStruct struct {
 └─────────────────┘ └─────────────────┘         └─────────────────┘
 ```
 
-### 3.3 数据流图
+### 3.2 Data Flow
 
 ```
                     ┌──────────────┐
-                    │  用户输入     │
-                    │  命令行参数   │
+                    │  User Input   │
+                    │  CLI Flags    │
                     └──────┬───────┘
                            │
                            ▼
                     ┌──────────────┐
-                    │   CLI 解析    │
-                    │  (main.go)   │
+                    │   CLI Parse   │
+                    │  (main.go)    │
                     └──────┬───────┘
                            │
            ┌───────────────┼───────────────┐
@@ -141,150 +134,112 @@ type GoodStruct struct {
            ▼               ▼               ▼
     ┌────────────┐ ┌────────────┐ ┌────────────┐
     │  Analyzer  │ │ Optimizer  │ │  Reporter  │
-    │  加载包     │ │ 优化结构体  │ │ 生成报告   │
+    │  Load Pkg  │ │ Optimize   │ │ Generate   │
     └─────┬──────┘ └─────┬──────┘ └─────┬──────┘
-          │              │               │
           │              │               │
           ▼              ▼               ▼
     ┌────────────┐ ┌────────────┐ ┌────────────┐
-    │ 包信息      │ │ 优化结果   │ │ MD/TXT/   │
-    │ AST        │ │ 字段顺序   │ │ HTML       │
-    │ 类型信息   │ │ 内存节省   │ │            │
+    │ Pkg Info   │ │ Results    │ │ MD/TXT/   │
+    │ AST        │ │ Field Order│ │ HTML       │
+    │ Types      │ │ Mem Savings│ │ Report     │
     └────────────┘ └────────────┘ └────────────┘
                            │
                            ▼
                     ┌──────────────┐
                     │    Writer    │
-                    │  写入文件     │
-                    │  备份原文件   │
+                    │  Write Files │
+                    │  Backup      │
                     └──────────────┘
 ```
 
-### 3.4 优化流程图
+### 3.3 Optimization Flow
 
 ```
-┌─────────────────────────────────────────────────────────────────────────┐
-│                        优化流程                                         │
-└─────────────────────────────────────────────────────────────────────────┘
-
     ┌─────────┐
-    │  开始   │
+    │  Start  │
     └────┬────┘
          │
          ▼
     ┌─────────────┐
-    │ 加载包信息   │
+    │ Load Pkg    │
     └─────┬───────┘
           │
           ▼
     ┌─────────────┐     ┌──────────┐
-    │ 查找结构体   │────▶│ 已优化？  │───┐
-    └─────┬───────┘     └────┬─────┘   │
-          │                  │否       │
+    │ Find Struct  │────▶│Already   │───┐
+    └─────┬───────┘     │Optimized?│   │
+          │             └────┬─────┘   │
+          │                  │No       │
           │                  ▼         │
           │            ┌──────────┐    │
-          │            │ 应跳过？  │────┤
+          │            │Should    │────┤
+          │            │Skip?     │    │
           │            └────┬─────┘    │
-          │                 │否        │
+          │                 │No        │
           │                 ▼          │
           │           ┌────────────┐   │
-          │           │ 优化嵌套   │   │
-          │           │ 字段结构体  │   │
+          │           │Optimize    │   │
+          │           │Nested      │   │
+          │           │Structs     │   │
           │           └─────┬──────┘   │
           │                 │          │
           │                 ▼          │
           │           ┌────────────┐   │
-          │           │ 重排字段   │   │
-          │           └─────┬──────┘   │
-          │                 │          │
-          │                 ▼          │
-          │           ┌────────────┐   │
-          │           │ 计算大小   │   │
+          │           │Reorder     │   │
+          │           │Fields      │   │
           │           └─────┬──────┘   │
           │                 │          │
           │                 ▼          │
           └────────────▶┌────────┐◀────┘
-                        │ 记录   │
-                        │ 结果   │
+                        │Record  │
+                        │Results │
                         └───┬────┘
                             │
                             ▼
                       ┌─────────┐
-                      │  结束   │
+                      │  End    │
                       └─────────┘
 ```
 
-### 3.5 模块调用关系图
+## 4. Module Design
 
-```
-┌─────────────────────────────────────────────────────────────────────────┐
-│  main.go                                                                 │
-│                                                                          │
-│  ┌────────────────────────────────────────────────────────────┐         │
-│  │  1. parseFlags()    解析命令行参数                          │         │
-│  │  2. NewAnalyzer()   创建分析器                              │         │
-│  │  3. NewOptimizer()  创建优化器                              │         │
-│  │  4. Optimize()      执行优化                                │         │
-│  │  5. Generate()      生成报告                                │         │
-│  │  6. WriteFiles()    写入文件                                │         │
-│  └────────────────────────────────────────────────────────────┘         │
-└─────────────────────────────────────────────────────────────────────────┘
-         │
-         │ calls
-         ▼
-┌─────────────────────────────────────────────────────────────────────────┐
-│  analyzer/analyzer.go                                                    │
-│                                                                          │
-│  ┌────────────────────────────────────────────────────────────┐         │
-│  │  LoadPackage()      加载包及其依赖                          │         │
-│  │  FindStructByName() 查找指定结构体                         │         │
-│  │  FindAllStructs()   查找所有结构体                          │         │
-│  │  HasMethod()        检查结构体方法                          │         │
-│  └────────────────────────────────────────────────────────────┘         │
-└─────────────────────────────────────────────────────────────────────────┘
-         │
-         │ uses
-         ▼
-┌─────────────────────────────────────────────────────────────────────────┐
-│  optimizer/optimizer.go                                                  │
-│                                                                          │
-│  ┌────────────────────────────────────────────────────────────┐         │
-│  │  Optimize()         优化入口                               │         │
-│  │  optimizeStruct()   优化单个结构体（递归）                  │         │
-│  │  shouldSkip()       检查是否跳过                            │         │
-│  │  ReorderFields()    重排字段                                │         │
-│  │  isStructType()     判断结构体类型                          │         │
-│  └────────────────────────────────────────────────────────────┘         │
-└─────────────────────────────────────────────────────────────────────────┘
-```
-
-## 4. 模块设计
-
-### 4.1 CLI 模块 (`cmd/structoptimizer/main.go`)
+### 4.1 CLI Module (`cmd/structoptimizer/main.go`)
 
 ```go
 type Config struct {
-    Struct          string   // 结构体名称
-    Package         string   // 包路径
-    SourceFile      string   // 源文件路径
-    Write           bool     // 是否写入源文件
-    Backup          bool     // 是否备份
-    SkipDirs        []string // 跳过的目录
-    SkipFiles       []string // 跳过的文件
-    SkipByMethods   []string // 跳过的方法
-    Output          string   // 报告输出路径
-    Verbose         int      // 详细程度
-    SortSameSize    bool     // 大小相同重排
-    TargetDir       string   // 目标目录
+    Struct         string        // Struct name (pkg.StructName format)
+    Package        string        // Package path (mutually exclusive with -struct)
+    SourceFile     string        // Source file path
+    Write          bool          // Write optimized fields to source files
+    Backup         bool          // Backup source files before modification
+    SkipDirs       string        // Directories to skip (comma-separated, glob patterns)
+    SkipFiles      string        // Files to skip (comma-separated, glob patterns)
+    SkipByMethods  string        // Skip structs with these methods (comma-separated)
+    SkipByNames    string        // Skip structs with these names (comma-separated)
+    Output         string        // Report output path
+    Verbose        int           // Verbosity level (0-3)
+    SortSameSize   bool          // Reorder fields of same size
+    ReportFormat   string        // Report format: md, txt, html
+    ProjectType    string        // Project type: gomod or gopath
+    GOPATH         string        // GOPATH path (optional, for GOPATH projects)
+    TargetDir      string        // Target directory (positional argument)
+    MaxDepth       int           // Maximum recursion depth
+    Timeout        int           // Timeout in seconds
+    PkgScope       string        // Package scope limit (required for GOPATH mode)
+    PkgWorkerLimit int           // Package concurrency limit
+    ShowVersion    bool          // Show version
+    ReservedFields string        // Reserved field names (comma-separated, placed last)
+    Recursive      bool          // Recursive scan of sub-packages (-package mode)
+    Lang           reporter.Lang // Report language: zh (default) or en
 }
 ```
 
-**职责**：
-- 解析命令行参数
-- 协调各模块工作
-- 错误处理和日志输出
+**Responsibilities**:
+- Parse command-line arguments
+- Coordinate module workflows
+- Error handling and logging
 
-### 4.2 分析器模块 (`analyzer/analyzer.go`)
+### 4.2 Analyzer Module (`analyzer/analyzer.go`)
 
 ```go
 type Analyzer struct {
@@ -296,33 +251,33 @@ type Analyzer struct {
 }
 ```
 
-**核心方法**：
-- `LoadPackage()`: 加载包及其依赖
-- `FindStructByName()`: 查找指定结构体
-- `FindAllStructs()`: 查找包中所有结构体
-- `HasMethod()`: 检查结构体是否有指定方法
+**Core Methods**:
+- `LoadPackage()`: Load package and its dependencies
+- `FindStructByName()`: Find a specific struct by name
+- `FindAllStructs()`: Find all structs in a package
+- `HasMethod()`: Check if a struct has a specified method
 
-**依赖**：
+**Dependencies**:
 - `golang.org/x/tools/go/packages`
 - `go/ast`, `go/types`, `go/token`
 
-### 4.3 优化器模块 (`optimizer/`)
+### 4.3 Optimizer Module (`optimizer/`)
 
-#### 4.3.1 字段信息 (`field.go`)
+#### 4.3.1 Field Info (`field.go`)
 
 ```go
 type FieldInfo struct {
-    Name     string      // 字段名
-    Type     types.Type  // 字段类型
-    Size     int64       // 字段大小
-    Align    int64       // 对齐要求
-    IsEmbed  bool        // 是否匿名
-    PkgPath  string      // 类型包路径
-    TypeName string      // 类型名称
+    Name     string      // Field name
+    Type     types.Type  // Field type
+    Size     int64       // Field size in bytes
+    Align    int64       // Alignment requirement
+    IsEmbed  bool        // Whether it's an embedded field
+    PkgPath  string      // Type package path
+    TypeName string      // Type name
 }
 ```
 
-#### 4.3.2 大小计算 (`size.go`)
+#### 4.3.2 Size Calculation (`size.go`)
 
 ```go
 func CalcStructSize(st *types.Struct) int64
@@ -330,7 +285,9 @@ func CalcFieldSize(typ types.Type) (size, align int64)
 func CalcOptimizedSize(fields []FieldInfo) int64
 ```
 
-#### 4.3.3 核心优化 (`optimizer.go`)
+Supports all Go types: basic types, pointers, structs, slices, maps, channels, functions, interfaces, arrays, and type aliases.
+
+#### 4.3.3 Core Optimization (`optimizer.go`)
 
 ```go
 type Optimizer struct {
@@ -338,30 +295,100 @@ type Optimizer struct {
     analyzer    *analyzer.Analyzer
     optimized   map[string]*StructInfo
     report      *Report
+    methodIndex *MethodIndex
+    // ... caching and concurrency fields
 }
 
 func (o *Optimizer) Optimize() (*Report, error)
 func (o *Optimizer) optimizeStruct(pkgPath, structName string, depth int)
 ```
 
-### 4.4 报告模块 (`reporter/reporter.go`)
+**Features**:
+- Depth-first recursive optimization of nested structs
+- Cross-package struct resolution
+- Parallel processing with configurable worker limits
+- Package and struct caching for performance
+
+#### 4.3.4 Reordering (`reorder.go`)
 
 ```go
+func ReorderFields(fields []FieldInfo, sortSameSize bool, reserved []string) []FieldInfo
+```
+
+**Algorithm**:
+1. Separate embedded fields and named fields
+2. Sort named fields by size (descending), then by alignment (if `sortSameSize`)
+3. Place reserved fields at the end
+4. Merge: embedded fields + sorted named fields + reserved fields
+
+### 4.4 Reporter Module (`reporter/`)
+
+#### 4.4.1 Report Types
+
+```go
+type ReportLevel int
+
+const (
+    ReportLevelSummary ReportLevel = iota  // Summary only
+    ReportLevelChanged                     // Summary + changed structs
+    ReportLevelFull                        // All structs
+)
+
 type Report struct {
-    TotalStructs   int
-    OptimizedCount int
-    SkippedCount   int
-    TotalSaved     int64
-    StructReports  []*StructReport
+    TotalStructs      int
+    OptimizedCount    int
+    SkippedCount      int
+    TotalSaved        int64
+    StructReports     []*StructReport
+    RootStruct        string  // Root struct name (-struct mode)
+    RootStructSize    int64   // Root struct size before optimization
+    RootStructOptSize int64   // Root struct size after optimization
+    TotalOrigSize     int64   // Total size before optimization
+    TotalOptSize      int64   // Total size after optimization
+}
+
+type StructReport struct {
+    Name       string
+    PkgPath    string
+    File       string
+    OrigSize   int64
+    OptSize    int64
+    Saved      int64
+    OrigFields []string
+    OptFields  []string
+    FieldTypes map[string]string  // field name -> type name
+    FieldSizes map[string]int64   // field name -> size (bytes)
+    Skipped    bool
+    SkipReason string
+    Depth      int
+    HasEmbed   bool
 }
 ```
 
-**支持的格式**：
-- Markdown (默认)
-- TXT
-- HTML
+#### 4.4.2 Internationalization (i18n)
 
-### 4.5 写入模块 (`writer/writer.go`)
+The reporter supports bilingual output through a language system:
+
+```go
+type Lang string
+
+const (
+    LangZH Lang = "zh"  // Chinese (default)
+    LangEN Lang = "en"  // English
+)
+```
+
+All UI strings are defined in `reporter_i18n.go` with separate structs for each language. The `getStrings()` function returns the appropriate language bundle based on the configured `Lang`.
+
+#### 4.4.3 Supported Formats
+
+| Format | File | Description |
+|--------|------|-------------|
+| Markdown (default) | `reporter_md.go` | Rich markdown with tables and code blocks |
+| TXT | `reporter.go` | Plain text with box-drawing characters |
+| HTML | `reporter_html.go` | Styled HTML with responsive tables |
+
+### 4.5 Writer Module (`writer/writer.go`)
 
 ```go
 type SourceWriter struct {
@@ -373,9 +400,14 @@ func (w *SourceWriter) BackupFile(filePath string) (string, error)
 func (w *SourceWriter) RewriteFile(filePath string, optimized map[string]*StructInfo) error
 ```
 
-## 5. 算法设计
+**Features**:
+- Creates `.bak` backups before modifying files
+- Preserves comments, build tags, and formatting
+- Uses `go/printer` for proper Go code formatting
 
-### 5.1 字段大小计算算法
+## 5. Algorithm Design
+
+### 5.1 Field Size Calculation
 
 ```go
 func CalcFieldSize(typ types.Type) (size, align int64) {
@@ -387,53 +419,55 @@ func CalcFieldSize(typ types.Type) (size, align int64) {
     case *types.Struct:
         return CalcStructSize(t), structAlign(t)
     case *types.Slice:
-        return sizeof(slice), alignof(slice)
+        return sizeof(sliceHeader), alignof(sliceHeader)
     case *types.Map:
-        return sizeof(map), alignof(map)
-    // ... 其他类型
+        return sizeof(mapHeader), alignof(mapHeader)
+    case *types.Array:
+        return t.Len() * elemSize, elemAlign
+    // ... other types
     }
 }
 ```
 
-### 5.2 结构体大小计算算法
+### 5.2 Struct Size Calculation
 
 ```go
 func CalcStructSize(st *types.Struct) int64 {
     var offset int64 = 0
     var maxAlign int64 = 1
-    
+
     for i := 0; i < st.NumFields(); i++ {
         field := st.Field(i)
         size, align := CalcFieldSize(field.Type())
-        
-        // 对齐偏移
+
+        // Align offset
         if offset % align != 0 {
             offset += align - (offset % align)
         }
-        
+
         offset += size
         if align > maxAlign {
             maxAlign = align
         }
     }
-    
-    // 末尾填充
+
+    // Trailing padding
     if offset % maxAlign != 0 {
         offset += maxAlign - (offset % maxAlign)
     }
-    
+
     return offset
 }
 ```
 
-### 5.3 字段重排算法
+### 5.3 Field Reordering
 
 ```go
-func ReorderFields(fields []FieldInfo, sortSameSize bool) []FieldInfo {
-    // 1. 分离匿名字段和命名字段
-    var embeds, named []FieldInfo
-    
-    // 2. 对命名字段排序（按大小降序）
+func ReorderFields(fields []FieldInfo, sortSameSize bool, reserved []string) []FieldInfo {
+    // 1. Separate embedded, reserved, and named fields
+    var embeds, reserved, named []FieldInfo
+
+    // 2. Sort named fields by size (descending), then alignment
     sort.Slice(named, func(i, j int) bool {
         if named[i].Size != named[j].Size {
             return named[i].Size > named[j].Size
@@ -443,227 +477,327 @@ func ReorderFields(fields []FieldInfo, sortSameSize bool) []FieldInfo {
         }
         return false
     })
-    
-    // 3. 合并：匿名 + 命名
-    return append(embeds, named...)
+
+    // 3. Merge: embedded + sorted named + reserved
+    return append(append(embeds, named...), reserved...)
 }
 ```
 
-### 5.4 深度优先优化算法
+### 5.4 Depth-First Optimization
 
 ```go
 func optimizeStruct(pkgPath, structName string, depth int) {
-    // 1. 检查是否已优化
+    // 1. Check if already optimized
     if _, ok := optimized[key]; ok {
         return
     }
-    
-    // 2. 检查是否应跳过
+
+    // 2. Check skip conditions
     if shouldSkip() {
         return
     }
-    
-    // 3. 递归优化嵌套结构体（深度优先）
+
+    // 3. Recursively optimize nested structs (depth-first)
     for _, field := range fields {
         if isStructType(field.Type) {
             optimizeStruct(field.PkgPath, field.TypeName, depth+1)
         }
     }
-    
-    // 4. 重排当前结构体字段
+
+    // 4. Reorder current struct fields
     ReorderFields()
 }
 ```
 
-## 6. 接口设计
+## 6. Interface Design
 
-### 6.1 命令行接口
+### 6.1 Command-Line Interface
 
 ```bash
-# 基本用法
+# Basic usage
 ./structoptimizer [flags] [directory]
 
-# 优化单个结构体
-./structoptimizer -struct=writer/config.Context ./
+# Optimize a single struct
+./structoptimizer -struct=pkg.Context ./
 
-# 优化整个包
-./structoptimizer --package writer/config ./
+# Optimize an entire package
+./structoptimizer --package pkg/path ./
 
-# 优化并写入
-./structoptimizer -struct=writer/config.Context --write --backup ./
+# Optimize and write changes
+./structoptimizer -struct=pkg.Context --write --backup ./
 
-# 跳过某些文件
-./structoptimizer --package writer/config \
+# Skip specific files
+./structoptimizer --package pkg/path \
     -skip "*.pb.go" \
     -skip "*_test.go" \
     ./
+
+# Generate English report in HTML format
+./structoptimizer -struct=pkg.Context --format html --lang en -o report.html ./
+
+# GOPATH project with recursive scan
+./structoptimizer -prj-type=gopath -struct=example.com/pkg.MyStruct \
+    -pkg-scope=example.com/pkg -recursive
 ```
 
-### 6.2 配置接口
+### 6.2 Key Flags
+
+| Flag | Description | Default |
+|------|-------------|---------|
+| `-struct` | Struct name (`pkg.StructName` format) | - |
+| `-package` | Package path (mutually exclusive with `-struct`) | - |
+| `-write` | Write optimized fields to source files | `false` |
+| `-backup` | Backup source files before modification | `true` |
+| `-format` | Report format (`md`/`txt`/`html`) | `md` |
+| `-lang` | Report language (`zh`/`en`) | `zh` |
+| `-output` | Report output file path | stdout |
+| `-skip-dirs` | Directories to skip (glob, comma-separated) | - |
+| `-skip-files` | Files to skip (glob, comma-separated) | - |
+| `-skip-by-methods` | Skip structs with these methods | - |
+| `-skip-by-names` | Skip structs with these names | - |
+| `-prj-type` | Project type (`gomod`/`gopath`) | `gomod` |
+| `-gopath` | GOPATH path (for GOPATH projects) | - |
+| `-pkg-scope` | Package scope limit (GOPATH mode required) | - |
+| `-max-depth` | Maximum recursion depth | `50` |
+| `-timeout` | Timeout in seconds | `1200` |
+| `-pkg-limit` | Package concurrency limit | `4` |
+| `-reserved-fields` | Reserved fields placed last (comma-separated) | - |
+| `-recursive` | Recursive sub-package scan (`-package` mode) | `false` |
+| `-sort-same-size` | Reorder same-size fields | `false` |
+| `-v`, `-vv`, `-vvv` | Verbosity levels | - |
+| `-version` | Show version | - |
+
+### 6.3 Reporter Interface
 
 ```go
-type Config interface {
-    GetStructName() string
-    GetPackage() string
-    ShouldWrite() bool
-    ShouldBackup() bool
-    GetSkipDirs() []string
-    GetSkipFiles() []string
-    GetVerboseLevel() int
+type Reporter struct {
+    format string      // txt, md, html
+    output string      // Output path
+    level  ReportLevel // Detail level
+    lang   Lang        // zh (default) or en
 }
+
+func NewReporter(format, output string, level ReportLevel) *Reporter
+func NewReporterWithLang(format, output string, level ReportLevel, lang Lang) *Reporter
+func (r *Reporter) Generate(report *optimizer.Report) error
+func (r *Reporter) GenerateMD(report *optimizer.Report) (string, error)
+func (r *Reporter) GenerateTXT(report *optimizer.Report) (string, error)
+func (r *Reporter) GenerateHTML(report *optimizer.Report) (string, error)
 ```
 
-### 6.3 报告接口
+## 7. Test Design
 
-```go
-type Reporter interface {
-    Generate(report *Report) error
-    GenerateMD(report *Report) (string, error)
-    GenerateTXT(report *Report) (string, error)
-    GenerateHTML(report *Report) (string, error)
-}
-```
+### 7.1 Test Strategy
 
-## 7. 测试设计
+| Module | Focus | Coverage Target |
+|--------|-------|-----------------|
+| utils | Utility function edge cases | >90% |
+| optimizer | Size calculation, field reordering | >80% |
+| reporter | Report format correctness, i18n | >80% |
+| writer | File operation correctness | >70% |
+| analyzer | Package loading, struct lookup | >60% |
 
-### 7.1 测试策略
-
-| 模块 | 测试重点 | 覆盖率目标 |
-|------|---------|-----------|
-| utils | 工具函数边界条件 | >90% |
-| optimizer | 大小计算、字段重排 | >80% |
-| reporter | 报告格式正确性 | >80% |
-| writer | 文件操作正确性 | >70% |
-| analyzer | 包加载、结构体查找 | >60% |
-
-### 7.2 测试用例分类
-
-1. **单元测试**：测试单个函数/方法
-2. **集成测试**：测试模块间协作
-3. **端到端测试**：测试完整流程
-
-### 7.3 测试数据
+### 7.2 Test Data Structure
 
 ```
 testdata/
-├── basic/              # 基础测试用例
-│   ├── basic.go        # 简单结构体
-│   └── ...
-├── nested/             # 嵌套测试用例
-│   ├── nested.go       # 2-3 层嵌套
-│   └── deep_nested.go  # 5+ 层嵌套
-├── crosspkg/           # 跨包测试用例
-│   ├── subpkg1/        # 子包 1
-│   ├── subpkg2/        # 子包 2
-│   └── crosspkg.go     # 跨包引用
-├── complexpkg/         # 复杂测试用例
-│   └── complex.go      # slice/map/指针
-└── methodskip/         # 方法跳过测试
-    └── methodskip.go   # 带方法的结构体
+├── basic/              # Basic test cases
+│   └── basic.go        # Simple structs
+├── nested/             # Nested test cases
+│   ├── nested.go       # 2-3 level nesting
+│   └── deep_nested.go  # 5+ level nesting
+├── crosspkg/           # Cross-package test cases
+│   ├── subpkg1/        # Sub-package 1
+│   ├── subpkg2/        # Sub-package 2
+│   └── crosspkg.go     # Cross-package references
+├── complexpkg/         # Complex test cases
+│   └── complex.go      # slice/map/pointer types
+├── methodskip/         # Method skip tests
+│   └── methodskip.go   # Structs with methods
+├── recursive_scan_test/ # Recursive scanning tests
+│   └── pkg/            # Multi-package test structure
+└── gopath_test_project/ # GOPATH mode tests
+    └── ...             # GOPATH-specific scenarios
 ```
 
-## 8. 性能考虑
+### 7.3 Test Categories
 
-### 8.1 时间复杂度
+1. **Unit Tests**: Test individual functions/methods
+2. **Integration Tests**: Test inter-module cooperation
+3. **End-to-End Tests**: Test complete optimization pipeline
+4. **Regression Tests**: Protect against known bugs (embedded fields, type aliases, external packages, etc.)
 
-| 操作 | 复杂度 | 说明 |
-|------|--------|------|
-| 包加载 | O(n) | n 为文件数 |
-| 结构体查找 | O(n*m) | n 为文件数，m 为声明数 |
-| 字段重排 | O(k log k) | k 为字段数 |
-| 嵌套优化 | O(d*k) | d 为深度，k 为结构体数 |
+## 8. Performance Considerations
 
-### 8.2 空间复杂度
+### 8.1 Time Complexity
 
-| 数据结构 | 复杂度 | 说明 |
-|---------|--------|------|
-| pkgMap | O(p) | p 为包数 |
-| optimized | O(s) | s 为结构体数 |
-| AST | O(n) | n 为节点数 |
+| Operation | Complexity | Description |
+|-----------|------------|-------------|
+| Package loading | O(n) | n = number of files |
+| Struct lookup | O(n*m) | n = files, m = declarations |
+| Field reordering | O(k log k) | k = number of fields |
+| Nested optimization | O(d*k) | d = depth, k = struct count |
 
-### 8.3 优化策略
+### 8.2 Space Complexity
 
-1. **缓存已加载包**：避免重复加载
-2. **缓存已优化结构体**：避免重复优化
-3. **并发处理**：未来可支持多包并发处理
+| Data Structure | Complexity | Description |
+|----------------|------------|-------------|
+| pkgMap | O(p) | p = number of packages |
+| optimized | O(s) | s = number of structs |
+| AST | O(n) | n = number of nodes |
 
-## 9. 扩展性设计
+### 8.3 Optimization Strategies
 
-### 9.1 新增报告格式
+1. **Package Caching**: Avoid reloading the same package
+2. **Struct Deduplication**: Optimize each struct only once
+3. **Configurable Concurrency**: Limit parallel workers to prevent OOM (default: 4)
+4. **Depth Limiting**: Prevent infinite recursion (default: 50)
+5. **Timeout Protection**: Prevent runaway analysis (default: 20 minutes)
+
+## 9. Extensibility
+
+### 9.1 Adding New Report Formats
 
 ```go
-// 实现 Reporter 接口
+// Implement the report generation pattern
 type JSONReporter struct{}
 
-func (r *JSONReporter) Generate(report *Report) error {
-    // 实现 JSON 格式报告
+func (r *JSONReporter) Generate(report *optimizer.Report) error {
+    // Implement JSON format report
 }
 ```
 
-### 9.2 新增跳过规则
+### 9.2 Adding New Skip Rules
 
 ```go
-// 在 shouldSkip 中添加新规则
+// Add new rules in shouldSkip()
 func (o *Optimizer) shouldSkip() string {
-    // ... 现有规则
-    
-    // 新增规则
+    // ... existing rules
+
+    // New rule: skip protobuf structs
     if hasTag(field, "protobuf") {
-        return "protobuf 结构体"
+        return "protobuf struct"
     }
-    
+
     return ""
 }
 ```
 
-### 9.3 新增优化策略
+### 9.3 Adding New Optimization Strategies
 
 ```go
-// 实现新的重排策略
+// Implement custom reordering strategies
 func ReorderFieldsCustom(fields []FieldInfo, strategy Strategy) []FieldInfo {
     switch strategy {
     case SizeDesc:
-        // 按大小降序
+        // Sort by size descending
     case AlignDesc:
-        // 按对齐降序
+        // Sort by alignment descending
     case Custom:
-        // 自定义策略
+        // Custom strategy
     }
 }
 ```
 
-## 10. 依赖管理
+### 9.4 Adding New Languages
 
-### 10.1 核心依赖
+To add a new language, extend `reporter_i18n.go`:
+
+```go
+var jaStrings = i18n{
+    ReportTitle:      "🚀 StructOptimizer 最適化レポート",
+    GeneratedTime:    "🕐 生成日時",
+    // ... all other strings
+}
+```
+
+Then add the language constant and update `getStrings()`.
+
+## 10. Dependencies
+
+### 10.1 Core Dependencies
 
 ```go
 require (
-    golang.org/x/tools v0.17.0  // packages.Load
-    golang.org/x/mod v0.14.0    // 间接依赖
+    golang.org/x/tools v0.44.0  // packages.Load, go/analysis
 )
 ```
 
-### 10.2 标准库依赖
+### 10.2 Standard Library Dependencies
 
-- `go/ast`: AST 解析
-- `go/types`: 类型检查
-- `go/token`: 词法分析
-- `go/parser`: 代码解析
-- `go/printer`: 代码格式化
+- `go/ast`: AST parsing
+- `go/types`: Type checking
+- `go/token`: Token/position tracking
+- `go/parser`: Source code parsing
+- `go/printer`: Code formatting
+- `golang.org/x/tools/go/packages`: Package loading
 
-## 11. 版本历史
+## 11. Project Structure
 
-| 版本 | 日期 | 变更 |
-|------|------|------|
-| v0.1.0 | 2024-01 | 初始版本，核心功能实现 |
-| v0.2.0 | 2024-01 | 添加嵌套优化、跨包优化 |
-| v0.3.0 | 2024-01 | 添加报告生成、文件写入 |
+```
+structoptimizer/
+├── cmd/
+│   └── structoptimizer/
+│       ├── main.go              # CLI entry point
+│       └── main_test.go         # CLI tests
+├── analyzer/
+│   ├── analyzer.go              # Package and struct analysis
+│   ├── analyzer_test.go         # Analyzer tests
+│   └── recursive_scan_test.go   # Recursive scan tests
+├── optimizer/
+│   ├── optimizer.go             # Core optimization logic
+│   ├── optimizer_test.go        # Optimization tests
+│   ├── field.go                 # Field info types
+│   ├── size.go                  # Size calculation
+│   ├── reorder.go               # Field reordering
+│   ├── skip.go                  # Skip rules
+│   ├── types.go                 # Shared types (Report, Config, etc.)
+│   ├── helper.go                # Helper functions
+│   ├── cache.go                 # Caching utilities
+│   ├── collector.go             # Result collection
+│   ├── processor.go             # Parallel processing
+│   ├── method_index.go          # Method indexing for skip rules
+│   ├── file_analyzer.go         # File-level analysis
+│   └── *_test.go                # Various test files
+├── reporter/
+│   ├── reporter.go              # Main reporter + TXT format
+│   ├── reporter_md.go           # Markdown format
+│   ├── reporter_html.go         # HTML format
+│   ├── reporter_types.go        # Reporter types and constructors
+│   ├── reporter_utils.go        # Utility functions
+│   ├── reporter_i18n.go         # Internationalization (zh/en)
+│   └── reporter_test.go         # Reporter tests
+├── writer/
+│   ├── writer.go                # Source file writer
+│   ├── writer_test.go           # Writer tests
+│   └── backup_test.go           # Backup tests
+├── internal/
+│   └── utils/
+│       ├── utils.go             # Shared utilities
+│       └── utils_test.go        # Utility tests
+├── testdata/                    # Test fixtures
+├── design.md                    # This document
+├── go.mod                       # Module definition
+└── go.sum                       # Dependency checksums
+```
 
-## 12. 待办事项
+## 12. Version History
 
-- [ ] 支持并发处理多个包
-- [ ] 支持 JSON 格式报告
-- [ ] 支持自定义优化策略
-- [ ] 支持配置文件
-- [ ] 支持增量优化
-- [ ] 支持更多跳过规则
+| Version | Date | Changes |
+|---------|------|---------|
+| v0.1.0 | 2024-01 | Initial release, core functionality |
+| v0.2.0 | 2024-01 | Nested struct optimization, cross-package support |
+| v0.3.0 | 2024-01 | Report generation, file writing |
+| v1.x.x | 2024-2026 | GOPATH support, parallel processing, i18n, reserved fields, recursive scan, bug fixes |
+
+## 13. TODO
+
+- [ ] Support concurrent processing of multiple packages
+- [ ] Support JSON format report
+- [ ] Support custom optimization strategies
+- [ ] Support configuration file (YAML/TOML)
+- [ ] Support incremental optimization (skip unchanged files)
+- [ ] Support more skip rules (e.g., build tags, protobuf detection)
+- [ ] Support additional languages (Japanese, Korean, etc.)
+- [ ] Add diff mode (show changes without applying)
+- [ ] Add dry-run mode with summary only

@@ -11,14 +11,20 @@ import (
 
 // GenerateHTML 生成 HTML 格式报告
 func (r *Reporter) GenerateHTML(report *optimizer.Report) (string, error) {
+	s := getStrings(r.lang)
 	var sb strings.Builder
 
+	langAttr := "zh-CN"
+	if r.lang == LangEN {
+		langAttr = "en"
+	}
+
 	sb.WriteString("<!DOCTYPE html>\n")
-	sb.WriteString("<html lang=\"zh-CN\">\n")
+	sb.WriteString(fmt.Sprintf("<html lang=\"%s\">\n", langAttr))
 	sb.WriteString("<head>\n")
 	sb.WriteString("    <meta charset=\"UTF-8\">\n")
 	sb.WriteString("    <meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\">\n")
-	sb.WriteString(fmt.Sprintf("    <title>StructOptimizer 优化报告 v%s</title>\n", Version))
+	sb.WriteString(fmt.Sprintf("    <title>%s v%s</title>\n", s.ReportTitle, Version))
 	sb.WriteString("    <style>\n")
 	sb.WriteString("        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 1200px; margin: 0 auto; padding: 20px; background: #f5f5f5; }\n")
 	sb.WriteString("        .container { background: white; border-radius: 8px; padding: 30px; box-shadow: 0 2px 8px rgba(0,0,0,0.1); }\n")
@@ -51,138 +57,73 @@ func (r *Reporter) GenerateHTML(report *optimizer.Report) (string, error) {
 	sb.WriteString("<body>\n")
 	sb.WriteString("    <div class=\"container\">\n")
 
-	sb.WriteString(fmt.Sprintf("        <h1>🚀 StructOptimizer 优化报告 <small>v%s</small></h1>\n", Version))
-	sb.WriteString(fmt.Sprintf("        <p>生成时间：%s</p>\n\n", time.Now().Format("2006-01-02 15:04:05")))
+	sb.WriteString(fmt.Sprintf("        <h1>%s <small>v%s</small></h1>\n", s.ReportTitle, Version))
+	sb.WriteString(fmt.Sprintf("        <p>%s：%s</p>\n\n", s.GeneratedTime, time.Now().Format("2006-01-02 15:04:05")))
 
 	// 1. 优化总览
 	sb.WriteString("        <div class=\"summary\">\n")
-	sb.WriteString("            <h2>📊 优化总览</h2>\n")
+	sb.WriteString(fmt.Sprintf("            <h2>%s</h2>\n", s.OverviewTitle))
 	sb.WriteString("            <table>\n")
-	sb.WriteString(fmt.Sprintf("                <tr><td>🔹 处理结构体总数</td><td><strong>%d</strong></td></tr>\n", report.TotalStructs))
-	sb.WriteString(fmt.Sprintf("                <tr><td>✅ 优化的结构体</td><td><strong>%d</strong></td></tr>\n", report.OptimizedCount))
-	sb.WriteString(fmt.Sprintf("                <tr><td>⏭️ 跳过的结构体</td><td><strong>%d</strong></td></tr>\n", report.SkippedCount))
+	sb.WriteString(fmt.Sprintf("                <tr><td>%s</td><td><strong>%d</strong></td></tr>\n", s.TotalStructs, report.TotalStructs))
+	sb.WriteString(fmt.Sprintf("                <tr><td>%s</td><td><strong>%d</strong></td></tr>\n", s.OptimizedStructs, report.OptimizedCount))
+	sb.WriteString(fmt.Sprintf("                <tr><td>%s</td><td><strong>%d</strong></td></tr>\n", s.SkippedStructs, report.SkippedCount))
 	if report.TotalSaved > 0 {
-		sb.WriteString(fmt.Sprintf("                <tr><td>💾 节省内存</td><td><strong>%d 字节</strong> (%.2f KB)</td></tr>\n",
-			report.TotalSaved, float64(report.TotalSaved)/1024))
+		sb.WriteString(fmt.Sprintf("                <tr><td>%s</td><td><strong>%d %s</strong> (%.2f KB)</td></tr>\n",
+			s.MemorySaved, report.TotalSaved, s.Bytes, float64(report.TotalSaved)/1024))
 	} else {
-		sb.WriteString("                <tr><td>💾 节省内存</td><td><strong>0 字节</strong></td></tr>\n")
+		sb.WriteString(fmt.Sprintf("                <tr><td>%s</td><td><strong>0 %s</strong></td></tr>\n", s.MemorySaved, s.Bytes))
 	}
 	// 显示总优化前/后大小
 	if report.TotalOrigSize > 0 {
 		totalOptRate := float64(report.TotalOrigSize-report.TotalOptSize) / float64(report.TotalOrigSize) * 100
-		sb.WriteString(fmt.Sprintf("                <tr><td>📈 总优化前大小</td><td><strong>%d 字节</strong></td></tr>\n", report.TotalOrigSize))
-		sb.WriteString(fmt.Sprintf("                <tr><td>📉 总优化后大小</td><td><strong>%d 字节</strong></td></tr>\n", report.TotalOptSize))
-		sb.WriteString(fmt.Sprintf("                <tr><td>📊 总优化率</td><td><strong>%.1f%%</strong></td></tr>\n", totalOptRate))
+		sb.WriteString(fmt.Sprintf("                <tr><td>%s</td><td><strong>%d %s</strong></td></tr>\n", s.TotalSizeBefore, report.TotalOrigSize, s.Bytes))
+		sb.WriteString(fmt.Sprintf("                <tr><td>%s</td><td><strong>%d %s</strong></td></tr>\n", s.TotalSizeAfter, report.TotalOptSize, s.Bytes))
+		sb.WriteString(fmt.Sprintf("                <tr><td>%s</td><td><strong>%.1f%%</strong></td></tr>\n", s.TotalOptRate, totalOptRate))
 	}
 	if report.RootStruct != "" {
-		sb.WriteString(fmt.Sprintf("                <tr><td>🎯 主结构体</td><td><code>%s</code></td></tr>\n", html.EscapeString(report.RootStruct)))
+		sb.WriteString(fmt.Sprintf("                <tr><td>%s</td><td><code>%s</code></td></tr>\n", s.RootStruct, html.EscapeString(report.RootStruct)))
 		if report.RootStructSize > 0 {
 			optRate := float64(report.RootStructSize-report.RootStructOptSize) / float64(report.RootStructSize) * 100
-			sb.WriteString(fmt.Sprintf("                <tr><td>📏 优化前大小</td><td><strong>%d 字节</strong></td></tr>\n", report.RootStructSize))
-			sb.WriteString(fmt.Sprintf("                <tr><td>📏 优化后大小</td><td><strong>%d 字节</strong></td></tr>\n", report.RootStructOptSize))
-			sb.WriteString(fmt.Sprintf("                <tr><td>📈 优化率</td><td><strong>%.1f%%</strong></td></tr>\n", optRate))
+			sb.WriteString(fmt.Sprintf("                <tr><td>%s</td><td><strong>%d %s</strong></td></tr>\n", s.RootSizeBefore, report.RootStructSize, s.Bytes))
+			sb.WriteString(fmt.Sprintf("                <tr><td>%s</td><td><strong>%d %s</strong></td></tr>\n", s.RootSizeAfter, report.RootStructOptSize, s.Bytes))
+			sb.WriteString(fmt.Sprintf("                <tr><td>%s</td><td><strong>%.1f%%</strong></td></tr>\n", s.RootOptRate, optRate))
 		}
 	}
 	sb.WriteString("            </table>\n")
 	sb.WriteString("        </div>\n\n")
 
 	// 分类结构体
-	var optimized, skippedNormal, skippedError, unchanged []*optimizer.StructReport
-	for _, sr := range report.StructReports {
-		if sr.Skipped {
-			// 区分正常跳过和异常跳过
-			if strings.HasPrefix(sr.SkipReason, "通过方法指定跳过") ||
-				strings.HasPrefix(sr.SkipReason, "通过名字指定跳过") ||
-				sr.SkipReason == "空结构体" ||
-				sr.SkipReason == "单字段结构体" {
-				skippedNormal = append(skippedNormal, sr)
-			} else {
-				skippedError = append(skippedError, sr)
-			}
-		} else if sr.OrigSize > sr.OptSize {
-			// 与 OptimizedCount 统计标准一致
-			optimized = append(optimized, sr)
-		} else {
-			unchanged = append(unchanged, sr)
-		}
-	}
+	optimized, skippedNormal, skippedError, unchanged := classifyStructReports(report, s)
 
 	// 2. 调整的结构体（优先显示）
 	if len(optimized) > 0 {
 		sb.WriteString("        <div class=\"section\">\n")
-		sb.WriteString(fmt.Sprintf("            <h2>✏️ 调整的结构体 (%d 个)</h2>\n\n", len(optimized)))
+		sb.WriteString(fmt.Sprintf("            <h2>%s (%s)</h2>\n\n", s.AdjustedTitle, fmt.Sprintf(s.AdjustedSummary, len(optimized))))
 
 		for _, sr := range optimized {
 			sb.WriteString(fmt.Sprintf("            <div class=\"struct-card\">\n"))
 			sb.WriteString(fmt.Sprintf("                <h3>📦 %s.%s</h3>\n", html.EscapeString(sr.PkgPath), html.EscapeString(sr.Name)))
-			sb.WriteString(fmt.Sprintf("                <p><strong>📁 文件</strong>: <code>%s</code></p>\n", html.EscapeString(sr.File)))
+			sb.WriteString(fmt.Sprintf("                <p><strong>%s</strong>: <code>%s</code></p>\n", s.FileLabel, html.EscapeString(sr.File)))
 
 			sb.WriteString("                <div class=\"stats\">\n")
-			sb.WriteString(fmt.Sprintf("                    优化前：%d 字节 → 优化后：%d 字节 → 节省：%d 字节 (%.1f%%)\n",
-				sr.OrigSize, sr.OptSize, sr.Saved, float64(sr.Saved)/float64(sr.OrigSize)*100))
+			sb.WriteString(fmt.Sprintf("                    %s：%d %s → %s：%d %s → %s：%d %s (%.1f%%)\n",
+				s.BeforeLabel, sr.OrigSize, s.Bytes, s.AfterLabel, sr.OptSize, s.Bytes, s.SavedLabel, sr.Saved, s.Bytes, float64(sr.Saved)/float64(sr.OrigSize)*100))
 			sb.WriteString("                </div>\n\n")
 
 			// 字段对比表格
-			sb.WriteString("                <h4>字段顺序对比:</h4>\n")
+			sb.WriteString(fmt.Sprintf("                <h4>%s:</h4>\n", s.FieldCompareTitle))
 			sb.WriteString("                <div class=\"table-wrapper\">\n")
 			sb.WriteString("                <table>\n")
-			sb.WriteString("                    <tr><th>序号</th><th>优化前 - 字段名</th><th>优化前 - 类型</th><th>大小</th><th>优化后 - 字段名</th><th>优化后 - 类型</th><th>大小</th><th>变化</th></tr>\n")
+			sb.WriteString(fmt.Sprintf("                    <tr><th>%s</th><th>%s</th><th>%s</th><th>%s</th><th>%s</th><th>%s</th><th>%s</th><th>%s</th></tr>\n",
+				s.ColNo, s.ColBeforeName, s.ColBeforeType, s.ColSize, s.ColAfterName, s.ColAfterType, s.ColSize, s.ColChange))
 
 			maxLen := len(sr.OrigFields)
 			if len(sr.OptFields) > maxLen {
 				maxLen = len(sr.OptFields)
 			}
 
-		for i := 0; i < maxLen; i++ {
-			origName := ""
-			origType := ""
-			origSize := ""
-			optName := ""
-			optType := ""
-			optSize := ""
-			change := ""
-
-			if i < len(sr.OrigFields) {
-				origName = sr.OrigFields[i]
-				if sr.FieldTypes != nil {
-					if t, ok := sr.FieldTypes[origName]; ok {
-						origType = t
-					}
-				}
-				if sr.FieldSizes != nil {
-					if size, ok := sr.FieldSizes[origName]; ok {
-						origSize = fmt.Sprintf("%d", size)
-					}
-				}
-			}
-			if i < len(sr.OptFields) {
-				optName = sr.OptFields[i]
-				if sr.FieldTypes != nil {
-					if t, ok := sr.FieldTypes[optName]; ok {
-						optType = t
-					}
-				}
-				if sr.FieldSizes != nil {
-					if size, ok := sr.FieldSizes[optName]; ok {
-						optSize = fmt.Sprintf("%d", size)
-					}
-				}
-			}
-
-				// 比较变化时使用完整字段信息（包括类型名）
-				origKey := origName + ":" + origType
-				optKey := optName + ":" + optType
-				if origKey != optKey {
-					change = "🔄"
-				}
-
-				// 显示时匿名字段字段名为空，只显示类型名
-				if origName == origType {
-					origName = ""
-				}
-				if optName == optType {
-					optName = ""
-				}
+			for i := 0; i < maxLen; i++ {
+				origName, origType, origSize, optName, optType, optSize, change := getFieldCompareData(sr, i)
 
 				className := ""
 				if change != "" {
@@ -202,12 +143,12 @@ func (r *Reporter) GenerateHTML(report *optimizer.Report) (string, error) {
 	// 3. 正常跳过的结构体（仅详细模式显示）
 	if r.level >= ReportLevelFull && len(skippedNormal) > 0 {
 		sb.WriteString("        <div class=\"section\">\n")
-		sb.WriteString(fmt.Sprintf("            <h2>⏭️ 正常跳过的结构体 (%d 个)</h2>\n\n", len(skippedNormal)))
+		sb.WriteString(fmt.Sprintf("            <h2>%s (%s)</h2>\n\n", s.SkippedNormalTitle, fmt.Sprintf(s.SkippedNormalSummary, len(skippedNormal))))
 
 		for _, sr := range skippedNormal {
 			sb.WriteString(fmt.Sprintf("            <div class=\"struct-card\">\n"))
 			sb.WriteString(fmt.Sprintf("                <h3>✓ %s.%s</h3>\n", html.EscapeString(sr.PkgPath), html.EscapeString(sr.Name)))
-			sb.WriteString(fmt.Sprintf("                <p><strong>原因</strong>: %s</p>\n", html.EscapeString(sr.SkipReason)))
+			sb.WriteString(fmt.Sprintf("                <p><strong>%s</strong>: %s</p>\n", s.ReasonLabel, html.EscapeString(sr.SkipReason)))
 			sb.WriteString("            </div>\n\n")
 		}
 		sb.WriteString("        </div>\n\n")
@@ -216,12 +157,12 @@ func (r *Reporter) GenerateHTML(report *optimizer.Report) (string, error) {
 	// 4. 异常跳过的结构体
 	if len(skippedError) > 0 {
 		sb.WriteString("        <div class=\"section\">\n")
-		sb.WriteString(fmt.Sprintf("            <h2>⚠️ 异常跳过的结构体 (%d 个)</h2>\n\n", len(skippedError)))
+		sb.WriteString(fmt.Sprintf("            <h2>%s (%s)</h2>\n\n", s.SkippedErrorTitle, fmt.Sprintf(s.SkippedErrorSummary, len(skippedError))))
 
 		for _, sr := range skippedError {
 			sb.WriteString(fmt.Sprintf("            <div class=\"struct-card skipped\">\n"))
 			sb.WriteString(fmt.Sprintf("                <h3>⏭️ %s.%s</h3>\n", html.EscapeString(sr.PkgPath), html.EscapeString(sr.Name)))
-			sb.WriteString(fmt.Sprintf("                <p><strong>原因</strong>: %s</p>\n", html.EscapeString(sr.SkipReason)))
+			sb.WriteString(fmt.Sprintf("                <p><strong>%s</strong>: %s</p>\n", s.ReasonLabel, html.EscapeString(sr.SkipReason)))
 			sb.WriteString("            </div>\n\n")
 		}
 		sb.WriteString("        </div>\n\n")
@@ -230,14 +171,14 @@ func (r *Reporter) GenerateHTML(report *optimizer.Report) (string, error) {
 	// 5. 未变化的结构体（详细模式下显示）
 	if r.level >= ReportLevelFull && len(unchanged) > 0 {
 		sb.WriteString("        <div class=\"section\">\n")
-		sb.WriteString(fmt.Sprintf("            <h2>✔️ 未变化的结构体 (%d 个)</h2>\n\n", len(unchanged)))
+		sb.WriteString(fmt.Sprintf("            <h2>%s (%s)</h2>\n\n", s.UnchangedTitle, fmt.Sprintf(s.UnchangedSummary, len(unchanged))))
 
 		sb.WriteString("            <div class=\"table-wrapper\">\n")
 		sb.WriteString("            <table>\n")
-		sb.WriteString("                <tr><th>结构体名</th><th>包路径</th><th>大小</th></tr>\n")
+		sb.WriteString(fmt.Sprintf("                <tr><th>%s</th><th>%s</th><th>%s</th></tr>\n", s.ColStructName, s.ColPkgPath, s.ColSize))
 		for _, sr := range unchanged {
-			sb.WriteString(fmt.Sprintf("                <tr class=\"unchanged\"><td><code>%s</code></td><td><code>%s</code></td><td>%d 字节</td></tr>\n",
-				html.EscapeString(sr.Name), html.EscapeString(sr.PkgPath), sr.OrigSize))
+			sb.WriteString(fmt.Sprintf("                <tr class=\"unchanged\"><td><code>%s</code></td><td><code>%s</code></td><td>%d %s</td></tr>\n",
+				html.EscapeString(sr.Name), html.EscapeString(sr.PkgPath), sr.OrigSize, s.Bytes))
 		}
 		sb.WriteString("            </table>\n")
 		sb.WriteString("            </div>\n")
@@ -245,7 +186,7 @@ func (r *Reporter) GenerateHTML(report *optimizer.Report) (string, error) {
 	}
 
 	sb.WriteString("        <div class=\"footer\">\n")
-	sb.WriteString("            <p>Generated by StructOptimizer</p>\n")
+	sb.WriteString(fmt.Sprintf("            <p>%s</p>\n", s.GenBy))
 	sb.WriteString("        </div>\n")
 
 	sb.WriteString("    </div>\n")

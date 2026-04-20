@@ -14,18 +14,29 @@ type Reporter struct {
 	format string      // txt, md, html
 	output string      // 输出路径
 	level  ReportLevel // 详细程度
+	lang   Lang        // zh (default) or en
 }
 
 // NewReporter 创建报告生成器
 func NewReporter(format, output string, level ReportLevel) *Reporter {
+	return NewReporterWithLang(format, output, level, LangZH)
+}
+
+// NewReporterWithLang 创建报告生成器（支持语言设置）
+func NewReporterWithLang(format, output string, level ReportLevel, lang Lang) *Reporter {
 	// 验证格式，无效则使用默认值
 	validFormats := map[string]bool{"txt": true, "md": true, "html": true}
 	if format == "" || !validFormats[format] {
 		format = "md"
 	}
+	// 验证语言，无效则使用默认值
+	if lang != LangEN {
+		lang = LangZH
+	}
 	return &Reporter{
 		format: format,
 		output: output,
 		level:  level,
+		lang:   lang,
 	}
 }

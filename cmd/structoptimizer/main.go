@@ -38,8 +38,9 @@ type Config struct {
 	PkgScope       string // 包范围限制
 	PkgWorkerLimit int    // 包并发限制
 	ShowVersion    bool   // 显示版本
-	ReservedFields string // 预留字段名称（逗号分隔）
-	Recursive      bool   // 递归扫描子包（-package 模式）
+	ReservedFields string   // 预留字段名称（逗号分隔）
+	Recursive      bool     // 递归扫描子包（-package 模式）
+	Lang           reporter.Lang // 报告语言
 }
 
 func main() {
@@ -136,7 +137,7 @@ func main() {
 		reportLevel = reporter.ReportLevelSummary
 	}
 
-	rep := reporter.NewReporter(cfg.ReportFormat, cfg.Output, reportLevel)
+	rep := reporter.NewReporterWithLang(cfg.ReportFormat, cfg.Output, reportLevel, cfg.Lang)
 	if err := rep.Generate(report); err != nil {
 		fmt.Fprintf(os.Stderr, "生成报告失败：%v\n", err)
 		os.Exit(1)
@@ -185,6 +186,7 @@ func parseFlags() *Config {
 	flag.IntVar(&cfg.PkgWorkerLimit, "pkg-limit", 4, "包并发限制（默认 4，降低可防止 OOM）")
 	flag.StringVar(&cfg.ReservedFields, "reserved-fields", "", "预留字段名称（逗号分隔，始终排在最后，如：reserved,padding,XXX）")
 	flag.BoolVar(&cfg.Recursive, "recursive", false, "递归扫描子包（仅 -package 模式有效）")
+	flag.StringVar((*string)(&cfg.Lang), "lang", "zh", "报告语言（zh=中文, en=英文）")
 
 	// 详细程度
 	v := flag.Bool("v", false, "显示详细信息")
@@ -266,6 +268,11 @@ func validateFlags(cfg *Config) error {
 		if !validFormats[cfg.ReportFormat] {
 			return fmt.Errorf("无效的报告格式：%s（支持：txt, md, html）", cfg.ReportFormat)
 		}
+	}
+
+	// 验证报告语言（空字符串默认为中文）
+	if cfg.Lang != "" && cfg.Lang != reporter.LangZH && cfg.Lang != reporter.LangEN {
+		return fmt.Errorf("无效的报告语言：%s（支持：zh, en）", cfg.Lang)
 	}
 
 	return nil

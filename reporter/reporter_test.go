@@ -406,3 +406,162 @@ func TestReportWithZeroSavings(t *testing.T) {
 		t.Error("Report missing saved bytes section")
 	}
 }
+
+// TestReportLanguageZH 测试中文报告（默认）
+func TestReportLanguageZH(t *testing.T) {
+	report := &optimizer.Report{
+		TotalStructs:   2,
+		OptimizedCount: 1,
+		SkippedCount:   1,
+		TotalSaved:     8,
+		StructReports: []*optimizer.StructReport{
+			{
+				Name:       "TestStruct",
+				PkgPath:    "example.com/pkg",
+				File:       "/path/to/file.go",
+				OrigSize:   32,
+				OptSize:    24,
+				Saved:      8,
+				OrigFields: []string{"A", "B"},
+				OptFields:  []string{"B", "A"},
+				Skipped:    false,
+			},
+		},
+	}
+
+	r := NewReporterWithLang("md", "", ReportLevelFull, LangZH)
+	content, err := r.GenerateMD(report)
+	if err != nil {
+		t.Fatalf("GenerateMD() error = %v", err)
+	}
+
+	requiredZH := []string{
+		"优化报告",
+		"生成时间",
+		"优化总览",
+		"处理结构体总数",
+		"优化的结构体",
+		"跳过的结构体",
+		"节省内存",
+	}
+
+	for _, required := range requiredZH {
+		if !strings.Contains(content, required) {
+			t.Errorf("ZH report missing %q", required)
+		}
+	}
+}
+
+// TestReportLanguageEN 测试英文报告
+func TestReportLanguageEN(t *testing.T) {
+	report := &optimizer.Report{
+		TotalStructs:   2,
+		OptimizedCount: 1,
+		SkippedCount:   1,
+		TotalSaved:     8,
+		StructReports: []*optimizer.StructReport{
+			{
+				Name:       "TestStruct",
+				PkgPath:    "example.com/pkg",
+				File:       "/path/to/file.go",
+				OrigSize:   32,
+				OptSize:    24,
+				Saved:      8,
+				OrigFields: []string{"A", "B"},
+				OptFields:  []string{"B", "A"},
+				Skipped:    false,
+			},
+		},
+	}
+
+	r := NewReporterWithLang("md", "", ReportLevelFull, LangEN)
+	content, err := r.GenerateMD(report)
+	if err != nil {
+		t.Fatalf("GenerateMD() error = %v", err)
+	}
+
+	requiredEN := []string{
+		"Optimization Report",
+		"Generated",
+		"Optimization Overview",
+		"Total structs processed",
+		"Optimized structs",
+		"Skipped structs",
+		"Memory saved",
+	}
+
+	for _, required := range requiredEN {
+		if !strings.Contains(content, required) {
+			t.Errorf("EN report missing %q", required)
+		}
+	}
+
+	// 英文报告不应该包含中文标题
+	shouldNotHave := []string{"优化报告", "优化总览", "处理结构体总数"}
+	for _, s := range shouldNotHave {
+		if strings.Contains(content, s) {
+			t.Errorf("EN report should not contain Chinese text %q", s)
+		}
+	}
+}
+
+// TestReportLanguageENAllFormats 测试英文报告所有格式
+func TestReportLanguageENAllFormats(t *testing.T) {
+	report := &optimizer.Report{
+		TotalStructs:   1,
+		OptimizedCount: 1,
+		TotalSaved:     8,
+		StructReports: []*optimizer.StructReport{
+			{
+				Name:     "TestStruct",
+				PkgPath:  "example.com/pkg",
+				OrigSize: 32,
+				OptSize:  24,
+				Saved:    8,
+				Skipped:  false,
+			},
+		},
+	}
+
+	formats := []string{"md", "txt", "html"}
+	for _, format := range formats {
+		t.Run(format, func(t *testing.T) {
+			r := NewReporterWithLang(format, "", ReportLevelFull, LangEN)
+			var content string
+			var err error
+			switch format {
+			case "md":
+				content, err = r.GenerateMD(report)
+			case "txt":
+				content, err = r.GenerateTXT(report)
+			case "html":
+				content, err = r.GenerateHTML(report)
+			}
+			if err != nil {
+				t.Fatalf("Generate%s() error = %v", strings.ToUpper(format), err)
+			}
+			if !strings.Contains(content, "Optimization") {
+				t.Errorf("%s EN report missing English text", format)
+			}
+		})
+	}
+}
+
+// TestReportLanguageHTMLLangAttr 测试 HTML 语言属性
+func TestReportLanguageHTMLLangAttr(t *testing.T) {
+	report := &optimizer.Report{TotalStructs: 1}
+
+	// 中文 HTML 应该有 lang="zh-CN"
+	rZH := NewReporterWithLang("html", "", ReportLevelFull, LangZH)
+	contentZH, _ := rZH.GenerateHTML(report)
+	if !strings.Contains(contentZH, `lang="zh-CN"`) {
+		t.Error("ZH HTML report missing lang=\"zh-CN\" attribute")
+	}
+
+	// 英文 HTML 应该有 lang="en"
+	rEN := NewReporterWithLang("html", "", ReportLevelFull, LangEN)
+	contentEN, _ := rEN.GenerateHTML(report)
+	if !strings.Contains(contentEN, `lang="en"`) {
+		t.Error("EN HTML report missing lang=\"en\" attribute")
+	}
+}
