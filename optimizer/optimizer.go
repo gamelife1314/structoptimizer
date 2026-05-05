@@ -180,19 +180,22 @@ func (o *Optimizer) optimizeInternal() (*Report, error) {
 		if info.Skipped {
 			o.report.SkippedCount++
 		} else if info.OrigSize > info.OptSize {
-			// 只有真正节省了内存才算优化
 			o.report.OptimizedCount++
 			o.report.TotalSaved += info.OrigSize - info.OptSize
 		}
+	}
 
-		// 累计所有结构体的总大小
-		o.report.TotalOrigSize += info.OrigSize
-		o.report.TotalOptSize += info.OptSize
-
-		// 如果是主结构体，单独记录大小
-		if o.report.RootStruct != "" && info.PkgPath+"."+info.Name == o.report.RootStruct {
-			o.report.RootStructSize = info.OrigSize
-			o.report.RootStructOptSize = info.OptSize
+	// Only sum depth-0 struct sizes to avoid double-counting nested children.
+	// Root structs already contain their nested children's sizes as fields.
+	for _, sr := range o.report.StructReports {
+		if sr.Depth == 0 {
+			o.report.TotalOrigSize += sr.OrigSize
+			o.report.TotalOptSize += sr.OptSize
+		}
+		// Track root struct size separately
+		if o.report.RootStruct != "" && sr.PkgPath+"."+sr.Name == o.report.RootStruct {
+			o.report.RootStructSize = sr.OrigSize
+			o.report.RootStructOptSize = sr.OptSize
 		}
 	}
 
