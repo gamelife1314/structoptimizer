@@ -13,9 +13,9 @@ import (
 	"github.com/gamelife1314/structoptimizer/writer"
 )
 
-// 版本信息使用 reporter 包统一定义
+// Version is defined centrally in the reporter package
 
-// Config 配置
+// Config holds all CLI configuration
 type Config struct {
 	Struct         string
 	Package        string
@@ -30,18 +30,18 @@ type Config struct {
 	Verbose        int
 	SortSameSize   bool
 	ReportFormat   string
-	ProjectType    string // 项目类型：gomod 或 gopath
-	GOPATH         string // GOPATH 路径（可选）
-	TargetDir      string // 项目目录（位置参数）
-	MaxDepth       int    // 最大递归深度
-	Timeout        int    // 超时时间（秒）
-	PkgScope       string // 包范围限制
-	PkgWorkerLimit int    // 包并发限制
-	ShowVersion    bool   // 显示版本
-	ReservedFields     string        // 预留字段名称（逗号分隔）
-	Recursive          bool          // 递归扫描子包（-package 模式）
-	Lang               reporter.Lang // 报告语言
-	AllowExternalPkgs  bool          // 允许扫描跨包结构体（包括 vendor 目录）
+	ProjectType    string // gomod or gopath
+	GOPATH         string // GOPATH path (optional)
+	TargetDir      string // project directory (positional arg)
+	MaxDepth       int    // maximum recursion depth
+	Timeout        int    // timeout in seconds
+	PkgScope       string // package scope limit
+	PkgWorkerLimit int    // package concurrency limit
+	ShowVersion    bool   // show version info
+	ReservedFields     string        // fields to keep at the end (comma-separated)
+	Recursive          bool          // recursively scan sub-packages (-package mode only)
+	Lang               reporter.Lang // report language
+	AllowExternalPkgs  bool          // allow scanning cross-package structs (including vendor)
 }
 
 func main() {
@@ -91,7 +91,7 @@ func main() {
 	}
 	anlz := analyzer.NewAnalyzer(analyzerCfg)
 
-	// 创建优化器
+	// Create optimizer
 	optimizerCfg := &optimizer.Config{
 		TargetDir:      cfg.TargetDir,
 		StructName:     cfg.Struct,
@@ -159,7 +159,7 @@ func main() {
 	os.Exit(0)
 }
 
-// parseFlags 解析命令行参数
+// parseFlags parses command-line arguments
 func parseFlags() *Config {
 	cfg := &Config{}
 
@@ -210,7 +210,7 @@ func parseFlags() *Config {
 
 	flag.Parse()
 
-	// 处理详细程度
+	// Handle verbosity levels
 	if *vvv {
 		cfg.Verbose = 3
 	} else if *vv {
@@ -219,15 +219,15 @@ func parseFlags() *Config {
 		cfg.Verbose = 1
 	}
 
-	// 获取项目目录（位置参数）
+	// Get project directory (positional arg)
 	if flag.NArg() > 0 {
 		cfg.TargetDir = flag.Arg(0)
 	}
-	// Go Module 项目如果未指定目录，使用当前目录
+	// Go Module project uses current dir if not specified
 	if cfg.ProjectType == "gomod" && cfg.TargetDir == "" {
 		cfg.TargetDir = "."
 	}
-	// GOPATH 项目不需要指定目录
+	// GOPATH project does not require a directory
 
 	return cfg
 }

@@ -7,24 +7,24 @@ import (
 	"github.com/gamelife1314/structoptimizer/analyzer"
 )
 
-// shouldSkip 检查是否应该跳过
+// shouldSkip checks if the struct should be skipped
 func (o *Optimizer) shouldSkip(info *StructInfo, key string) string {
-	// 空结构体
+	// Empty struct
 	if len(info.Fields) == 0 {
 		return "空结构体"
 	}
 
-	// 单字段结构体
+	// Single-field struct
 	if len(info.Fields) == 1 {
 		return "单字段结构体"
 	}
 
-	// 检查是否是 vendor 中的第三方包结构体（AllowExternalPkgs=true 时允许扫描）
+	// Check if it's a third-party struct in vendor (scan allowed when AllowExternalPkgs=true)
 	if !o.config.AllowExternalPkgs && isVendorPackage(info.PkgPath) {
 		return "vendor 中的第三方包结构体"
 	}
 
-	// 检查是否是项目内部的包（AllowExternalPkgs=true 时允许跨包扫描）
+	// Check if it's an internal project package (cross-package scan allowed when AllowExternalPkgs=true)
 	if !o.config.AllowExternalPkgs && !o.isProjectPackage(info.PkgPath) {
 		if isStandardLibrary(info.PkgPath) {
 			return "Go 标准库结构体"
@@ -32,7 +32,7 @@ func (o *Optimizer) shouldSkip(info *StructInfo, key string) string {
 		return "非项目内部包结构体"
 	}
 
-	// 检查是否通过名字指定跳过
+	// Check if it should be skipped by name
 	if len(o.config.SkipByNames) > 0 {
 		for _, name := range o.config.SkipByNames {
 			if o.matchStructName(key, name) {
@@ -41,9 +41,9 @@ func (o *Optimizer) shouldSkip(info *StructInfo, key string) string {
 		}
 	}
 
-	// 检查是否通过方法指定跳过
+	// Check if it should be skipped by method
 	if len(o.config.SkipByMethods) > 0 {
-		// 加载包检查方法
+		// Load the package to check methods
 		for _, methodName := range o.config.SkipByMethods {
 			if o.hasMethodByName(info, methodName) {
 				return "通过方法指定跳过：" + methodName
@@ -54,22 +54,22 @@ func (o *Optimizer) shouldSkip(info *StructInfo, key string) string {
 	return ""
 }
 
-// hasMethodByName 检查结构体是否有指定方法（使用 MethodIndex，不加载包）
+// hasMethodByName checks if a struct has the specified method (uses MethodIndex, no package loading)
 func (o *Optimizer) hasMethodByName(info *StructInfo, methodPattern string) bool {
-	// 使用 MethodIndex 查询，无需加载整个包
+	// Query using MethodIndex, no need to load the entire package
 	result := o.methodIndex.HasMethod(info.PkgPath, info.Name, methodPattern)
 	o.Log(3, "检查方法 %s.%s.%s = %v", info.PkgPath, info.Name, methodPattern, result)
 	return result
 }
 
-// matchMethod 匹配方法名（支持通配符）
+// matchMethod matches a method name (supports wildcards)
 func (o *Optimizer) matchMethod(methodName, pattern string) bool {
-	// 完全匹配
+	// Exact match
 	if methodName == pattern {
 		return true
 	}
 
-	// 通配符匹配
+	// Wildcard match
 	if strings.Contains(pattern, "*") || strings.Contains(pattern, "?") {
 		if matched, _ := filepath.Match(pattern, methodName); matched {
 			return true
@@ -79,20 +79,20 @@ func (o *Optimizer) matchMethod(methodName, pattern string) bool {
 	return false
 }
 
-// matchStructName 匹配结构体名称（支持通配符）
+// matchStructName matches a struct name (supports wildcards)
 func (o *Optimizer) matchStructName(key, pattern string) bool {
-	// 完全匹配
+	// Exact match
 	if key == pattern {
 		return true
 	}
 
-	// 简单名称匹配（不包含包路径）
+	// Simple name match (without package path)
 	_, structName := analyzer.ParseStructName(key)
 	if structName == pattern {
 		return true
 	}
 
-	// 通配符匹配
+	// Wildcard match
 	if strings.Contains(pattern, "*") {
 		matched, _ := filepath.Match(pattern, key)
 		if matched {

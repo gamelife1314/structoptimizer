@@ -6,7 +6,7 @@ import (
 	"strings"
 )
 
-// isStandardLibraryPkg 快速判断是否是标准库包
+// isStandardLibraryPkg quickly checks if it is a standard library package
 func isStandardLibraryPkg(pkgPath string) bool {
 	if pkgPath == "" {
 		return true
@@ -20,14 +20,14 @@ func isStandardLibraryPkg(pkgPath string) bool {
 	return false
 }
 
-// isVendorPackage 判断是否是 vendor 中的包或第三方包
+// isVendorPackage checks if it is a vendor package or third-party package
 func isVendorPackage(pkgPath string) bool {
-	// 1. 空包路径（通常是标准库或内置类型）
+	// 1. Empty package path (usually a standard library or built-in type)
 	if pkgPath == "" {
 		return true
 	}
 
-	// 2. 检查是否包含 vendor 目录
+	// 2. Check if it contains a vendor directory
 	if strings.Contains(pkgPath, "/vendor/") || strings.HasPrefix(pkgPath, "vendor/") {
 		return true
 	}
@@ -35,16 +35,16 @@ func isVendorPackage(pkgPath string) bool {
 	return false
 }
 
-// isStandardLibrary 判断是否是 Go 标准库
+// isStandardLibrary checks if it is a Go standard library
 func isStandardLibrary(pkgPath string) bool {
 	if pkgPath == "" {
 		return true
 	}
-	// 标准库不包含点号
+	// Standard libraries do not contain dots
 	if strings.Contains(pkgPath, ".") {
 		return false
 	}
-	// 单级包名，检查是否是已知标准库
+	// Single-segment package name, check against known standard libraries
 	standardLibs := map[string]bool{
 		"fmt": true, "os": true, "io": true, "net": true, "http": true,
 		"reflect": true, "errors": true, "bytes": true, "strings": true,
@@ -63,85 +63,85 @@ func isStandardLibrary(pkgPath string) bool {
 	return standardLibs[pkgPath]
 }
 
-// isProjectPackage 判断是否是项目内部的包
+// isProjectPackage checks if it is an internal project package
 func (o *Optimizer) isProjectPackage(pkgPath string) bool {
-	// 空包路径不是项目包
+	// Empty package path is not a project package
 	if pkgPath == "" {
 		return false
 	}
 
-	// vendor 中的不是项目包
+	// Packages in vendor are not project packages
 	if isVendorPackage(pkgPath) {
 		return false
 	}
 
-	// 标准库不是项目包
+	// Standard libraries are not project packages
 	if isStandardLibrary(pkgPath) {
 		return false
 	}
 
-	// GOPATH 模式下，需要检查是否在项目路径下
+	// In GOPATH mode, check if it is under the project path
 	if o.config.ProjectType == "gopath" {
 		gopath := o.config.GOPATH
 		if gopath == "" {
 			gopath = os.Getenv("GOPATH")
 		}
 		if gopath != "" {
-			// 检查包路径是否以 GOPATH/src/ 开头
+			// Check if the package path starts with GOPATH/src/
 			if strings.HasPrefix(pkgPath, "src/") {
-				// 提取项目路径
+				// Extract the project path
 				relPath := strings.TrimPrefix(pkgPath, "src/")
-				// 检查是否包含 vendor
+				// Check if it contains vendor
 				if strings.Contains(relPath, "/vendor/") {
 					return false
 				}
 				return true
 			}
 		}
-		// GOPATH 模式下，只要不是 vendor 和标准库，就认为是项目包
+		// In GOPATH mode, if not vendor and not standard library, consider it a project package
 		return true
 	}
 
-	// Go Module 模式下，需要检查是否是当前项目的包
+	// In Go Module mode, check if it is a package of the current project
 	if o.config.ProjectType == "gomod" || o.config.ProjectType == "" {
-		// 获取项目根目录
+		// Get the project root directory
 		targetDir := o.config.TargetDir
 		if targetDir == "" {
 			targetDir = "."
 		}
 
-		// 尝试读取 go.mod 获取模块路径
+		// Try to read go.mod to get the module path
 		goModPath := filepath.Join(targetDir, "go.mod")
 		if data, err := os.ReadFile(goModPath); err == nil {
-			// 解析 go.mod 第一行获取模块路径
+			// Parse the first line of go.mod to get the module path
 			lines := strings.Split(string(data), "\n")
 			for _, line := range lines {
 				line = strings.TrimSpace(line)
 				if strings.HasPrefix(line, "module ") {
 					modulePath := strings.TrimSpace(strings.TrimPrefix(line, "module "))
-					// 检查包路径是否以模块路径开头
+					// Check if the package path starts with the module path
 					if strings.HasPrefix(pkgPath, modulePath) {
-						// 确保是子路径，不是前缀匹配
+						// Ensure it is a sub-path, not a prefix match
 						remaining := strings.TrimPrefix(pkgPath, modulePath)
 						if remaining == "" || strings.HasPrefix(remaining, "/") {
 							return true
 						}
 					}
-					// 是其他模块的包，不是项目包
+					// Package from another module, not a project package
 					return false
 				}
 			}
 		}
 
-		// 如果无法解析 go.mod，保守判断：只要不是 vendor 和标准库，就认为是项目包
+		// If go.mod cannot be parsed, conservative: consider it a project package if not vendor/stdlib
 		return true
 	}
 
-	// 默认认为是项目包
+	// Default to considering it a project package
 	return true
 }
 
-// fieldOrderSame 检查字段顺序是否相同
+// fieldOrderSame checks if field order is the same
 func (o *Optimizer) fieldOrderSame(orig, opt []string) bool {
 	if len(orig) != len(opt) {
 		return false
@@ -154,10 +154,10 @@ func (o *Optimizer) fieldOrderSame(orig, opt []string) bool {
 	return true
 }
 
-// getPackageDir 获取包所在的目录
+// getPackageDir returns the directory where the package is located
 func (o *Optimizer) getPackageDir(pkgPath string) string {
 	if o.config.TargetDir != "" {
-		// Go Module 模式
+		// Go Module mode
 		relPath := strings.TrimPrefix(pkgPath, o.getModulePath())
 		relPath = strings.TrimPrefix(relPath, "/")
 		if relPath != "" {
@@ -166,7 +166,7 @@ func (o *Optimizer) getPackageDir(pkgPath string) string {
 		return o.config.TargetDir
 	}
 
-	// GOPATH 模式
+	// GOPATH mode
 	gopath := o.config.GOPATH
 	if gopath == "" {
 		gopath = os.Getenv("GOPATH")
@@ -178,7 +178,7 @@ func (o *Optimizer) getPackageDir(pkgPath string) string {
 	return ""
 }
 
-// getModulePath 获取模块路径（从 go.mod）
+// getModulePath returns the module path (from go.mod)
 func (o *Optimizer) getModulePath() string {
 	if o.config.TargetDir == "" {
 		return ""

@@ -17,19 +17,19 @@ import (
 	"github.com/gamelife1314/structoptimizer/optimizer"
 )
 
-// SourceWriter 源码写入器
+// SourceWriter writes optimized source code
 type SourceWriter struct {
 	config *Config
 	fset   *token.FileSet
 }
 
-// Config 写入器配置
+// Config holds writer configuration
 type Config struct {
 	Backup  bool
 	Verbose int
 }
 
-// NewSourceWriter 创建源码写入器
+// NewSourceWriter creates a new source writer
 func NewSourceWriter(cfg *Config) *SourceWriter {
 	return &SourceWriter{
 		config: cfg,
@@ -37,23 +37,23 @@ func NewSourceWriter(cfg *Config) *SourceWriter {
 	}
 }
 
-// BackupFile 备份源文件（带时间戳，避免覆盖）
+// BackupFile creates a timestamped backup of the source file (to avoid overwriting)
 func (w *SourceWriter) BackupFile(filePath string) (string, error) {
 	if !w.config.Backup {
 		return "", nil
 	}
 
-	// 创建备份文件名：xxx.go -> xxx.go.20060102_150405.bak（带时间戳）
+	// Create backup filename: xxx.go -> xxx.go.20060102_150405.bak (with timestamp)
 	timestamp := time.Now().Format("20060102_150405")
 	backupName := fmt.Sprintf("%s.%s.bak", filePath, timestamp)
 
-	// 读取原文件
+	// Read original file
 	content, err := os.ReadFile(filePath)
 	if err != nil {
 		return "", err
 	}
 
-	// 写入备份文件
+	// Write backup file
 	err = os.WriteFile(backupName, content, 0644)
 	if err != nil {
 		return "", err
@@ -63,17 +63,17 @@ func (w *SourceWriter) BackupFile(filePath string) (string, error) {
 	return backupName, nil
 }
 
-// WriteStruct 写入优化后的结构体到源文件
+// WriteStruct writes the optimized struct to the source file
 func (w *SourceWriter) WriteStruct(filePath string, info *optimizer.StructInfo) error {
 	w.log(1, "写入优化后的结构体到文件：%s", filePath)
 
-	// 解析文件
+	// Parse the file
 	f, err := parser.ParseFile(w.fset, filePath, nil, parser.ParseComments)
 	if err != nil {
 		return fmt.Errorf("解析文件失败：%v", err)
 	}
 
-	// 查找并修改结构体
+	// Find and modify the struct
 	modified := false
 	ast.Inspect(f, func(n ast.Node) bool {
 		genDecl, ok := n.(*ast.GenDecl)
@@ -92,7 +92,7 @@ func (w *SourceWriter) WriteStruct(filePath string, info *optimizer.StructInfo) 
 				continue
 			}
 
-			// 重排字段
+			// Reorder fields
 			w.reorderStructFields(structType, info.Fields)
 			modified = true
 			return false
@@ -105,7 +105,7 @@ func (w *SourceWriter) WriteStruct(filePath string, info *optimizer.StructInfo) 
 		return fmt.Errorf("未找到结构体：%s", info.Name)
 	}
 
-	// 写回文件
+	// Write back to file
 	var buf bytes.Buffer
 	err = printer.Fprint(&buf, w.fset, f)
 	if err != nil {
@@ -121,17 +121,17 @@ func (w *SourceWriter) WriteStruct(filePath string, info *optimizer.StructInfo) 
 	return nil
 }
 
-// reorderStructFields 重排结构体字段
+// reorderStructFields reorders struct fields
 func (w *SourceWriter) reorderStructFields(structType *ast.StructType, fields []optimizer.FieldInfo) {
 	if structType.Fields == nil {
 		return
 	}
 
-	// 创建字段映射
+	// Create field mapping
 	fieldMap := make(map[string]*ast.Field)
 	for _, field := range structType.Fields.List {
 		if len(field.Names) == 0 {
-			// 匿名字段
+			// Anonymous (embedded) field
 			typeStr := getTypeString(field.Type)
 			fieldMap["embed:"+typeStr] = field
 		} else {
@@ -141,7 +141,7 @@ func (w *SourceWriter) reorderStructFields(structType *ast.StructType, fields []
 		}
 	}
 
-	// 创建新的字段列表
+	// Create new field list
 	newFields := make([]*ast.Field, 0, len(fields))
 
 	for _, fi := range fields {
@@ -160,7 +160,7 @@ func (w *SourceWriter) reorderStructFields(structType *ast.StructType, fields []
 	structType.Fields.List = newFields
 }
 
-// getTypeString 获取类型的字符串表示
+// getTypeString returns the string representation of a type
 func getTypeString(expr ast.Expr) string {
 	switch t := expr.(type) {
 	case *ast.Ident:
@@ -176,9 +176,9 @@ func getTypeString(expr ast.Expr) string {
 	}
 }
 
-// RewriteFile 重写整个文件（使用优化后的结构体）
+// RewriteFile rewrites the entire file using optimized structs
 func (w *SourceWriter) RewriteFile(filePath string, optimizedStructs map[string]*optimizer.StructInfo) error {
-	// 规范化文件路径（解决不同操作系统路径分隔符问题）
+	// Canonicalize file path (handles cross-platform path separator differences)
 	absFilePath, err := filepath.Abs(filePath)
 	if err != nil {
 		return fmt.Errorf("规范化文件路径失败：%v", err)
@@ -186,20 +186,20 @@ func (w *SourceWriter) RewriteFile(filePath string, optimizedStructs map[string]
 
 	w.log(1, "重写文件：%s", filePath)
 
-	// 解析文件
+	// Parse the file
 	f, err := parser.ParseFile(w.fset, filePath, nil, parser.ParseComments)
 	if err != nil {
 		return fmt.Errorf("解析文件失败：%v", err)
 	}
 
-	// 收集该文件中所有需要修改的结构体（按结构体名索引）
+	// Collect all structs in this file that need modification (indexed by struct name)
 	fileStructs := make(map[string]*optimizer.StructInfo)
 	for _, info := range optimizedStructs {
 		if info.File != "" && info.Optimized {
-			// 规范化后比较路径
+			// Compare after canonicalization
 			absInfoFile, err := filepath.Abs(info.File)
 			if err != nil {
-				continue // 跳过无法规范化的路径
+				continue // skip paths that cannot be canonicalized
 			}
 			if absInfoFile == absFilePath {
 				fileStructs[info.Name] = info
@@ -208,10 +208,10 @@ func (w *SourceWriter) RewriteFile(filePath string, optimizedStructs map[string]
 	}
 
 	if len(fileStructs) == 0 {
-		return nil // 没有需要修改的结构体
+		return nil // no structs to modify
 	}
 
-	// 修改所有匹配的结构体
+	// Modify all matching structs
 	modified := false
 	ast.Inspect(f, func(n ast.Node) bool {
 		genDecl, ok := n.(*ast.GenDecl)
@@ -235,7 +235,7 @@ func (w *SourceWriter) RewriteFile(filePath string, optimizedStructs map[string]
 				continue
 			}
 
-			// 重排字段
+			// Reorder fields
 			w.reorderStructFields(structType, info.Fields)
 			modified = true
 		}
@@ -247,14 +247,14 @@ func (w *SourceWriter) RewriteFile(filePath string, optimizedStructs map[string]
 		return nil
 	}
 
-	// 写回文件（使用 go/format 格式化）
+	// Write back to file (formatted with go/format)
 	var buf bytes.Buffer
 	err = printer.Fprint(&buf, w.fset, f)
 	if err != nil {
 		return fmt.Errorf("格式化代码失败：%v", err)
 	}
 
-	// 使用 go/format 进行标准格式化（删除空行，保留注释）
+	// Apply go/format standard formatting (removes blank lines, preserves comments)
 	formatted, err := format.Source(buf.Bytes())
 	if err != nil {
 		return fmt.Errorf("go fmt 格式化失败：%v", err)
@@ -269,9 +269,9 @@ func (w *SourceWriter) RewriteFile(filePath string, optimizedStructs map[string]
 	return nil
 }
 
-// WriteFiles 写入多个文件
+// WriteFiles writes multiple files
 func (w *SourceWriter) WriteFiles(optimized map[string]*optimizer.StructInfo) error {
-	// 按文件分组
+	// Group by file
 	fileStructs := make(map[string][]*optimizer.StructInfo)
 	for _, info := range optimized {
 		if info.File != "" && info.Optimized {
@@ -279,22 +279,22 @@ func (w *SourceWriter) WriteFiles(optimized map[string]*optimizer.StructInfo) er
 		}
 	}
 
-	// 处理每个文件
+	// Process each file
 	for filePath := range fileStructs {
-		// 备份
+		// Backup
 		if w.config.Backup {
 			backupPath, err := w.BackupFile(filePath)
 			if err != nil {
 				w.log(0, "备份文件失败：%v", err)
 				continue
 			}
-			// 清理旧备份文件（保留最近 3 个）
+			// Clean up old backups (keep the most recent 3)
 			if backupPath != "" {
 				w.cleanupOldBackups(filePath)
 			}
 		}
 
-		// 写入
+		// Write
 		err := w.RewriteFile(filePath, optimized)
 		if err != nil {
 			w.log(0, "写入文件失败：%v", err)
@@ -305,20 +305,20 @@ func (w *SourceWriter) WriteFiles(optimized map[string]*optimizer.StructInfo) er
 	return nil
 }
 
-// cleanupOldBackups 清理旧备份文件，保留最近 3 个
+// cleanupOldBackups removes old backup files, keeping the most recent 3
 func (w *SourceWriter) cleanupOldBackups(filePath string) {
-	// 查找所有备份文件：xxx.go.YYYYMMDD_HHMMSS.bak
+	// Find all backup files: xxx.go.YYYYMMDD_HHMMSS.bak
 	pattern := filePath + ".*.bak"
 	matches, err := filepath.Glob(pattern)
 	if err != nil {
-		return // 忽略错误
+		return // ignore errors
 	}
 
-	// 如果备份文件超过 3 个，删除最旧的
+	// If more than 3 backups, delete the oldest
 	if len(matches) > 3 {
-		// 按文件名排序（时间戳在文件名中，排序后最早的在前）
+		// Sort by filename (timestamp is in the filename, earliest first after sorting)
 		sort.Strings(matches)
-		// 删除最旧的文件
+		// Delete oldest files
 		for i := 0; i < len(matches)-3; i++ {
 			os.Remove(matches[i])
 			w.log(2, "清理旧备份文件：%s", matches[i])
@@ -326,7 +326,7 @@ func (w *SourceWriter) cleanupOldBackups(filePath string) {
 	}
 }
 
-// log 日志输出
+// log emits a log line
 func (w *SourceWriter) log(level int, format string, args ...interface{}) {
 	if level <= w.config.Verbose {
 		prefix := ""
@@ -339,12 +339,12 @@ func (w *SourceWriter) log(level int, format string, args ...interface{}) {
 	}
 }
 
-// GetFileSet 获取文件集
+// GetFileSet returns the file set
 func (w *SourceWriter) GetFileSet() *token.FileSet {
 	return w.fset
 }
 
-// FormatNode 格式化 AST 节点
+// FormatNode formats an AST node
 func (w *SourceWriter) FormatNode(node ast.Node) (string, error) {
 	var buf bytes.Buffer
 	err := printer.Fprint(&buf, w.fset, node)
@@ -354,12 +354,12 @@ func (w *SourceWriter) FormatNode(node ast.Node) (string, error) {
 	return buf.String(), nil
 }
 
-// SortFieldInfos 对字段信息进行排序
+// SortFieldInfos sorts field info entries
 func SortFieldInfos(fields []optimizer.FieldInfo, sortSameSize bool) []optimizer.FieldInfo {
 	return optimizer.ReorderFields(fields, sortSameSize, nil)
 }
 
-// CreateFieldInfo 创建字段信息（用于测试）
+// CreateFieldInfo creates a field info entry (for testing)
 func CreateFieldInfo(name string, size, align int64, isEmbed bool, typeName string) optimizer.FieldInfo {
 	return optimizer.FieldInfo{
 		Name:     name,
@@ -370,7 +370,7 @@ func CreateFieldInfo(name string, size, align int64, isEmbed bool, typeName stri
 	}
 }
 
-// ReadFile 读取文件内容
+// ReadFile reads file content
 func ReadFile(filePath string) (string, error) {
 	content, err := os.ReadFile(filePath)
 	if err != nil {
@@ -379,12 +379,12 @@ func ReadFile(filePath string) (string, error) {
 	return string(content), nil
 }
 
-// WriteFile 写入文件内容
+// WriteFile writes content to a file
 func WriteFile(filePath string, content string) error {
 	return os.WriteFile(filePath, []byte(content), 0644)
 }
 
-// BackupAndWrite 备份并写入文件
+// BackupAndWrite creates a backup and writes to a file
 func BackupAndWrite(filePath, content string, backup bool) error {
 	if backup {
 		dir := filepath.Dir(filePath)
@@ -404,7 +404,7 @@ func BackupAndWrite(filePath, content string, backup bool) error {
 	return os.WriteFile(filePath, []byte(content), 0644)
 }
 
-// GetStructFields 获取结构体的字段列表（用于调试）
+// GetStructFields returns the field list of a struct (for debugging)
 func GetStructFields(filePath, structName string) ([]string, error) {
 	fset := token.NewFileSet()
 	f, err := parser.ParseFile(fset, filePath, nil, parser.ParseComments)
@@ -427,7 +427,7 @@ func GetStructFields(filePath, structName string) ([]string, error) {
 		if structType.Fields != nil {
 			for _, field := range structType.Fields.List {
 				if len(field.Names) == 0 {
-					// 匿名字段
+					// Anonymous (embedded) field
 					fields = append(fields, getTypeString(field.Type))
 				} else {
 					for _, name := range field.Names {
@@ -442,7 +442,7 @@ func GetStructFields(filePath, structName string) ([]string, error) {
 	return fields, nil
 }
 
-// CompareFields 比较两个字段列表
+// CompareFields compares two field lists
 func CompareFields(orig, new []string) bool {
 	if len(orig) != len(new) {
 		return false
@@ -455,7 +455,7 @@ func CompareFields(orig, new []string) bool {
 	return true
 }
 
-// FieldsChanged 检查字段是否发生变化
+// FieldsChanged checks whether fields have changed
 func FieldsChanged(orig, new []optimizer.FieldInfo) bool {
 	if len(orig) != len(new) {
 		return true
@@ -468,7 +468,7 @@ func FieldsChanged(orig, new []optimizer.FieldInfo) bool {
 	return false
 }
 
-// GenerateStructCode 生成结构体代码
+// GenerateStructCode generates struct source code
 func GenerateStructCode(name string, fields []optimizer.FieldInfo) string {
 	var sb strings.Builder
 	sb.WriteString(fmt.Sprintf("type %s struct {\n", name))
@@ -485,7 +485,7 @@ func GenerateStructCode(name string, fields []optimizer.FieldInfo) string {
 	return sb.String()
 }
 
-// PrintFields 打印字段信息（用于调试）
+// PrintFields prints field info (for debugging)
 func PrintFields(fields []optimizer.FieldInfo) {
 	for i, f := range fields {
 		fmt.Printf("%2d. %-20s size=%3d align=%2d", i+1, f.Name, f.Size, f.Align)
@@ -496,7 +496,7 @@ func PrintFields(fields []optimizer.FieldInfo) {
 	}
 }
 
-// GroupFieldsBySize 按大小分组字段
+// GroupFieldsBySize groups fields by their size
 func GroupFieldsBySize(fields []optimizer.FieldInfo) map[int64][]optimizer.FieldInfo {
 	groups := make(map[int64][]optimizer.FieldInfo)
 	for _, f := range fields {
@@ -505,7 +505,7 @@ func GroupFieldsBySize(fields []optimizer.FieldInfo) map[int64][]optimizer.Field
 	return groups
 }
 
-// CalculatePadding 计算填充大小
+// CalculatePadding computes the total padding size
 func CalculatePadding(fields []optimizer.FieldInfo) int64 {
 	var offset int64 = 0
 	var padding int64 = 0
@@ -523,7 +523,7 @@ func CalculatePadding(fields []optimizer.FieldInfo) int64 {
 		}
 	}
 
-	// 末尾填充
+	// Trailing padding
 	if offset%maxAlign != 0 {
 		padding += maxAlign - (offset % maxAlign)
 	}

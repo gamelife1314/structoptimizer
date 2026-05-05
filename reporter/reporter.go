@@ -9,7 +9,7 @@ import (
 	"github.com/gamelife1314/structoptimizer/optimizer"
 )
 
-// Generate 生成报告
+// Generate generates the report
 func (r *Reporter) Generate(report *optimizer.Report) error {
 	var content string
 	var err error
@@ -29,7 +29,7 @@ func (r *Reporter) Generate(report *optimizer.Report) error {
 		return err
 	}
 
-	// 输出到文件或 stdout
+	// Output to file or stdout
 	if r.output != "" {
 		return os.WriteFile(r.output, []byte(content), 0644)
 	} else {
@@ -38,7 +38,7 @@ func (r *Reporter) Generate(report *optimizer.Report) error {
 	}
 }
 
-// GenerateTXT 生成 TXT 格式报告
+// GenerateTXT generates a TXT format report
 func (r *Reporter) GenerateTXT(report *optimizer.Report) (string, error) {
 	s := getStrings(r.lang)
 	var sb strings.Builder
@@ -50,7 +50,7 @@ func (r *Reporter) GenerateTXT(report *optimizer.Report) (string, error) {
 	sb.WriteString("╚════════════════════════════════════════════════════════════════════════════════╝\n")
 	sb.WriteString(fmt.Sprintf("%s：%s\n\n", s.GeneratedTime, time.Now().Format("2006-01-02 15:04:05")))
 
-	// 1. 优化总览
+	// 1. Optimization overview
 	sb.WriteString("┌────────────────────────────────────────────────────────────────────────────────┐\n")
 	sb.WriteString(fmt.Sprintf("│  %-76s│\n", s.OverviewTitle))
 	sb.WriteString("├────────────────────────────────────────────────────────────────────────────────┤\n")
@@ -75,10 +75,10 @@ func (r *Reporter) GenerateTXT(report *optimizer.Report) (string, error) {
 	}
 	sb.WriteString("└────────────────────────────────────────────────────────────────────────────────┘\n\n")
 
-	// 分类结构体
+	// Classify struct reports
 	optimized, skippedNormal, skippedError, unchanged := classifyStructReports(report, s)
 
-	// 2. 调整的结构体（优先显示）
+	// 2. Adjusted structs (shown first)
 	if len(optimized) > 0 {
 		sb.WriteString("┌────────────────────────────────────────────────────────────────────────────────┐\n")
 		sb.WriteString(fmt.Sprintf("│  %-76s│\n", fmt.Sprintf("%s (%s)", s.AdjustedTitle, fmt.Sprintf(s.AdjustedSummary, len(optimized)))))
@@ -113,7 +113,7 @@ func (r *Reporter) GenerateTXT(report *optimizer.Report) (string, error) {
 		}
 	}
 
-	// 3. 正常跳过的结构体（仅详细模式显示）
+	// 3. Normal skipped structs (detailed mode only)
 	if r.level >= ReportLevelFull && len(skippedNormal) > 0 {
 		sb.WriteString("┌────────────────────────────────────────────────────────────────────────────────┐\n")
 		sb.WriteString(fmt.Sprintf("│  %-76s│\n", fmt.Sprintf("%s (%s)", s.SkippedNormalTitle, fmt.Sprintf(s.SkippedNormalSummary, len(skippedNormal)))))
@@ -125,7 +125,7 @@ func (r *Reporter) GenerateTXT(report *optimizer.Report) (string, error) {
 		}
 	}
 
-	// 4. 异常跳过的结构体
+	// 4. Error skipped structs
 	if len(skippedError) > 0 {
 		sb.WriteString("┌────────────────────────────────────────────────────────────────────────────────┐\n")
 		sb.WriteString(fmt.Sprintf("│  %-76s│\n", fmt.Sprintf("%s (%s)", s.SkippedErrorTitle, fmt.Sprintf(s.SkippedErrorSummary, len(skippedError)))))
@@ -137,7 +137,7 @@ func (r *Reporter) GenerateTXT(report *optimizer.Report) (string, error) {
 		}
 	}
 
-	// 5. 未变化的结构体（详细模式下显示）
+	// 5. Unchanged structs (detailed mode)
 	if r.level >= ReportLevelFull && len(unchanged) > 0 {
 		sb.WriteString("┌────────────────────────────────────────────────────────────────────────────────┐\n")
 		sb.WriteString(fmt.Sprintf("│  %-76s│\n", fmt.Sprintf("%s (%s)", s.UnchangedTitle, fmt.Sprintf(s.UnchangedSummary, len(unchanged)))))
@@ -156,11 +156,11 @@ func (r *Reporter) GenerateTXT(report *optimizer.Report) (string, error) {
 	return sb.String(), nil
 }
 
-// classifyStructReports 分类结构体报告
+// classifyStructReports classifies struct reports into categories
 func classifyStructReports(report *optimizer.Report, s i18n) (optimized, skippedNormal, skippedError, unchanged []*optimizer.StructReport) {
 	for _, sr := range report.StructReports {
 		if sr.Skipped {
-			// 区分正常跳过和异常跳过
+			// Distinguish between normal skips and error skips
 			if strings.HasPrefix(sr.SkipReason, s.SkipReasonByMethod) ||
 				strings.HasPrefix(sr.SkipReason, s.SkipReasonByName) ||
 				sr.SkipReason == s.SkipReasonEmpty ||
@@ -178,7 +178,7 @@ func classifyStructReports(report *optimizer.Report, s i18n) (optimized, skipped
 	return
 }
 
-// getFieldCompareData 获取字段对比数据
+// getFieldCompareData retrieves field comparison data for display
 func getFieldCompareData(sr *optimizer.StructReport, i int) (origName, origType, origSize, optName, optType, optSize, change string) {
 	origName = "-"
 	origType = "-"
@@ -215,14 +215,14 @@ func getFieldCompareData(sr *optimizer.StructReport, i int) (origName, origType,
 		}
 	}
 
-	// 比较变化时使用完整字段信息（包括类型名）
+	// When comparing, use full field info (including type name)
 	origKey := origName + ":" + origType
 	optKey := optName + ":" + optType
 	if origKey != optKey {
 		change = "🔄"
 	}
 
-	// 显示时匿名字段字段名为空，只显示类型名
+	// For display, hide field names for anonymous (embedded) fields, show type only
 	if origName == origType {
 		origName = ""
 	}

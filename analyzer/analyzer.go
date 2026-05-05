@@ -16,41 +16,41 @@ import (
 	"golang.org/x/tools/go/packages"
 )
 
-// Analyzer 分析器（参考 gopls 设计）
+// Analyzer (modeled after gopls design)
 type Analyzer struct {
 	config      *Config
 	fset        *token.FileSet
 	info        *types.Info
 	pkg         *packages.Package
-	pkgMap      map[string]*packages.Package // 已加载的包缓存（线程安全）
+	pkgMap      map[string]*packages.Package // loaded package cache (thread-safe)
 	loadedPkgs  map[string]bool
-	mu          sync.RWMutex               // 保护包缓存
-	structIndex map[string]*StructLocation // 结构体位置索引（包路径。结构体名 -> 文件路径）
+	mu          sync.RWMutex               // protects the package cache
+	structIndex map[string]*StructLocation // struct location index (packagePath.structName -> filePath)
 }
 
-// StructLocation 结构体位置信息
+// StructLocation holds struct location info
 type StructLocation struct {
 	PkgPath  string
 	FileName string
-	Loaded   bool // 是否已加载包
+	Loaded   bool // whether the package has been loaded
 }
 
-// Config 分析器配置
+// Config holds analyzer configuration
 type Config struct {
 	TargetDir     string
-	StructName    string // 结构体全名（包路径。结构体名）
-	Package       string // 包路径
+	StructName    string // struct full name (packagePath.structName)
+	Package       string // package path
 	SourceFile    string
 	SkipDirs      []string
 	SkipFiles     []string
 	SkipByMethods []string
 	SkipByNames   []string
 	Verbose       int
-	ProjectType   string // 项目类型：gomod 或 gopath
-	GOPATH        string // GOPATH 路径（可选，为空则使用环境变量）
+	ProjectType   string // project type: gomod or gopath
+	GOPATH        string // GOPATH path (optional, uses env var if empty)
 }
 
-// NewAnalyzer 创建分析器
+// NewAnalyzer creates a new analyzer
 func NewAnalyzer(cfg *Config) *Analyzer {
 	return &Analyzer{
 		config:      cfg,
@@ -61,19 +61,19 @@ func NewAnalyzer(cfg *Config) *Analyzer {
 	}
 }
 
-// BuildStructIndex 构建结构体索引（参考 gopls 的文件扫描）
-// 快速扫描所有文件，建立结构体位置索引，不加载包
+// BuildStructIndex builds the struct index (modeled after gopls file scanning)
+// Quickly scans all files to build the struct location index without loading packages
 func (a *Analyzer) BuildStructIndex() error {
 	a.Log(1, "构建结构体索引...")
 	start := time.Now()
 
-	// 确定搜索目录
+	// Determine the search directory
 	searchDir := a.config.TargetDir
 	if searchDir == "" {
 		searchDir = "."
 	}
 
-	// 扫描所有 Go 文件
+	// Scan all Go files
 	err := a.scanDirectory(searchDir)
 	if err != nil {
 		return err
@@ -83,7 +83,7 @@ func (a *Analyzer) BuildStructIndex() error {
 	return nil
 }
 
-// scanDirectory 递归扫描目录
+// scanDirectory recursively scans directories
 func (a *Analyzer) scanDirectory(dir string) error {
 	entries, err := os.ReadDir(dir)
 	if err != nil {
@@ -92,7 +92,7 @@ func (a *Analyzer) scanDirectory(dir string) error {
 
 	for _, entry := range entries {
 		if entry.IsDir() {
-			// 跳过 vendor 和.git 等目录
+			// Skip vendor, .git, etc. directories
 			name := entry.Name()
 			if name == "vendor" || name == ".git" || name == "node_modules" {
 				continue
@@ -103,7 +103,7 @@ func (a *Analyzer) scanDirectory(dir string) error {
 			continue
 		}
 
-		// 只处理.go 文件
+		// Only process .go files
 		name := entry.Name()
 		if !strings.HasSuffix(name, ".go") {
 			continue
@@ -112,36 +112,36 @@ func (a *Analyzer) scanDirectory(dir string) error {
 		filePath := filepath.Join(dir, name)
 		if err := a.scanFile(filePath); err != nil {
 			a.Log(2, "扫描文件失败：%v", err)
-			continue // 继续处理其他文件
+			continue // continue processing other files
 		}
 	}
 
 	return nil
 }
 
-// scanFile 扫描单个文件，提取结构体定义
+// scanFile scans a single file and extracts struct definitions
 func (a *Analyzer) scanFile(filePath string) error {
-	// 快速检查：文件是否包含 "type.*struct"
+	// Quick check: whether the file contains "type.*struct"
 	data, err := os.ReadFile(filePath)
 	if err != nil {
 		return err
 	}
 
 	if !bytes.Contains(data, []byte("type ")) || !bytes.Contains(data, []byte(" struct")) {
-		return nil // 文件不包含结构体定义
+		return nil // file contains no struct definitions
 	}
 
-	// 解析文件
+	// Parse the file
 	fset := token.NewFileSet()
 	f, err := parser.ParseFile(fset, filePath, nil, parser.ParseComments)
 	if err != nil {
 		return err
 	}
 
-	// 提取包路径
+	// Extract the package path
 	pkgPath := a.extractPkgPath(f, filePath)
 
-	// 提取结构体
+	// Extract structs
 	for _, decl := range f.Decls {
 		genDecl, ok := decl.(*ast.GenDecl)
 		if !ok || genDecl.Tok != token.TYPE {
@@ -168,11 +168,11 @@ func (a *Analyzer) scanFile(filePath string) error {
 	return nil
 }
 
-// extractPkgPath 从文件中提取包路径
+// extractPkgPath extracts the package path from a file
 func (a *Analyzer) extractPkgPath(f *ast.File, filePath string) string {
-	// 尝试从 import 推断完整包路径
+	// Try to infer the full package path from imports
 	if a.config.TargetDir != "" {
-		// Go Module 模式：从文件路径推断
+		// Go Module mode: infer from file path
 		relPath, err := filepath.Rel(a.config.TargetDir, filepath.Dir(filePath))
 		if err == nil && relPath != "." {
 			modulePath := a.getModulePath()
@@ -182,7 +182,7 @@ func (a *Analyzer) extractPkgPath(f *ast.File, filePath string) string {
 		}
 	}
 
-	// 使用包名作为后备
+	// Fallback to using the package name
 	if f.Name != nil {
 		return f.Name.Name
 	}
@@ -190,7 +190,7 @@ func (a *Analyzer) extractPkgPath(f *ast.File, filePath string) string {
 	return "unknown"
 }
 
-// getModulePath 获取模块路径
+// getModulePath retrieves the module path
 func (a *Analyzer) getModulePath() string {
 	if a.config.TargetDir == "" {
 		return ""
@@ -212,7 +212,7 @@ func (a *Analyzer) getModulePath() string {
 	return ""
 }
 
-// LoadPackage 加载包（线程安全，带错误处理）
+// LoadPackage loads a package (thread-safe, with error handling)
 func (a *Analyzer) LoadPackage(pkgPath string) (*packages.Package, error) {
 	a.mu.Lock()
 	if pkg, ok := a.pkgMap[pkgPath]; ok {
@@ -226,17 +226,17 @@ func (a *Analyzer) LoadPackage(pkgPath string) (*packages.Package, error) {
 	a.loadedPkgs[pkgPath] = true
 	a.mu.Unlock()
 
-	// 根据项目类型构建环境
+	// Build the environment based on project type
 	isGoMod := a.config.ProjectType != "gopath"
 
-	// 构建环境
+	// Build environment
 	env := os.Environ()
 	var loadDir string
 	if !isGoMod {
-		// GOPATH 模式
+		// GOPATH mode
 		env = append(env, "GO111MODULE=off")
 
-		// 使用配置的 GOPATH 或环境变量
+		// Use configured GOPATH or environment variable
 		gopath := a.config.GOPATH
 		if gopath == "" {
 			gopath = os.Getenv("GOPATH")
@@ -245,10 +245,10 @@ func (a *Analyzer) LoadPackage(pkgPath string) (*packages.Package, error) {
 			env = append(env, "GOPATH="+gopath)
 		}
 
-		loadDir = "" // GOPATH 模式下，使用 GOPATH 查找包
+		loadDir = "" // GOPATH mode, look up packages via GOPATH
 		a.Log(1, "使用 GOPATH 模式加载包：%s (GOPATH=%s)", pkgPath, gopath)
 	} else {
-		// Go Module 模式
+		// Go Module mode
 		loadDir = a.config.TargetDir
 		a.Log(1, "使用 Go Module 模式加载包：%s", pkgPath)
 	}
@@ -262,10 +262,10 @@ func (a *Analyzer) LoadPackage(pkgPath string) (*packages.Package, error) {
 		Env:  env,
 	}
 
-	// 加载包
+	// Load the package
 	pkgs, err := packages.Load(cfg, pkgPath)
 	if err != nil {
-		// 标记为已加载（避免重复尝试）
+		// Mark as loaded (avoid retry)
 		a.mu.Lock()
 		a.loadedPkgs[pkgPath] = true
 		a.mu.Unlock()
@@ -273,7 +273,7 @@ func (a *Analyzer) LoadPackage(pkgPath string) (*packages.Package, error) {
 	}
 
 	if len(pkgs) == 0 {
-		// 标记为已加载
+		// Mark as loaded
 		a.mu.Lock()
 		a.loadedPkgs[pkgPath] = true
 		a.mu.Unlock()
@@ -281,7 +281,7 @@ func (a *Analyzer) LoadPackage(pkgPath string) (*packages.Package, error) {
 	}
 
 	if len(pkgs) > 1 {
-		// 标记为已加载
+		// Mark as loaded
 		a.mu.Lock()
 		a.loadedPkgs[pkgPath] = true
 		a.mu.Unlock()
@@ -290,17 +290,17 @@ func (a *Analyzer) LoadPackage(pkgPath string) (*packages.Package, error) {
 
 	pkg := pkgs[0]
 
-	// 包有错误，记录但仍然缓存（避免重复尝试）
+	// Package has errors, log but still cache (avoid retry)
 	if len(pkg.Errors) > 0 {
 		a.Log(2, "包 %s 有错误：%v", pkgPath, pkg.Errors)
 		a.mu.Lock()
 		a.pkgMap[pkgPath] = pkg
 		a.loadedPkgs[pkgPath] = true
 		a.mu.Unlock()
-		return pkg, nil // 返回包但不报错
+		return pkg, nil // return the package without error
 	}
 
-	// 缓存包（写锁）
+	// Cache the package (write lock)
 	a.mu.Lock()
 	a.pkgMap[pkgPath] = pkg
 	a.loadedPkgs[pkgPath] = true
@@ -309,21 +309,21 @@ func (a *Analyzer) LoadPackage(pkgPath string) (*packages.Package, error) {
 	return pkg, nil
 }
 
-// FindStructByName 查找指定名称的结构体
-// 优化：先尝试快速查找（不加载包），失败后再加载包
+// FindStructByName finds a struct by name
+// Optimization: try fast lookup first (no package load), fall back to loading
 func (a *Analyzer) FindStructByName(pkgPath, structName string) (*types.Struct, string, error) {
-	// 快速路径：如果包已加载，直接从缓存查找
+	// Fast path: if package already loaded, look up from cache
 	if pkg, ok := a.pkgMap[pkgPath]; ok {
 		return a.findStructInLoadedPackage(pkg, structName)
 	}
 
-	// 快速路径：直接解析文件查找结构体（不加载包）
+	// Fast path: parse the file directly without loading the package
 	st, filePath, err := a.findStructFast(pkgPath, structName)
 	if err == nil {
 		return st, filePath, nil
 	}
 
-	// 慢速路径：加载整个包再查找
+	// Slow path: load the full package, then search
 	a.Log(3, "快速查找失败，加载包：%s", pkgPath)
 	pkg, err := a.LoadPackage(pkgPath)
 	if err != nil {
@@ -336,21 +336,21 @@ func (a *Analyzer) FindStructByName(pkgPath, structName string) (*types.Struct, 
 	return a.findStructInLoadedPackage(pkg, structName)
 }
 
-// findStructFast 快速查找结构体（不加载包，只解析文件）
+// findStructFast performs a fast struct lookup (no package load, parse file only)
 func (a *Analyzer) findStructFast(pkgPath, structName string) (*types.Struct, string, error) {
-	// 确定搜索目录
+	// Determine the search directory
 	searchDir := a.getPackageDir(pkgPath)
 	if searchDir == "" {
 		return nil, "", fmt.Errorf("无法确定包目录：%s", pkgPath)
 	}
 
-	// 查找包含结构体的文件
+	// Find files containing the struct
 	files, err := a.findFilesWithStruct(searchDir, structName)
 	if err != nil {
 		return nil, "", err
 	}
 
-	// 解析找到的文件
+	// Parse the found files
 	for _, filePath := range files {
 		st, err := a.parseStructFromFile(filePath, structName)
 		if err == nil && st != nil {
@@ -361,13 +361,13 @@ func (a *Analyzer) findStructFast(pkgPath, structName string) (*types.Struct, st
 	return nil, "", fmt.Errorf("struct %s not found", structName)
 }
 
-// findStructInLoadedPackage 在已加载的包中查找结构体
+// findStructInLoadedPackage looks up a struct in a loaded package
 func (a *Analyzer) findStructInLoadedPackage(pkg *packages.Package, structName string) (*types.Struct, string, error) {
-	// 遍历包中的所有文件
+	// Iterate over all files in the package
 	for _, syntax := range pkg.Syntax {
 		filePath := pkg.Fset.File(syntax.Pos()).Name()
 
-		// 在文件中查找结构体
+		// Look for the struct in the file
 		for _, decl := range syntax.Decls {
 			genDecl, ok := decl.(*ast.GenDecl)
 			if !ok || genDecl.Tok != token.TYPE {
@@ -384,7 +384,7 @@ func (a *Analyzer) findStructInLoadedPackage(pkg *packages.Package, structName s
 					continue
 				}
 
-				// 查找对应的类型信息
+				// Look up the corresponding type info
 				obj := pkg.TypesInfo.ObjectOf(typeSpec.Name)
 				if obj == nil {
 					continue
@@ -402,10 +402,10 @@ func (a *Analyzer) findStructInLoadedPackage(pkg *packages.Package, structName s
 	return nil, "", fmt.Errorf("struct %s not found in package", structName)
 }
 
-// getPackageDir 获取包所在的目录
+// getPackageDir returns the directory for a package
 func (a *Analyzer) getPackageDir(pkgPath string) string {
 	if a.config.TargetDir != "" {
-		// Go Module 模式
+		// Go Module mode
 		relPath := strings.TrimPrefix(pkgPath, a.getModulePath())
 		relPath = strings.TrimPrefix(relPath, "/")
 		if relPath != "" {
@@ -414,7 +414,7 @@ func (a *Analyzer) getPackageDir(pkgPath string) string {
 		return a.config.TargetDir
 	}
 
-	// GOPATH 模式
+	// GOPATH mode
 	gopath := a.config.GOPATH
 	if gopath == "" {
 		gopath = os.Getenv("GOPATH")
@@ -426,11 +426,11 @@ func (a *Analyzer) getPackageDir(pkgPath string) string {
 	return ""
 }
 
-// findFilesWithStruct 查找可能包含指定结构体的文件
+// findFilesWithStruct finds files that may contain the given struct
 func (a *Analyzer) findFilesWithStruct(dir, structName string) ([]string, error) {
 	var result []string
 
-	// 读取目录
+	// Read the directory
 	entries, err := os.ReadDir(dir)
 	if err != nil {
 		return nil, err
@@ -448,7 +448,7 @@ func (a *Analyzer) findFilesWithStruct(dir, structName string) ([]string, error)
 
 		filePath := filepath.Join(dir, name)
 
-		// 快速检查文件是否包含结构体名称
+		// Quick check: does the file contain the struct name
 		if a.fileContainsStruct(filePath, structName) {
 			result = append(result, filePath)
 		}
@@ -457,28 +457,28 @@ func (a *Analyzer) findFilesWithStruct(dir, structName string) ([]string, error)
 	return result, nil
 }
 
-// fileContainsStruct 快速检查文件是否包含结构体定义（不解析）
+// fileContainsStruct quickly checks if a file contains a struct definition (no parsing)
 func (a *Analyzer) fileContainsStruct(filePath, structName string) bool {
 	data, err := os.ReadFile(filePath)
 	if err != nil {
 		return false
 	}
 
-	// 简单字符串匹配：查找 "type StructName struct"
+	// Simple string match: look for "type StructName struct"
 	pattern := []byte("type " + structName + " struct")
 	return bytes.Contains(data, pattern)
 }
 
-// parseStructFromFile 从文件中解析结构体
+// parseStructFromFile parses a struct from a file
 func (a *Analyzer) parseStructFromFile(filePath, structName string) (*types.Struct, error) {
-	// 解析文件
+	// Parse the file
 	fset := token.NewFileSet()
 	f, err := parser.ParseFile(fset, filePath, nil, parser.ParseComments)
 	if err != nil {
 		return nil, err
 	}
 
-	// 查找结构体定义
+	// Find the struct definition
 	for _, decl := range f.Decls {
 		genDecl, ok := decl.(*ast.GenDecl)
 		if !ok || genDecl.Tok != token.TYPE {
@@ -493,7 +493,7 @@ func (a *Analyzer) parseStructFromFile(filePath, structName string) (*types.Stru
 
 			if ts.Name.Name == structName {
 				if st, ok := ts.Type.(*ast.StructType); ok {
-					// 创建简化的结构体（用于收集依赖）
+					// Create a simplified struct (for dependency collection)
 					result, _ := a.createSimpleStruct(st, fset)
 					return result, nil
 				}
@@ -504,7 +504,7 @@ func (a *Analyzer) parseStructFromFile(filePath, structName string) (*types.Stru
 	return nil, fmt.Errorf("struct %s not found in file %s", structName, filePath)
 }
 
-// createSimpleStruct 创建简化的结构体（用于快速收集依赖）
+// createSimpleStruct creates a simplified struct (for fast dependency collection)
 func (a *Analyzer) createSimpleStruct(astStruct *ast.StructType, fset *token.FileSet) (*types.Struct, error) {
 	var fields []*types.Var
 
@@ -514,7 +514,7 @@ func (a *Analyzer) createSimpleStruct(astStruct *ast.StructType, fset *token.Fil
 			fieldNames = field.Names
 		}
 
-		// 创建占位符类型
+		// Create placeholder type
 		fieldType := types.Typ[types.Invalid]
 
 		for _, name := range fieldNames {
@@ -522,7 +522,7 @@ func (a *Analyzer) createSimpleStruct(astStruct *ast.StructType, fset *token.Fil
 			fields = append(fields, fieldVar)
 		}
 
-		// 匿名字段
+		// Anonymous (embedded) field
 		if len(fieldNames) == 0 {
 			typeName := a.extractTypeName(field.Type)
 			if typeName != "" {
@@ -535,7 +535,7 @@ func (a *Analyzer) createSimpleStruct(astStruct *ast.StructType, fset *token.Fil
 	return types.NewStruct(fields, nil), nil
 }
 
-// extractTypeName 从 AST 类型表达式中提取类型名称
+// extractTypeName extracts a type name from an AST type expression
 func (a *Analyzer) extractTypeName(expr ast.Expr) string {
 	switch t := expr.(type) {
 	case *ast.Ident:
@@ -549,14 +549,15 @@ func (a *Analyzer) extractTypeName(expr ast.Expr) string {
 	}
 }
 
-// FindAllStructs 查找包中的所有结构体
+// StructDef holds the definition of a struct found during scanning
 type StructDef struct {
 	Name    string
 	PkgPath string
 	File    string
 	Type    *types.Struct
 }
-// FindAllStructs 查找指定包中的所有结构体
+
+// FindAllStructs finds all structs in the specified package
 func (a *Analyzer) FindAllStructs(pkgPath string) ([]StructDef, error) {
 	pkg, err := a.LoadPackage(pkgPath)
 	if err != nil {
@@ -568,25 +569,25 @@ func (a *Analyzer) FindAllStructs(pkgPath string) ([]StructDef, error) {
 
 	var structs []StructDef
 
-	// 遍历包中的所有文件
+	// Iterate over all files in the package
 	for _, syntax := range pkg.Syntax {
 		filePath := pkg.Fset.File(syntax.Pos()).Name()
 
-		// 如果指定了源文件，只在该文件中查找
+		// If a source file is specified, search only in that file
 		if a.config.SourceFile != "" {
-			// 检查文件路径是否匹配（使用 basename 匹配）
+			// Check if the file path matches (using basename)
 			baseName := filepath.Base(filePath)
 			if baseName != a.config.SourceFile {
 				continue
 			}
 		}
 
-		// 检查是否应该跳过
+		// Check whether this file should be skipped
 		if a.shouldSkipFile(filePath) {
 			continue
 		}
 
-		// 在文件中查找结构体
+		// Look for structs in the file
 		for _, decl := range syntax.Decls {
 			genDecl, ok := decl.(*ast.GenDecl)
 			if !ok || genDecl.Tok != token.TYPE {
@@ -604,7 +605,7 @@ func (a *Analyzer) FindAllStructs(pkgPath string) ([]StructDef, error) {
 					continue
 				}
 
-				// 获取类型信息
+				// Get type information
 				typ := pkg.TypesInfo.TypeOf(typeSpec.Type)
 				if typ == nil {
 					continue
@@ -628,15 +629,15 @@ func (a *Analyzer) FindAllStructs(pkgPath string) ([]StructDef, error) {
 	return structs, nil
 }
 
-// FindAllStructsRecursive 递归查找指定包及其所有子包中的结构体
+// FindAllStructsRecursive recursively finds structs in a package and all sub-packages
 func (a *Analyzer) FindAllStructsRecursive(rootPkgPath string) ([]StructDef, error) {
 	a.Log(1, "递归扫描包：%s 及其所有子包", rootPkgPath)
 
-	// 收集所有子包路径
+	// Collect all sub-package paths
 	var allPkgPaths []string
 	visited := make(map[string]bool)
 
-	// 使用 BFS 遍历所有导入的包
+	// Use BFS to traverse all imported packages
 	queue := []string{rootPkgPath}
 	visited[rootPkgPath] = true
 
@@ -644,25 +645,25 @@ func (a *Analyzer) FindAllStructsRecursive(rootPkgPath string) ([]StructDef, err
 		currentPkg := queue[0]
 		queue = queue[1:]
 
-		// 加载当前包以获取其导入
+		// Load the current package to get its imports
 		pkg, err := a.LoadPackage(currentPkg)
 		if err != nil {
 			a.Log(2, "加载包 %s 失败：%v", currentPkg, err)
-			// 即使加载失败，也添加到扫描列表
+			// Even if loading fails, add to the scan list
 			allPkgPaths = append(allPkgPaths, currentPkg)
 			continue
 		}
 
-		// 添加当前包到扫描列表
+		// Add current package to the scan list
 		allPkgPaths = append(allPkgPaths, currentPkg)
 
-		// 获取所有导入的包
+		// Get all imported packages
 		for _, imp := range pkg.Imports {
 			impPath := imp.PkgPath
 			if !visited[impPath] {
-				// 只添加项目内部的包（跳过标准库和 vendor）
+				// Only add project-internal packages (skip stdlib and vendor)
 				if a.isProjectPackage(impPath) && !isVendorPackage(impPath) {
-					// 检查是否在根包的子路径下
+					// Check if it is under the root package path
 					if strings.HasPrefix(impPath, rootPkgPath+"/") {
 						visited[impPath] = true
 						queue = append(queue, impPath)
@@ -674,7 +675,7 @@ func (a *Analyzer) FindAllStructsRecursive(rootPkgPath string) ([]StructDef, err
 
 	a.Log(2, "找到 %d 个子包", len(allPkgPaths))
 
-	// 收集所有包中的结构体
+	// Collect structs from all packages
 	var allStructs []StructDef
 	for _, pkgPath := range allPkgPaths {
 		structs, err := a.FindAllStructs(pkgPath)
@@ -690,7 +691,7 @@ func (a *Analyzer) FindAllStructsRecursive(rootPkgPath string) ([]StructDef, err
 	return allStructs, nil
 }
 
-// isProjectPackage 判断是否是项目内部的包
+// isProjectPackage checks whether a package is internal to the project
 func (a *Analyzer) isProjectPackage(pkgPath string) bool {
 	if pkgPath == "" {
 		return false
@@ -704,14 +705,14 @@ func (a *Analyzer) isProjectPackage(pkgPath string) bool {
 	return true
 }
 
-// isVendorPackage 判断是否是 vendor 中的包或第三方包
+// isVendorPackage checks whether a package is in vendor or is a third-party package
 func isVendorPackage(pkgPath string) bool {
-	// 1. 空包路径（通常是标准库或内置类型）
+	// 1. Empty package path (usually stdlib or built-in types)
 	if pkgPath == "" {
 		return true
 	}
 
-	// 2. 检查是否包含 vendor 目录
+	// 2. Check if the path contains a vendor directory
 	if strings.Contains(pkgPath, "/vendor/") || strings.HasPrefix(pkgPath, "vendor/") {
 		return true
 	}
@@ -719,19 +720,19 @@ func isVendorPackage(pkgPath string) bool {
 	return false
 }
 
-// isStandardLibrary 判断是否是 Go 标准库
+// isStandardLibrary checks whether a package is part of the Go standard library
 func isStandardLibrary(pkgPath string) bool {
 	if pkgPath == "" {
 		return true
 	}
-	// 标准库不包含点号
+	// Standard library packages do not contain dots
 	if strings.Contains(pkgPath, ".") {
 		return false
 	}
 	return true
 }
 
-// HasMethod 检查结构体是否有指定方法
+// HasMethod checks whether a struct has the specified method
 func (a *Analyzer) HasMethod(structType *types.Named, methodName string) bool {
 	if structType == nil {
 		return false
@@ -746,7 +747,7 @@ func (a *Analyzer) HasMethod(structType *types.Named, methodName string) bool {
 	return false
 }
 
-// HasAnyMethod 检查结构体是否有任一指定方法
+// HasAnyMethod checks whether a struct has any of the specified methods
 func (a *Analyzer) HasAnyMethod(structType *types.Named, methodNames []string) bool {
 	for _, name := range methodNames {
 		if a.HasMethod(structType, name) {
@@ -756,7 +757,7 @@ func (a *Analyzer) HasAnyMethod(structType *types.Named, methodNames []string) b
 	return false
 }
 
-// GetStructMethods 获取结构体的所有方法名
+// GetStructMethods returns all method names of a struct
 func (a *Analyzer) GetStructMethods(structType *types.Named) []string {
 	var methods []string
 	for i := 0; i < structType.NumMethods(); i++ {
@@ -765,16 +766,16 @@ func (a *Analyzer) GetStructMethods(structType *types.Named) []string {
 	return methods
 }
 
-// IsExternalPackage 判断是否是外部包（非当前项目）
+// IsExternalPackage checks whether a package is external (not in the current project)
 func (a *Analyzer) IsExternalPackage(pkgPath string) bool {
-	// 标准库
+	// Standard library
 	if !strings.Contains(pkgPath, ".") {
 		return true
 	}
 
-	// 检查是否在项目内
+	// Check if it is within the project
 	if a.config.TargetDir != "" {
-		// 尝试加载包来判断
+		// Try loading the package to determine
 		if pkg, ok := a.pkgMap[pkgPath]; ok && len(pkg.GoFiles) > 0 {
 			return !strings.HasPrefix(pkg.GoFiles[0], a.config.TargetDir)
 		}
@@ -783,7 +784,7 @@ func (a *Analyzer) IsExternalPackage(pkgPath string) bool {
 	return false
 }
 
-// shouldSkipFile 检查是否应该跳过文件
+// shouldSkipFile checks whether a file should be skipped
 func (a *Analyzer) shouldSkipFile(filePath string) bool {
 	if filePath == "" {
 		return false
@@ -791,9 +792,9 @@ func (a *Analyzer) shouldSkipFile(filePath string) bool {
 
 	name := filepath.Base(filePath)
 
-	// 检查目录跳过（检查路径中的所有目录组件）
+	// Check directory skip (check all directory components in the path)
 	for _, pattern := range a.config.SkipDirs {
-		// 遍历文件路径的所有目录组件
+		// Walk all directory components of the file path
 		dir := filePath
 		for dir != "" && dir != "." {
 			base := filepath.Base(dir)
@@ -808,7 +809,7 @@ func (a *Analyzer) shouldSkipFile(filePath string) bool {
 		}
 	}
 
-	// 检查文件跳过
+	// Check file skip
 	for _, pattern := range a.config.SkipFiles {
 		if matched, _ := filepath.Match(pattern, name); matched {
 			return true
@@ -818,7 +819,7 @@ func (a *Analyzer) shouldSkipFile(filePath string) bool {
 	return false
 }
 
-// ParseStructName 解析结构体全名
+// ParseStructName parses a struct's fully qualified name
 func ParseStructName(fullName string) (pkgPath, structName string) {
 	lastDot := strings.LastIndex(fullName, ".")
 	if lastDot == -1 {
@@ -827,15 +828,15 @@ func ParseStructName(fullName string) (pkgPath, structName string) {
 	return fullName[:lastDot], fullName[lastDot+1:]
 }
 
-// LoadAndParseFile 加载并解析单个文件
+// LoadAndParseFile loads and parses a single file
 func (a *Analyzer) LoadAndParseFile(filePath string) (*ast.File, *types.Info, error) {
-	// 解析文件
+	// Parse the file
 	f, err := parser.ParseFile(a.fset, filePath, nil, parser.ParseComments)
 	if err != nil {
 		return nil, nil, err
 	}
 
-	// 类型检查
+	// Type check
 	info := &types.Info{
 		Types: make(map[ast.Expr]types.TypeAndValue),
 		Defs:  make(map[*ast.Ident]types.Object),
@@ -854,7 +855,7 @@ func (a *Analyzer) LoadAndParseFile(filePath string) (*ast.File, *types.Info, er
 	return f, info, nil
 }
 
-// Log 日志输出
+// Log emits a log line
 func (a *Analyzer) Log(level int, format string, args ...interface{}) {
 	if level <= a.config.Verbose {
 		timestamp := time.Now().Format("2006-01-02 15:04:05.000")
@@ -871,17 +872,17 @@ func (a *Analyzer) Log(level int, format string, args ...interface{}) {
 	}
 }
 
-// GetTypesInfo 获取类型信息
+// GetTypesInfo returns type information
 func (a *Analyzer) GetTypesInfo() *types.Info {
 	return a.info
 }
 
-// GetFset 获取文件集
+// GetFset returns the file set
 func (a *Analyzer) GetFset() *token.FileSet {
 	return a.fset
 }
 
-// LoadPackages 批量加载包（参考 gopls 的批量加载优化）
+// LoadPackages loads multiple packages in batch (modeled after gopls batch loading)
 func (a *Analyzer) LoadPackages(pkgPaths []string) error {
 	if len(pkgPaths) == 0 {
 		return nil
@@ -890,7 +891,7 @@ func (a *Analyzer) LoadPackages(pkgPaths []string) error {
 	a.Log(1, "批量加载 %d 个包...", len(pkgPaths))
 	start := time.Now()
 
-	// 过滤已加载的包
+	// Filter already-loaded packages
 	var toLoad []string
 	for _, pkgPath := range pkgPaths {
 		a.mu.RLock()
@@ -908,7 +909,7 @@ func (a *Analyzer) LoadPackages(pkgPaths []string) error {
 		return nil
 	}
 
-	// 根据项目类型构建环境
+	// Build the environment based on project type
 	isGoMod := a.config.ProjectType != "gopath"
 	env := os.Environ()
 	var loadDir string
@@ -926,7 +927,7 @@ func (a *Analyzer) LoadPackages(pkgPaths []string) error {
 		loadDir = a.config.TargetDir
 	}
 
-	// 构建配置
+	// Build config
 	cfg := &packages.Config{
 		Mode: packages.NeedName | packages.NeedFiles | packages.NeedCompiledGoFiles |
 			packages.NeedImports | packages.NeedTypes | packages.NeedTypesInfo | packages.NeedSyntax,
@@ -934,13 +935,13 @@ func (a *Analyzer) LoadPackages(pkgPaths []string) error {
 		Dir: loadDir,
 	}
 
-	// 批量加载
+	// Batch load
 	pkgs, err := packages.Load(cfg, toLoad...)
 	if err != nil {
 		return err
 	}
 
-	// 缓存结果
+	// Cache results
 	a.mu.Lock()
 	for _, pkg := range pkgs {
 		if len(pkg.Errors) > 0 {
@@ -955,12 +956,12 @@ func (a *Analyzer) LoadPackages(pkgPaths []string) error {
 	return nil
 }
 
-// GetStructIndex 获取结构体索引
+// GetStructIndex returns the struct index
 func (a *Analyzer) GetStructIndex() map[string]*StructLocation {
 	return a.structIndex
 }
 
-// FindStructByIndex 通过索引查找结构体（不需要加载包）
+// FindStructByIndex looks up a struct via the index (no package load needed)
 func (a *Analyzer) FindStructByIndex(pkgPath, structName string) (*StructLocation, error) {
 	key := pkgPath + "." + structName
 	a.mu.RLock()

@@ -13,7 +13,7 @@ import (
 	"github.com/gamelife1314/structoptimizer/analyzer"
 )
 
-// findStructInPackage 在已加载的包中查找结构体（优化阶段使用）
+// findStructInPackage finds a struct in a loaded package (used in optimization phase)
 func (o *Optimizer) findStructInPackage(pkg *packages.Package, structName string) (*types.Struct, string, error) {
 	for _, syntax := range pkg.Syntax {
 		filePath := pkg.Fset.File(syntax.Pos()).Name()
@@ -51,17 +51,17 @@ func (o *Optimizer) findStructInPackage(pkg *packages.Package, structName string
 	return nil, "", fmt.Errorf("struct %s not found in package", structName)
 }
 
-// NewOptimizer 创建优化器
+// NewOptimizer creates a new optimizer
 func NewOptimizer(cfg *Config, analyzer *analyzer.Analyzer) *Optimizer {
-	// 设置默认值
+	// Set defaults
 	maxDepth := cfg.MaxDepth
 	if maxDepth <= 0 {
-		maxDepth = 50 // 默认 50 层
+		maxDepth = 50 // default 50 levels
 	}
 
 	pkgWorkerLimit := cfg.PkgWorkerLimit
 	if pkgWorkerLimit <= 0 {
-		pkgWorkerLimit = 4 // 默认 4 个并发包，防止 OOM
+		pkgWorkerLimit = 4 // default 4 concurrent packages to prevent OOM
 	}
 
 	return &Optimizer{
@@ -75,8 +75,8 @@ func NewOptimizer(cfg *Config, analyzer *analyzer.Analyzer) *Optimizer {
 		structQueue:      make([]*StructTask, 0),
 		structByLevel:    make(map[int][]*StructTask),
 		structByPkgLevel: make(map[int]map[string][]*StructTask),
-		workerLimit:      10,             // 结构体并发限制
-		pkgWorkerLimit:   pkgWorkerLimit, // 包并发限制（防止 OOM）
+		workerLimit:      10,             // struct-level concurrency limit
+		pkgWorkerLimit:   pkgWorkerLimit, // package-level concurrency limit (prevent OOM)
 		pkgCache:         make(map[string]*packages.Package),
 		report: &Report{
 			StructReports: make([]*StructReport, 0),
@@ -84,16 +84,16 @@ func NewOptimizer(cfg *Config, analyzer *analyzer.Analyzer) *Optimizer {
 	}
 }
 
-// Optimize 执行优化（入口函数）
-// 两阶段处理：
+// Optimize runs the optimization (entry point).
+// Two-phase processing:
 //
-//	阶段 1: 只收集结构体位置信息（不加载包，不分析字段）
-//	阶段 2: 并行优化所有收集的结构体（按需加载包）
+//	Phase 1: Collect struct location info only (no package loading, no field analysis)
+//	Phase 2: Optimize all collected structs in parallel (load packages on demand)
 func (o *Optimizer) Optimize() (*Report, error) {
 	o.Log(1, "开始优化...")
 	o.Log(1, "配置：最大深度=%d, 超时=%d 秒", o.maxDepth, o.config.Timeout)
 
-	// 设置超时
+	// Set up timeout
 	done := make(chan struct{})
 	var result *Report
 	var err error
@@ -103,47 +103,47 @@ func (o *Optimizer) Optimize() (*Report, error) {
 		result, err = o.optimizeInternal()
 	}()
 
-	// 等待完成或超时
+	// Wait for completion or timeout
 	select {
 	case <-done:
 		return result, err
 	case <-time.After(time.Duration(o.config.Timeout) * time.Second):
 		o.Log(0, "错误：优化超时（%d 秒）", o.config.Timeout)
-		// 注意：goroutine 会继续执行直到完成，但结果会被丢弃
-		// 这是可接受的行为，因为超时后用户已经得到响应
+		// Note: the goroutine will continue until completion, but the result will be discarded.
+		// This is acceptable because the user already received a response after the timeout.
 		return nil, fmt.Errorf("optimization timeout after %d seconds", o.config.Timeout)
 	}
 }
 
-// optimizeInternal 实际优化逻辑（两阶段）
+// optimizeInternal performs the actual optimization logic (two-phase)
 func (o *Optimizer) optimizeInternal() (*Report, error) {
-	// ==================== 阶段 1: 收集结构体 ====================
+	// ==================== Phase 1: Collect structs ====================
 	o.Log(1, "阶段 1/2: 收集结构体（只解析文件，不加载包）...")
 	if o.config.StructName != "" {
-		// 优化指定结构体
+		// Optimize a specific struct
 		pkgPath, structName := analyzer.ParseStructName(o.config.StructName)
 		if pkgPath == "" {
 			return nil, fmt.Errorf("invalid struct name format: %s", o.config.StructName)
 		}
 
-		// 设置主结构体
+		// Set the root struct
 		o.report.RootStruct = o.config.StructName
 
 		o.Log(1, "收集结构体：%s.%s", pkgPath, structName)
 		o.collectStructs(pkgPath, structName, "", 0, 0)
 	} else if o.config.Package != "" {
-		// 优化包中所有结构体
+		// Optimize all structs in a package
 		o.Log(1, "收集包：%s", o.config.Package)
 		
 		var structs []analyzer.StructDef
 		var err error
 		
 		if o.config.Recursive {
-			// 递归扫描所有子包
+			// Recursively scan all sub-packages
 			o.Log(1, "递归模式：扫描 %s 及其所有子包", o.config.Package)
 			structs, err = o.analyzer.FindAllStructsRecursive(o.config.Package)
 		} else {
-			// 只扫描当前包
+			// Scan only the current package
 			structs, err = o.analyzer.FindAllStructs(o.config.Package)
 		}
 		
@@ -158,18 +158,18 @@ func (o *Optimizer) optimizeInternal() (*Report, error) {
 
 	o.Log(1, "阶段 1 完成：共收集到 %d 个结构体任务", len(o.structQueue))
 
-	// 打印收集到的结构体列表
+	// Print the list of collected structs
 	o.Log(2, "收集到的结构体列表:")
 	for i, task := range o.structQueue {
 		o.Log(3, "  [%d] %s.%s (层级:%d, 文件:%s)",
 			i+1, task.PkgPath, task.StructName, task.Level, filepath.Base(task.FilePath))
 	}
 
-	// ==================== 阶段 2: 并行优化 ====================
+	// ==================== Phase 2: Parallel optimization ====================
 	o.Log(1, "阶段 2/2: 并行优化结构体（按需加载包）...")
 	o.processStructsParallel()
 
-	// 生成报告
+	// Generate report
 	o.report.TotalStructs = len(o.optimized)
 	o.report.OptimizedCount = 0
 	o.report.SkippedCount = 0
@@ -208,11 +208,11 @@ func (o *Optimizer) optimizeInternal() (*Report, error) {
 	return o.report, nil
 }
 
-// optimizeStruct 优化单个结构体（递归）
+// optimizeStruct optimizes a single struct (recursive)
 func (o *Optimizer) optimizeStruct(pkgPath, structName, filePath string, depth int) (*StructInfo, error) {
 	key := pkgPath + "." + structName
 
-	// 检查递归深度限制
+	// Check recursion depth limit
 	if depth > o.maxDepth {
 		o.Log(2, "跳过结构体（超过最大深度 %d）：%s", o.maxDepth, key)
 		info := &StructInfo{
@@ -227,7 +227,7 @@ func (o *Optimizer) optimizeStruct(pkgPath, structName, filePath string, depth i
 		return info, nil
 	}
 
-	// 检查是否已优化（加锁保护）
+	// Check if already optimized (lock-protected)
 	o.mu.Lock()
 	if info, ok := o.optimized[key]; ok {
 		o.mu.Unlock()
@@ -235,7 +235,7 @@ func (o *Optimizer) optimizeStruct(pkgPath, structName, filePath string, depth i
 		return info, nil
 	}
 
-	// 检测循环引用：如果正在处理中，说明有循环引用
+	// Detect circular reference: if already processing, there's a circular reference
 	if o.processing[key] {
 		o.Log(2, "检测到循环引用，跳过：%s", key)
 		info := &StructInfo{
@@ -251,18 +251,18 @@ func (o *Optimizer) optimizeStruct(pkgPath, structName, filePath string, depth i
 		return info, nil
 	}
 
-	// 标记为正在处理
+	// Mark as processing
 	o.processing[key] = true
 	o.mu.Unlock()
 
 	defer func() {
-		// 处理完成后，移除标记
+		// After processing, remove the mark
 		o.mu.Lock()
 		delete(o.processing, key)
 		o.mu.Unlock()
 	}()
 
-	// 检查是否是 vendor 中的包或第三方包（AllowExternalPkgs=true 时允许扫描）
+	// Check if it's a vendor package or third-party package (scan allowed when AllowExternalPkgs=true)
 	if !o.config.AllowExternalPkgs && isVendorPackage(pkgPath) {
 		o.Log(3, "跳过 vendor 中的结构体：%s", key)
 		info := &StructInfo{
@@ -279,7 +279,7 @@ func (o *Optimizer) optimizeStruct(pkgPath, structName, filePath string, depth i
 		return info, nil
 	}
 
-	// 检查是否是项目内部的包（AllowExternalPkgs=true 时允许跨包扫描）
+	// Check if it's an internal project package (cross-package scan allowed when AllowExternalPkgs=true)
 	if !o.config.AllowExternalPkgs && !o.isProjectPackage(pkgPath) {
 		o.Log(3, "跳过非项目内部包结构体：%s", key)
 		info := &StructInfo{
@@ -311,13 +311,13 @@ func (o *Optimizer) optimizeStruct(pkgPath, structName, filePath string, depth i
 		o.Log(3, "    文件路径：%s", filepath.Base(filePath))
 	}
 
-	// 优化阶段：优先解析文件，不加载包
-	// 只有文件解析失败时才加载包
+	// Optimization phase: prefer parsing files, do not load packages.
+	// Only load packages when file parsing fails.
 	var info *StructInfo
 	var err error
 	var st *types.Struct
 
-	// 尝试只解析文件（快速路径）
+	// Try parsing only the file (fast path)
 	if filePath != "" {
 		info, st, err = analyzeStructFromFile(filePath, structName, pkgPath)
 		if err != nil {
@@ -325,7 +325,7 @@ func (o *Optimizer) optimizeStruct(pkgPath, structName, filePath string, depth i
 		}
 	}
 
-	// 文件解析失败，加载包（慢速路径）
+	// File parsing failed, load the package (slow path)
 	if info == nil {
 		o.Log(2, "加载包获取类型信息：%s", pkgPath)
 		pkg, err := o.analyzer.LoadPackage(pkgPath)
@@ -345,7 +345,7 @@ func (o *Optimizer) optimizeStruct(pkgPath, structName, filePath string, depth i
 			return info, nil
 		}
 
-		// 在包中查找结构体
+		// Find the struct in the package
 		st, filePath, err = o.findStructInPackage(pkg, structName)
 		if err != nil {
 			o.Log(1, "警告：查找结构体失败，跳过：%s (%v)", key, err)
@@ -367,19 +367,19 @@ func (o *Optimizer) optimizeStruct(pkgPath, structName, filePath string, depth i
 
 		info = fieldAnalyzer.AnalyzeStruct(st, structName, pkgPath, filePath)
 		
-		// 使用 types.Sizes 重新计算大小（与 unsafe.Sizeof 一致）
+		// Recalculate size using types.Sizes (consistent with unsafe.Sizeof)
 		sizes := types.SizesFor("gc", "amd64")
 		if sizes != nil {
 			info.OrigSize = sizes.Sizeof(st)
 		}
 	}
 
-	// 检查是否应该跳过
+	// Check if it should be skipped
 	if skipReason := o.shouldSkip(info, key); skipReason != "" {
 		o.Log(2, "跳过结构体：%s, 原因：%s", key, skipReason)
 		info.Skipped = true
 		info.SkipReason = skipReason
-		info.OptSize = info.OrigSize // 跳过的结构体，优化后大小等于优化前大小
+		info.OptSize = info.OrigSize // skipped structs: optimized size equals original size
 		o.mu.Lock()
 		o.optimized[key] = info
 		o.mu.Unlock()
@@ -387,15 +387,16 @@ func (o *Optimizer) optimizeStruct(pkgPath, structName, filePath string, depth i
 		return info, nil
 	}
 
-	// 重排字段（嵌套结构体已在收集阶段处理）
-	// 注意：ReorderFields 内部使用估计大小判断是否重排，可能不准确
-	// 我们总是获取排序结果，然后在下面用准确大小判断是否采用
+	// Reorder fields (nested structs already handled in collection phase).
+	// Note: ReorderFields uses estimated sizes internally to decide whether to reorder,
+	// which may be inaccurate. We always get the sorted result, then use accurate sizes
+	// below to decide whether to adopt it.
 	sortedFields := ReorderFields(info.Fields, o.config.SortSameSize, o.config.ReservedFields)
 
-	// 计算排序后的大小（使用准确的类型信息）
+	// Calculate the size after sorting (using accurate type info)
 	sortedOptSize := CalcOptimizedSize(sortedFields, o.analyzer.GetTypesInfo())
 
-	// 判断是否采用排序结果：只有能节省内存时才采用
+	// Decide whether to adopt the sorted result: only if it saves memory
 	if sortedOptSize < info.OrigSize {
 		info.Fields = sortedFields
 		info.OptSize = sortedOptSize
@@ -405,10 +406,10 @@ func (o *Optimizer) optimizeStruct(pkgPath, structName, filePath string, depth i
 		o.Log(2, "结构体优化：%s %d -> %d 字节 (节省:%d)",
 			key, info.OrigSize, info.OptSize, info.OrigSize-info.OptSize)
 	} else {
-		// 无法节省内存，不采用新顺序，保持原样
+		// Cannot save memory, keep original order, do not adopt new order.
 		info.OptSize = info.OrigSize
 		info.OptOrder = info.OrigOrder
-		// info.Optimized 保持为 false，不会触发文件重写
+		// info.Optimized remains false, will not trigger file rewrite
 		o.Log(2, "结构体无需优化：%s", key)
 	}
 
@@ -420,7 +421,7 @@ func (o *Optimizer) optimizeStruct(pkgPath, structName, filePath string, depth i
 	return info, nil
 }
 
-// createSkippedInfo 创建跳过的结构体信息
+// createSkippedInfo creates a skipped struct info entry
 func (o *Optimizer) createSkippedInfo(key, filePath, reason string) *StructInfo {
 	pkgPath, structName := analyzer.ParseStructName(key)
 	return &StructInfo{
@@ -432,28 +433,28 @@ func (o *Optimizer) createSkippedInfo(key, filePath, reason string) *StructInfo 
 	}
 }
 
-// addReport 添加报告
+// addReport adds a report entry
 func (o *Optimizer) addReport(info *StructInfo, skipReason string, depth int) {
-	// 构建字段类型映射和字段大小映射
-	// 注意：key 使用与 OrigOrder/OptOrder 一致的格式（纯字段名，匿名字段用类型名）
+	// Build field type map and field size map.
+	// Note: key format is consistent with OrigOrder/OptOrder (plain field name, embedded fields use type name).
 	fieldTypes := make(map[string]string)
 	fieldSizes := make(map[string]int64)
 	hasEmbed := false
 	for _, f := range info.Fields {
-		// key 与 extractFieldNames 保持一致
+		// key is consistent with extractFieldNames
 		var key string
 		if f.Name != "" {
-			// 命名字段：使用字段名
+			// Named field: use the field name
 			key = f.Name
 		} else {
-			// 匿名字段：使用类型名
+			// Embedded field: use the type name
 			key = f.TypeName
 		}
 		fieldTypes[key] = f.TypeName
 		fieldSizes[key] = f.Size
 
-		// 检查是否是匿名字段
-		// 判断条件：IsEmbed 为 true，且类型是结构体类型（非基本类型）
+		// Check if it is an embedded field.
+		// Condition: IsEmbed is true, and the type is a struct type (not a basic type).
 		if f.IsEmbed && !isBasicType(f.TypeName) {
 			hasEmbed = true
 		}
@@ -480,7 +481,7 @@ func (o *Optimizer) addReport(info *StructInfo, skipReason string, depth int) {
 		report.Saved = 0
 	}
 
-	// 加锁保护并发写入报告
+	// Lock-protected concurrent write to report
 	o.mu.Lock()
 	o.report.StructReports = append(o.report.StructReports, report)
 	o.mu.Unlock()
@@ -504,7 +505,7 @@ func (o *Optimizer) GetReport() *Report {
 	return o.report
 }
 
-// Log 日志输出
+// Log outputs a log message
 func (o *Optimizer) Log(level int, format string, args ...interface{}) {
 	if level <= o.config.Verbose {
 		timestamp := time.Now().Format("2006-01-02 15:04:05.000")
@@ -521,7 +522,7 @@ func (o *Optimizer) Log(level int, format string, args ...interface{}) {
 	}
 }
 
-// isBasicType 判断是否是基本类型
+// isBasicType checks if the type name is a basic type
 func isBasicType(typeName string) bool {
 	basicTypes := map[string]bool{
 		"bool": true, "string": true,
@@ -533,14 +534,14 @@ func isBasicType(typeName string) bool {
 	return basicTypes[typeName]
 }
 
-// extractFieldNamesFromInfo 从 FieldInfo 列表提取字段名称
+// extractFieldNamesFromInfo extracts field names from a FieldInfo slice
 func extractFieldNamesFromInfo(fields []FieldInfo) []string {
 	var names []string
 	for _, f := range fields {
 		if f.Name != "" {
 			names = append(names, f.Name)
 		} else {
-			// 匿名字段使用类型名
+			// Embedded field uses type name
 			names = append(names, f.TypeName)
 		}
 	}

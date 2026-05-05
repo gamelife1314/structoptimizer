@@ -1,35 +1,35 @@
 package reporter
 
-// ReportLevel 报告详细程度
+// ReportLevel represents the verbosity level of the report
 type ReportLevel int
 
 const (
-	ReportLevelSummary ReportLevel = iota // 只显示优化总览
-	ReportLevelChanged                    // 显示优化总览 + 变化的结构体
-	ReportLevelFull                       // 显示所有结构体
+	ReportLevelSummary ReportLevel = iota // Show only optimization overview
+	ReportLevelChanged                    // Show overview + changed structs
+	ReportLevelFull                       // Show all structs
 )
 
-// Reporter 报告生成器
+// Reporter is the report generator
 type Reporter struct {
 	format string      // txt, md, html
-	output string      // 输出路径
-	level  ReportLevel // 详细程度
+	output string      // output path
+	level  ReportLevel // verbosity level
 	lang   Lang        // zh (default) or en
 }
 
-// NewReporter 创建报告生成器
+// NewReporter creates a report generator
 func NewReporter(format, output string, level ReportLevel) *Reporter {
 	return NewReporterWithLang(format, output, level, LangZH)
 }
 
-// NewReporterWithLang 创建报告生成器（支持语言设置）
+// NewReporterWithLang creates a report generator (with language support)
 func NewReporterWithLang(format, output string, level ReportLevel, lang Lang) *Reporter {
-	// 验证格式，无效则使用默认值
+	// Validate format, use default if invalid
 	validFormats := map[string]bool{"txt": true, "md": true, "html": true}
 	if format == "" || !validFormats[format] {
 		format = "md"
 	}
-	// 验证语言，无效则使用默认值
+	// Validate language, use default if invalid
 	if lang != LangEN {
 		lang = LangZH
 	}

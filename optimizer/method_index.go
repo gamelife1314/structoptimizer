@@ -12,21 +12,21 @@ import (
 	"sync"
 )
 
-// MethodIndex 缓存包的方法集
-// 结构: map[包路径]map[结构体名]map[方法名]bool
+// MethodIndex caches method sets for packages.
+// Structure: map[package_path]map[struct_name]map[method_name]bool
 type MethodIndex struct {
 	mu    sync.RWMutex
 	cache map[string]map[string]map[string]bool
 }
 
-// NewMethodIndex 创建方法索引器
+// NewMethodIndex creates a new method indexer
 func NewMethodIndex() *MethodIndex {
 	return &MethodIndex{
 		cache: make(map[string]map[string]map[string]bool),
 	}
 }
 
-// HasMethod 检查结构体是否有指定方法（支持通配符）
+// HasMethod checks if a struct has the specified method (supports wildcards)
 func (mi *MethodIndex) HasMethod(pkgPath, structName, methodPattern string) bool {
 	mi.mu.RLock()
 	pkgCache, pkgExists := mi.cache[pkgPath]
@@ -34,7 +34,7 @@ func (mi *MethodIndex) HasMethod(pkgPath, structName, methodPattern string) bool
 
 	if !pkgExists {
 		if err := mi.indexPkg(pkgPath); err != nil {
-			// 索引失败，保守起见返回 false
+			// Indexing failed, conservatively return false
 			return false
 		}
 		mi.mu.RLock()
@@ -51,7 +51,7 @@ func (mi *MethodIndex) HasMethod(pkgPath, structName, methodPattern string) bool
 		return false
 	}
 
-	// 检查方法匹配
+	// Check method match
 	for methodName := range structMethods {
 		if mi.matchMethod(methodName, methodPattern) {
 			return true
@@ -60,14 +60,14 @@ func (mi *MethodIndex) HasMethod(pkgPath, structName, methodPattern string) bool
 	return false
 }
 
-// matchMethod 匹配方法名（支持通配符）
+// matchMethod matches a method name (supports wildcards)
 func (mi *MethodIndex) matchMethod(methodName, pattern string) bool {
-	// 完全匹配
+	// Exact match
 	if methodName == pattern {
 		return true
 	}
 
-	// 通配符匹配
+	// Wildcard match
 	if strings.Contains(pattern, "*") || strings.Contains(pattern, "?") {
 		matched, _ := filepath.Match(pattern, methodName)
 		if matched {
@@ -78,9 +78,9 @@ func (mi *MethodIndex) matchMethod(methodName, pattern string) bool {
 	return false
 }
 
-// indexPkg 扫描包目录构建索引
+// indexPkg scans the package directory to build the index
 func (mi *MethodIndex) indexPkg(pkgPath string) error {
-	// 获取包目录
+	// Get the package directory
 	dir, err := mi.getPkgDir(pkgPath)
 	if err != nil {
 		return err
@@ -90,13 +90,13 @@ func (mi *MethodIndex) indexPkg(pkgPath string) error {
 		return fmt.Errorf("无法获取包目录：%s", pkgPath)
 	}
 
-	// 扫描文件
+	// Scan files
 	files, err := filepath.Glob(filepath.Join(dir, "*.go"))
 	if err != nil {
 		return err
 	}
 
-	// 确保包缓存存在
+	// Ensure package cache exists
 	mi.mu.Lock()
 	if _, ok := mi.cache[pkgPath]; !ok {
 		mi.cache[pkgPath] = make(map[string]map[string]bool)
@@ -106,7 +106,7 @@ func (mi *MethodIndex) indexPkg(pkgPath string) error {
 
 	fset := token.NewFileSet()
 	for _, file := range files {
-		// 忽略测试文件
+		// Skip test files
 		if strings.HasSuffix(file, "_test.go") {
 			continue
 		}
@@ -122,7 +122,7 @@ func (mi *MethodIndex) indexPkg(pkgPath string) error {
 				continue
 			}
 
-			// 提取接收者类型
+			// Extract receiver type
 			recvType := extractRecvType(funcDecl.Recv.List[0].Type)
 			if recvType == "" {
 				continue
@@ -142,7 +142,7 @@ func (mi *MethodIndex) indexPkg(pkgPath string) error {
 	return nil
 }
 
-// extractRecvType 从接收者 AST 中提取类型名称
+// extractRecvType extracts the type name from a receiver AST
 func extractRecvType(expr ast.Expr) string {
 	switch t := expr.(type) {
 	case *ast.Ident:
@@ -155,32 +155,32 @@ func extractRecvType(expr ast.Expr) string {
 	return ""
 }
 
-// getPkgDir 使用 go list 获取包目录
+// getPkgDir uses "go list" to get the package directory
 func (mi *MethodIndex) getPkgDir(pkgPath string) (string, error) {
-	// 尝试 1: 使用 go list（Go Modules 模式）
+	// Attempt 1: use "go list" (Go Modules mode)
 	cmd := exec.Command("go", "list", "-f", "{{.Dir}}", pkgPath)
-	// 不要修改环境，使用当前项目的模块模式
+	// Do not modify the environment; use the current project's module mode
 	out, err := cmd.CombinedOutput()
 	if err == nil {
 		dir := strings.TrimSpace(string(out))
 		if dir != "" {
-			// 验证目录是否存在
+			// Verify the directory exists
 			if _, err := os.Stat(dir); err == nil {
 				return dir, nil
 			}
 		}
 	}
 
-	// 尝试 2: GOPATH 模式手动解析
+	// Attempt 2: manually resolve via GOPATH
 	return mi.getPkgDirFromGOPATH(pkgPath)
 }
 
-// getPkgDirFromGOPATH 从 GOPATH 解析包路径
+// getPkgDirFromGOPATH resolves the package path from GOPATH
 func (mi *MethodIndex) getPkgDirFromGOPATH(pkgPath string) (string, error) {
-	// 获取 GOPATH
+	// Get GOPATH
 	gopath := os.Getenv("GOPATH")
 	if gopath == "" {
-		// 默认 GOPATH
+		// Default GOPATH
 		home, err := os.UserHomeDir()
 		if err != nil {
 			return "", fmt.Errorf("无法获取用户主目录")
@@ -188,15 +188,15 @@ func (mi *MethodIndex) getPkgDirFromGOPATH(pkgPath string) (string, error) {
 		gopath = filepath.Join(home, "go")
 	}
 
-	// GOPATH 可能有多个路径，用分隔符分割
+	// GOPATH may have multiple paths, split by separator
 	gopaths := filepath.SplitList(gopath)
 
-	// 在每个 GOPATH 的 src 目录下查找
+	// Search under each GOPATH's src directory
 	for _, gp := range gopaths {
 		srcDir := filepath.Join(gp, "src")
 		pkgDir := filepath.Join(srcDir, pkgPath)
 
-		// 验证目录是否存在
+		// Verify the directory exists
 		if _, err := os.Stat(pkgDir); err == nil {
 			return pkgDir, nil
 		}

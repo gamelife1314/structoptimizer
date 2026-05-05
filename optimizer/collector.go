@@ -12,7 +12,7 @@ import (
 	"strings"
 )
 
-// isInterfaceType 快速判断是否是接口类型
+// isInterfaceType quickly checks if the type is an interface
 func isInterfaceType(typ types.Type) bool {
 	if typ == nil {
 		return false
@@ -29,7 +29,7 @@ func isInterfaceType(typ types.Type) bool {
 	}
 }
 
-// isStructType 快速判断是否是结构体类型
+// isStructType quickly checks if the type is a struct
 func isStructType(typ types.Type) bool {
 	if typ == nil {
 		return false
@@ -46,11 +46,11 @@ func isStructType(typ types.Type) bool {
 	}
 }
 
-// collectStructs 收集所有需要处理的结构体（只解析文件，不加载包）
+// collectStructs collects all structs that need processing (parses files only, does not load packages)
 func (o *Optimizer) collectStructs(pkgPath, structName, filePath string, depth, level int) {
 	key := pkgPath + "." + structName
 
-	// 去重检查：在持有锁的情况下检查 optimized 和 collecting
+	// Dedup check: check optimized and collecting while holding the lock
 	o.mu.Lock()
 	if _, ok := o.optimized[key]; ok {
 		o.mu.Unlock()
@@ -60,45 +60,45 @@ func (o *Optimizer) collectStructs(pkgPath, structName, filePath string, depth, 
 		o.mu.Unlock()
 		return
 	}
-	// 标记为正在收集，防止其他 goroutine 重复处理
+	// Mark as collecting to prevent other goroutines from processing duplicates
 	o.collecting[key] = true
 	o.mu.Unlock()
 
-	// 检查递归深度
+	// Check recursion depth
 	if depth > o.maxDepth {
 		return
 	}
 
-	// 检查是否是第三方包（AllowExternalPkgs=true 时允许跨包扫描）
+	// Check if it is a third-party package (cross-package scan allowed when AllowExternalPkgs=true)
 	if !o.config.AllowExternalPkgs {
 		if isVendorPackage(pkgPath) || !o.isProjectPackage(pkgPath) {
 			return
 		}
 	}
 
-	// 检查文件路径是否包含应该跳过的目录
+	// Check if the file path contains directories that should be skipped
 	if filePath != "" && o.shouldSkipDir(filePath) {
 		o.Log(3, "跳过目录中的结构体：%s (文件：%s)", key, filePath)
 		return
 	}
 
-	// 只解析文件，不加载包
+	// Parse file only, do not load package
 	nestedFields, filePath, err := o.parseStructFromFileOnly(pkgPath, structName, filePath)
 	if err != nil {
-		// 只有真正的错误才记录（不是基本类型）
+		// Only log real errors (not basic types)
 		if !strings.Contains(err.Error(), "struct ") {
 			o.Log(2, "解析文件失败：%s.%s: %v", pkgPath, structName, err)
 		}
 		return
 	}
 
-	// 检查解析后的文件路径是否包含应该跳过的目录
+	// Check if the resolved file path contains directories that should be skipped
 	if filePath != "" && o.shouldSkipDir(filePath) {
 		o.Log(3, "跳过目录中的结构体：%s (文件：%s)", key, filePath)
 		return
 	}
 
-	// 添加到队列
+	// Add to queue
 	task := &StructTask{
 		PkgPath:    pkgPath,
 		StructName: structName,
@@ -111,42 +111,43 @@ func (o *Optimizer) collectStructs(pkgPath, structName, filePath string, depth, 
 	o.structQueue = append(o.structQueue, task)
 	o.mu.Unlock()
 
-	// 递归收集嵌套结构体（跨包分析）
+	// Recursively collect nested structs (cross-package analysis)
 	for _, field := range nestedFields {
-		// 永远跳过标准库
+		// Always skip standard library
 		if isStandardLibraryPkg(field.PkgPath) {
 			continue
 		}
 
-		// AllowExternalPkgs=false 时才跳过 vendor 包
+		// Skip vendor package only when AllowExternalPkgs=false
 		if !o.config.AllowExternalPkgs && isVendorPackage(field.PkgPath) {
 			continue
 		}
 
-		// 检查包范围限制（AllowExternalPkgs=true 时可跳过此限制）
+		// Check package scope restriction (skippable when AllowExternalPkgs=true)
 		if !o.config.AllowExternalPkgs && o.config.PkgScope != "" && !strings.HasPrefix(field.PkgPath, o.config.PkgScope) {
 			o.Log(3, "跳过跨包字段：%s (包：%s, 范围：%s)", field.Name, field.PkgPath, o.config.PkgScope)
 			continue
 		}
 
 		if o.config.AllowExternalPkgs || o.isProjectPackage(field.PkgPath) {
-			// 无论同包还是跨包，都不传递 filePath
-			// 让 parseStructFromFileOnly 通过 findFilesWithStruct 自动查找包含该结构体的文件
-			// 这样可以正确处理同包不同文件中的嵌套结构体
+			// Whether intra-package or cross-package, do not pass filePath.
+			// Let parseStructFromFileOnly auto-locate the file containing the struct
+			// via findFilesWithStruct. This correctly handles nested structs
+			// defined in different files within the same package.
 			o.collectStructs(field.PkgPath, field.Name, "", depth+1, level+1)
 		}
 	}
 }
 
-// parseStructFromFileOnly 只解析文件获取结构体信息（不加载包）
+// parseStructFromFileOnly parses only the file to get struct info (does not load package)
 func (o *Optimizer) parseStructFromFileOnly(pkgPath, structName, filePath string) ([]nestedField, string, error) {
-	// 确定搜索目录
+	// Determine the search directory
 	searchDir := o.getPackageDir(pkgPath)
 	if searchDir == "" {
 		return nil, "", fmt.Errorf("无法确定包目录：%s", pkgPath)
 	}
 
-	// 如果没有指定文件路径，查找包含结构体的文件
+	// If no file path specified, find files containing the struct
 	if filePath == "" {
 		files, err := o.findFilesWithStruct(searchDir, structName)
 		if err != nil {
@@ -158,11 +159,11 @@ func (o *Optimizer) parseStructFromFileOnly(pkgPath, structName, filePath string
 		filePath = files[0]
 	}
 
-	// 解析文件获取结构体字段
+	// Parse file to get struct fields
 	return o.parseStructFields(filePath, structName, pkgPath)
 }
 
-// parseStructFields 解析文件中的结构体字段
+// parseStructFields parses the struct fields in a file
 func (o *Optimizer) parseStructFields(filePath, structName, pkgPath string) ([]nestedField, string, error) {
 	fset := token.NewFileSet()
 	f, err := parser.ParseFile(fset, filePath, nil, parser.ParseComments)
@@ -170,13 +171,13 @@ func (o *Optimizer) parseStructFields(filePath, structName, pkgPath string) ([]n
 		return nil, "", err
 	}
 
-	// 解析 import 映射
+	// Parse import mapping
 	importMap := o.parseImports(f, pkgPath)
 
-	// 获取包目录（用于查找同包其他文件中的类型定义）
+	// Get the package directory (used to find type definitions in other files of the same package)
 	pkgDir := o.getPackageDir(pkgPath)
 
-	// 查找结构体（支持 type xxx struct 和 type ( ... ) 两种形式）
+	// Find struct definition (supports both "type xxx struct" and "type ( ... )" forms)
 	for _, decl := range f.Decls {
 		genDecl, ok := decl.(*ast.GenDecl)
 		if !ok || genDecl.Tok != token.TYPE {
@@ -194,7 +195,7 @@ func (o *Optimizer) parseStructFields(filePath, structName, pkgPath string) ([]n
 				return nil, "", fmt.Errorf("%s is not a struct", structName)
 			}
 
-			// 提取字段信息（传入 pkgDir 以支持同包跨文件类型查找）
+			// Extract field info (pass pkgDir to support cross-file type lookup within the same package)
 			var nestedFields []nestedField
 			for _, field := range st.Fields.List {
 				fieldInfo := o.extractFieldInfo(field, importMap, pkgPath, pkgDir)
@@ -210,11 +211,11 @@ func (o *Optimizer) parseStructFields(filePath, structName, pkgPath string) ([]n
 	return nil, "", fmt.Errorf("struct %s not found in file %s", structName, filePath)
 }
 
-// parseImports 解析文件的 import 映射
+// parseImports parses the import mapping of a file
 func (o *Optimizer) parseImports(f *ast.File, pkgPath string) map[string]string {
 	importMap := make(map[string]string)
 
-	// 添加当前包
+	// Add the current package
 	importMap[""] = pkgPath
 
 	for _, imp := range f.Imports {
@@ -227,7 +228,7 @@ func (o *Optimizer) parseImports(f *ast.File, pkgPath string) map[string]string 
 		if alias != "" && alias != "_" && alias != "." {
 			importMap[alias] = importPath
 		} else {
-			// 使用路径的最后一部分作为别名
+			// Use the last segment of the path as alias
 			parts := strings.Split(importPath, "/")
 			importMap[parts[len(parts)-1]] = importPath
 		}
@@ -236,7 +237,7 @@ func (o *Optimizer) parseImports(f *ast.File, pkgPath string) map[string]string 
 	return importMap
 }
 
-// extractFieldInfo 提取字段信息
+// extractFieldInfo extracts field information
 func (o *Optimizer) extractFieldInfo(field *ast.Field, importMap map[string]string, pkgPath string, pkgDir string) nestedField {
 	typeName, pkgAlias := o.extractTypeNameFromExpr(field.Type)
 
@@ -247,17 +248,17 @@ func (o *Optimizer) extractFieldInfo(field *ast.Field, importMap map[string]stri
 		}
 	}
 
-	// 判断是否是结构体
+	// Check if it is a struct
 	isStruct := false
 
-	// 1. 先检查是否是基本类型
+	// 1. First check if it is a basic type
 	if !isBasicType(typeName) {
-		// 2. 如果是同包的未导出类型，需要扫描同包文件查找定义
+		// 2. For unexported types in the same package, scan package files to find the definition
 		if fieldPkg == pkgPath && pkgDir != "" {
 			isStruct = o.isStructTypeInPackage(pkgDir, typeName, pkgPath)
 		} else if fieldPkg != pkgPath {
-			// 跨包的情况，需要检查是否是接口类型
-			// 接口类型不应该被优化，所以标记为非结构体
+			// For cross-package, need to check if it's an interface type.
+			// Interface types should not be optimized, so mark as non-struct.
 			isStruct = !o.isInterfaceTypeCrossPackage(fieldPkg, typeName)
 		}
 	}
@@ -269,16 +270,16 @@ func (o *Optimizer) extractFieldInfo(field *ast.Field, importMap map[string]stri
 	}
 }
 
-// isInterfaceTypeCrossPackage 检查跨包类型是否是接口
+// isInterfaceTypeCrossPackage checks whether a cross-package type is an interface
 func (o *Optimizer) isInterfaceTypeCrossPackage(pkgPath, typeName string) bool {
-	// 获取包目录
+	// Get the package directory
 	pkgDir := o.getPackageDir(pkgPath)
 	if pkgDir == "" {
-		// 无法获取包目录，保守假设不是接口
+		// Unable to get package directory, conservatively assume not an interface
 		return false
 	}
 
-	// 扫描包中的Go文件
+	// Scan Go files in the package
 	entries, err := os.ReadDir(pkgDir)
 	if err != nil {
 		return false
@@ -298,7 +299,7 @@ func (o *Optimizer) isInterfaceTypeCrossPackage(pkgPath, typeName string) bool {
 	return false
 }
 
-// isInterfaceTypeInFile 检查文件中是否定义了接口类型
+// isInterfaceTypeInFile checks whether an interface type is defined in a file
 func (o *Optimizer) isInterfaceTypeInFile(filePath, typeName string) bool {
 	fset := token.NewFileSet()
 	f, err := parser.ParseFile(fset, filePath, nil, 0)
@@ -318,12 +319,12 @@ func (o *Optimizer) isInterfaceTypeInFile(filePath, typeName string) bool {
 				continue
 			}
 
-			// 检查是否是接口
+			// Check if it is an interface
 			if _, ok := ts.Type.(*ast.InterfaceType); ok {
 				return true
 			}
 
-			// 不是接口
+			// Not an interface
 			return false
 		}
 	}
@@ -331,9 +332,9 @@ func (o *Optimizer) isInterfaceTypeInFile(filePath, typeName string) bool {
 	return false
 }
 
-// isStructTypeInPackage 检查类型是否是在包中定义的结构体
+// isStructTypeInPackage checks whether a type is a struct defined in the package
 func (o *Optimizer) isStructTypeInPackage(pkgDir, typeName, pkgPath string) bool {
-	// 查找包中所有 Go 文件
+	// Find all Go files in the package
 	entries, err := os.ReadDir(pkgDir)
 	if err != nil {
 		return false
@@ -353,7 +354,7 @@ func (o *Optimizer) isStructTypeInPackage(pkgDir, typeName, pkgPath string) bool
 	return false
 }
 
-// isStructTypeInFile 检查文件中是否定义了指定的结构体类型
+// isStructTypeInFile checks whether a specific struct type is defined in a file
 func (o *Optimizer) isStructTypeInFile(filePath, typeName, pkgPath string) bool {
 	fset := token.NewFileSet()
 	f, err := parser.ParseFile(fset, filePath, nil, 0)
@@ -373,12 +374,12 @@ func (o *Optimizer) isStructTypeInFile(filePath, typeName, pkgPath string) bool 
 				continue
 			}
 
-			// 检查是否是结构体
+			// Check if it is a struct
 			if _, ok := ts.Type.(*ast.StructType); ok {
 				return true
 			}
 
-			// 不是结构体
+			// Not a struct
 			return false
 		}
 	}
@@ -386,7 +387,7 @@ func (o *Optimizer) isStructTypeInFile(filePath, typeName, pkgPath string) bool 
 	return false
 }
 
-// extractTypeNameFromExpr 从 AST 表达式中提取类型名称和包别名
+// extractTypeNameFromExpr extracts type name and package alias from an AST expression
 func (o *Optimizer) extractTypeNameFromExpr(expr ast.Expr) (typeName, pkgAlias string) {
 	switch t := expr.(type) {
 	case *ast.Ident:
@@ -399,10 +400,10 @@ func (o *Optimizer) extractTypeNameFromExpr(expr ast.Expr) (typeName, pkgAlias s
 		}
 		return t.Sel.Name, ""
 	case *ast.ArrayType:
-		// 数组或切片: []Type 或 [10]Type
+		// Array or slice: []Type or [10]Type
 		elemName, elemAlias := o.extractTypeNameFromExpr(t.Elt)
 		if t.Len != nil {
-			// 固定长度数组
+			// Fixed-length array
 			return "[" + getArrayLengthString(t.Len) + "]" + elemName, elemAlias
 		}
 		return "[]" + elemName, elemAlias
@@ -416,20 +417,20 @@ func (o *Optimizer) extractTypeNameFromExpr(expr ast.Expr) (typeName, pkgAlias s
 		elemName, elemAlias := o.extractTypeNameFromExpr(t.Value)
 		return "chan " + elemName, elemAlias
 	case *ast.FuncType:
-		// 函数类型
+		// Function type
 		return "func", ""
 	case *ast.InterfaceType:
-		// 接口类型
+		// Interface type
 		return "interface{}", ""
 	case *ast.StructType:
-		// 内嵌结构体
+		// Inline struct
 		return "struct{}", ""
 	default:
 		return "", ""
 	}
 }
 
-// getArrayLengthString 获取数组长度的字符串表示
+// getArrayLengthString returns the string representation of an array length
 func getArrayLengthString(expr ast.Expr) string {
 	switch e := expr.(type) {
 	case *ast.BasicLit:
@@ -441,7 +442,7 @@ func getArrayLengthString(expr ast.Expr) string {
 	}
 }
 
-// collectNestedFromFields 从字段信息收集中嵌套结构体
+// collectNestedFromFields collects nested structs from field info
 func (o *Optimizer) collectNestedFromFields(fields []nestedField, pkgPath, filePath string, depth, level int) {
 	for _, field := range fields {
 		if !field.IsStruct || isStandardLibraryPkg(field.PkgPath) || isVendorPackage(field.PkgPath) {
@@ -454,7 +455,7 @@ func (o *Optimizer) collectNestedFromFields(fields []nestedField, pkgPath, fileP
 	}
 }
 
-// findFilesWithStruct 查找可能包含指定结构体的文件（检查跳过目录和文件）
+// findFilesWithStruct searches for files that may contain the specified struct (checks skip dirs and files)
 func (o *Optimizer) findFilesWithStruct(dir, structName string) ([]string, error) {
 	var result []string
 
@@ -465,12 +466,12 @@ func (o *Optimizer) findFilesWithStruct(dir, structName string) ([]string, error
 
 	for _, entry := range entries {
 		if entry.IsDir() {
-			// 检查是否应该跳过该目录（传递完整路径）
+			// Check if this directory should be skipped (pass full path)
 			dirPath := filepath.Join(dir, entry.Name())
 			if o.shouldSkipDir(dirPath) {
 				continue
 			}
-			// 递归搜索子目录
+			// Recursively search subdirectories
 			subFiles, err := o.findFilesWithStruct(dirPath, structName)
 			if err == nil {
 				result = append(result, subFiles...)
@@ -483,14 +484,14 @@ func (o *Optimizer) findFilesWithStruct(dir, structName string) ([]string, error
 			continue
 		}
 
-		// 检查是否应该跳过该文件
+		// Check if this file should be skipped
 		if o.shouldSkipFile(name) {
 			continue
 		}
 
 		filePath := filepath.Join(dir, name)
 
-		// 快速检查文件是否包含结构体名称
+		// Quickly check if the file contains the struct name
 		if o.fileContainsStruct(filePath, structName) {
 			result = append(result, filePath)
 		}
@@ -499,22 +500,22 @@ func (o *Optimizer) findFilesWithStruct(dir, structName string) ([]string, error
 	return result, nil
 }
 
-// shouldSkipDir 检查是否应该跳过该目录（支持路径匹配）
+// shouldSkipDir checks whether a directory should be skipped (supports path matching)
 func (o *Optimizer) shouldSkipDir(dirPath string) bool {
-	// 提取目录的 basename
+	// Extract the directory basename
 	baseName := filepath.Base(dirPath)
 
-	// 规范化路径分隔符（Windows 和 Unix 统一）
+	// Normalize path separators (unify Windows and Unix)
 	normalizedPath := filepath.ToSlash(dirPath)
 
 	for _, pattern := range o.config.SkipDirs {
-		// 匹配 basename（向后兼容）
+		// Match basename (backwards compatibility)
 		if matched, _ := filepath.Match(pattern, baseName); matched {
 			return true
 		}
-		// 检查路径中是否包含该目录名（作为完整路径组件）
-		// 例如：pattern="datas" 匹配 "/do/datas/ele/" 或 "/do/datas"
-		// 使用路径分割来确保匹配完整的目录名
+		// Check if the path contains the directory name as a complete path component.
+		// For example: pattern="datas" matches "/do/datas/ele/" or "/do/datas"
+		// Use path splitting to ensure we match complete directory names.
 		normalizedPattern := filepath.ToSlash(pattern)
 		parts := strings.Split(normalizedPath, "/")
 		for _, part := range parts {
@@ -526,7 +527,7 @@ func (o *Optimizer) shouldSkipDir(dirPath string) bool {
 	return false
 }
 
-// shouldSkipFile 检查是否应该跳过该文件
+// shouldSkipFile checks whether a file should be skipped
 func (o *Optimizer) shouldSkipFile(fileName string) bool {
 	for _, pattern := range o.config.SkipFiles {
 		if matched, _ := filepath.Match(pattern, fileName); matched {
@@ -536,29 +537,30 @@ func (o *Optimizer) shouldSkipFile(fileName string) bool {
 	return false
 }
 
-// fileContainsStruct 快速检查文件是否包含结构体定义（支持 type xxx struct 和 type ( ... ) 两种形式）
+// fileContainsStruct quickly checks if a file contains a struct definition
+// (supports both "type xxx struct" and "type ( ... )" forms)
 func (o *Optimizer) fileContainsStruct(filePath, structName string) bool {
 	data, err := os.ReadFile(filePath)
 	if err != nil {
 		return false
 	}
 
-	// 匹配 type StructName struct 形式
+	// Match "type StructName struct" form
 	pattern1 := []byte("type " + structName + " struct")
 	if bytes.Contains(data, pattern1) {
 		return true
 	}
 
-	// 匹配 type ( ... StructName struct ... ) 形式
-	// 查找 structName 后面紧跟 struct 关键字（中间只有空白字符）
+	// Match "type ( ... StructName struct ... )" form.
+	// Look for structName followed by the struct keyword (only whitespace in between).
 	lines := bytes.Split(data, []byte("\n"))
 	for _, line := range lines {
-		// 查找 structName
+		// Find structName
 		idx := bytes.Index(line, []byte(structName))
 		if idx >= 0 {
-			// 检查后面是否有 struct 关键字
+			// Check if struct keyword follows
 			remaining := line[idx+len(structName):]
-			// 跳过空白字符
+			// Skip whitespace
 			trimmed := bytes.TrimLeft(remaining, " \t\r")
 			if bytes.HasPrefix(trimmed, []byte("struct")) {
 				return true
@@ -569,7 +571,7 @@ func (o *Optimizer) fileContainsStruct(filePath, structName string) bool {
 	return false
 }
 
-// nestedField 嵌套字段信息
+// nestedField represents nested field information
 type nestedField struct {
 	Name     string
 	PkgPath  string

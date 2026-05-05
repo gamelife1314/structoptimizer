@@ -4,7 +4,7 @@ import (
 	"go/types"
 )
 
-// CalcStructSizeFromFields 从字段信息计算结构体大小
+// CalcStructSizeFromFields calculates struct size from field information
 func CalcStructSizeFromFields(fields []FieldInfo) int64 {
 	if len(fields) == 0 {
 		return 0
@@ -14,7 +14,7 @@ func CalcStructSizeFromFields(fields []FieldInfo) int64 {
 	var maxAlign int64 = 1
 
 	for _, field := range fields {
-		// 对齐
+		// Alignment
 		if offset%field.Align != 0 {
 			offset += field.Align - (offset % field.Align)
 		}
@@ -25,7 +25,7 @@ func CalcStructSizeFromFields(fields []FieldInfo) int64 {
 		}
 	}
 
-	// 末尾填充
+	// Trailing padding
 	if offset%maxAlign != 0 {
 		offset += maxAlign - (offset % maxAlign)
 	}
@@ -33,22 +33,22 @@ func CalcStructSizeFromFields(fields []FieldInfo) int64 {
 	return offset
 }
 
-// CalcStructSize 计算结构体大小（使用 types.Sizes 模拟 unsafe.Sizeof）
+// CalcStructSize calculates struct size (uses types.Sizes to simulate unsafe.Sizeof)
 func CalcStructSize(st *types.Struct, sizes types.Sizes) int64 {
 	if st == nil {
 		return 0
 	}
 
-	// 如果有 types.Sizes，使用它来计算（更准确）
+	// If types.Sizes is available, use it for calculation (more accurate)
 	if sizes != nil {
 		return sizes.Sizeof(st)
 	}
 
-	// 否则回退到手动计算
+	// Otherwise fall back to manual calculation
 	return calcStructSizeManual(st)
 }
 
-// calcStructSizeManual 手动计算结构体大小（回退方案）
+// calcStructSizeManual manually calculates struct size (fallback)
 func calcStructSizeManual(st *types.Struct) int64 {
 	if st == nil {
 		return 0
@@ -61,7 +61,7 @@ func calcStructSizeManual(st *types.Struct) int64 {
 		field := st.Field(i)
 		sz, al := CalcFieldSize(field.Type(), nil)
 
-		// 对齐
+		// Alignment
 		if offset%al != 0 {
 			offset += al - (offset % al)
 		}
@@ -72,7 +72,7 @@ func calcStructSizeManual(st *types.Struct) int64 {
 		}
 	}
 
-	// 末尾填充
+	// Trailing padding
 	if offset%maxAlign != 0 {
 		offset += maxAlign - (offset % maxAlign)
 	}
@@ -80,7 +80,7 @@ func calcStructSizeManual(st *types.Struct) int64 {
 	return offset
 }
 
-// CalcFieldSize 计算字段大小
+// CalcFieldSize calculates field size
 func CalcFieldSize(typ types.Type, info *types.Info) (size, align int64) {
 	if typ == nil {
 		return 0, 1
@@ -123,7 +123,7 @@ func CalcFieldSize(typ types.Type, info *types.Info) (size, align int64) {
 	}
 }
 
-// basicSize 计算基本类型大小
+// basicSize calculates the size of a basic type
 func basicSize(kind types.BasicKind) (size, align int64) {
 	switch kind {
 	case types.Bool, types.Uint8, types.Int8:
@@ -147,17 +147,17 @@ func basicSize(kind types.BasicKind) (size, align int64) {
 	}
 }
 
-// sizeofPtr 返回指针大小
+// sizeofPtr returns the size of a pointer
 func sizeofPtr() int64 {
 	return 8
 }
 
-// alignofPtr 返回指针对齐
+// alignofPtr returns the alignment of a pointer
 func alignofPtr() int64 {
 	return 8
 }
 
-// CalcOptimizedSize 计算优化后的大小
+// CalcOptimizedSize calculates the size after optimization
 func CalcOptimizedSize(fields []FieldInfo, info *types.Info) int64 {
 	if len(fields) == 0 {
 		return 0
@@ -167,7 +167,7 @@ func CalcOptimizedSize(fields []FieldInfo, info *types.Info) int64 {
 	var maxAlign int64 = 1
 
 	for _, field := range fields {
-		// 对齐
+		// Alignment
 		if offset%field.Align != 0 {
 			offset += field.Align - (offset % field.Align)
 		}
@@ -178,7 +178,7 @@ func CalcOptimizedSize(fields []FieldInfo, info *types.Info) int64 {
 		}
 	}
 
-	// 末尾填充
+	// Trailing padding
 	if offset%maxAlign != 0 {
 		offset += maxAlign - (offset % maxAlign)
 	}

@@ -8,7 +8,7 @@ import (
 	"github.com/gamelife1314/structoptimizer/analyzer"
 )
 
-// Optimizer 优化器
+// Optimizer is the struct optimizer
 type Optimizer struct {
 	config    *Config
 	analyzer  *analyzer.Analyzer
@@ -17,23 +17,23 @@ type Optimizer struct {
 	processing map[string]bool
 	maxDepth  int
 
-	// 方法索引器
+	// Method indexer
 	methodIndex *MethodIndex
 
-	// 并行处理相关
+	// Parallel processing related
 	structQueue      []*StructTask
 	structByLevel    map[int][]*StructTask
-	structByPkgLevel map[int]map[string][]*StructTask // 按层级和包分组
+	structByPkgLevel map[int]map[string][]*StructTask // grouped by level and package
 	collecting       map[string]bool
 	mu               sync.Mutex
 	workerLimit      int
-	pkgWorkerLimit   int // 包并发限制
+	pkgWorkerLimit   int // package-level concurrency limit
 
-	// 缓存优化
+	// Cache optimization
 	pkgCache map[string]*packages.Package
 }
 
-// StructTask 结构体处理任务
+// StructTask represents a struct processing task
 type StructTask struct {
 	PkgPath    string
 	StructName string
@@ -42,7 +42,7 @@ type StructTask struct {
 	Level      int
 }
 
-// Config 优化器配置
+// Config holds the optimizer configuration
 type Config struct {
 	TargetDir      string
 	StructName     string
@@ -62,13 +62,13 @@ type Config struct {
 	MaxDepth       int
 	Timeout        int
 	PkgScope       string
-	PkgWorkerLimit int      // 包并发限制（默认 4，防止 OOM）
-	ReservedFields   []string // 预留字段名称（始终排在最后）
-	Recursive        bool     // 递归扫描子包（-package 模式）
-	AllowExternalPkgs bool    // 允许扫描跨包结构体（包括 vendor 目录）
+	PkgWorkerLimit int      // package-level concurrency limit (default 4, prevents OOM)
+	ReservedFields   []string // reserved field names (always placed last)
+	Recursive        bool     // recursively scan sub-packages (-package mode)
+	AllowExternalPkgs bool    // allow scanning cross-package structs (including vendor directory)
 }
 
-// StructInfo 结构体信息
+// StructInfo holds struct information
 type StructInfo struct {
 	Name       string
 	PkgPath    string
@@ -83,7 +83,7 @@ type StructInfo struct {
 	OptOrder   []string
 }
 
-// StructReport 结构体报告
+// StructReport represents a struct optimization report
 type StructReport struct {
 	Name       string
 	PkgPath    string
@@ -93,24 +93,24 @@ type StructReport struct {
 	Saved      int64
 	OrigFields []string
 	OptFields  []string
-	FieldTypes map[string]string // 字段名 -> 类型名
-	FieldSizes map[string]int64  // 字段名 -> 大小（字节）
+	FieldTypes map[string]string // field_name -> type_name
+	FieldSizes map[string]int64  // field_name -> size (bytes)
 	Skipped    bool
 	SkipReason string
 	Depth      int
-	HasEmbed   bool // 是否包含匿名字段
+	HasEmbed   bool // whether it contains embedded fields
 }
 
-// Report 优化报告
+// Report is the optimization report
 type Report struct {
 	TotalStructs      int
 	OptimizedCount    int
 	SkippedCount      int
 	TotalSaved        int64
 	StructReports     []*StructReport
-	RootStruct        string // 主结构体名称（-struct 模式）
-	RootStructSize    int64  // 主结构体优化前大小（仅主结构体）
-	RootStructOptSize int64  // 主结构体优化后大小（仅主结构体）
-	TotalOrigSize     int64  // 所有结构体优化前总大小
-	TotalOptSize      int64  // 所有结构体优化后总大小
+	RootStruct        string // root struct name (-struct mode)
+	RootStructSize    int64  // root struct original size (root struct only)
+	RootStructOptSize int64  // root struct optimized size (root struct only)
+	TotalOrigSize     int64  // total original size of all structs
+	TotalOptSize      int64  // total optimized size of all structs
 }

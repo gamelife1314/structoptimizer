@@ -9,7 +9,7 @@ import (
 	"github.com/gamelife1314/structoptimizer/optimizer"
 )
 
-// GenerateHTML 生成 HTML 格式报告
+// GenerateHTML generates an HTML format report
 func (r *Reporter) GenerateHTML(report *optimizer.Report) (string, error) {
 	s := getStrings(r.lang)
 	var sb strings.Builder
@@ -60,7 +60,7 @@ func (r *Reporter) GenerateHTML(report *optimizer.Report) (string, error) {
 	sb.WriteString(fmt.Sprintf("        <h1>%s <small>v%s</small></h1>\n", s.ReportTitle, Version))
 	sb.WriteString(fmt.Sprintf("        <p>%s：%s</p>\n\n", s.GeneratedTime, time.Now().Format("2006-01-02 15:04:05")))
 
-	// 1. 优化总览
+	// 1. Optimization overview
 	sb.WriteString("        <div class=\"summary\">\n")
 	sb.WriteString(fmt.Sprintf("            <h2>%s</h2>\n", s.OverviewTitle))
 	sb.WriteString("            <table>\n")
@@ -73,7 +73,7 @@ func (r *Reporter) GenerateHTML(report *optimizer.Report) (string, error) {
 	} else {
 		sb.WriteString(fmt.Sprintf("                <tr><td>%s</td><td><strong>0 %s</strong></td></tr>\n", s.MemorySaved, s.Bytes))
 	}
-	// 显示总优化前/后大小
+	// Show total size before/after optimization
 	if report.TotalOrigSize > 0 {
 		totalOptRate := float64(report.TotalOrigSize-report.TotalOptSize) / float64(report.TotalOrigSize) * 100
 		sb.WriteString(fmt.Sprintf("                <tr><td>%s</td><td><strong>%d %s</strong></td></tr>\n", s.TotalSizeBefore, report.TotalOrigSize, s.Bytes))
@@ -92,10 +92,10 @@ func (r *Reporter) GenerateHTML(report *optimizer.Report) (string, error) {
 	sb.WriteString("            </table>\n")
 	sb.WriteString("        </div>\n\n")
 
-	// 分类结构体
+	// Classify struct reports
 	optimized, skippedNormal, skippedError, unchanged := classifyStructReports(report, s)
 
-	// 2. 调整的结构体（优先显示）
+	// 2. Adjusted structs (shown first)
 	if len(optimized) > 0 {
 		sb.WriteString("        <div class=\"section\">\n")
 		sb.WriteString(fmt.Sprintf("            <h2>%s (%s)</h2>\n\n", s.AdjustedTitle, fmt.Sprintf(s.AdjustedSummary, len(optimized))))
@@ -110,7 +110,7 @@ func (r *Reporter) GenerateHTML(report *optimizer.Report) (string, error) {
 				s.BeforeLabel, sr.OrigSize, s.Bytes, s.AfterLabel, sr.OptSize, s.Bytes, s.SavedLabel, sr.Saved, s.Bytes, float64(sr.Saved)/float64(sr.OrigSize)*100))
 			sb.WriteString("                </div>\n\n")
 
-			// 字段对比表格
+			// Field comparison table
 			sb.WriteString(fmt.Sprintf("                <h4>%s:</h4>\n", s.FieldCompareTitle))
 			sb.WriteString("                <div class=\"table-wrapper\">\n")
 			sb.WriteString("                <table>\n")
@@ -140,7 +140,7 @@ func (r *Reporter) GenerateHTML(report *optimizer.Report) (string, error) {
 		sb.WriteString("        </div>\n\n")
 	}
 
-	// 3. 正常跳过的结构体（仅详细模式显示）
+	// 3. Normal skipped structs (detailed mode only)
 	if r.level >= ReportLevelFull && len(skippedNormal) > 0 {
 		sb.WriteString("        <div class=\"section\">\n")
 		sb.WriteString(fmt.Sprintf("            <h2>%s (%s)</h2>\n\n", s.SkippedNormalTitle, fmt.Sprintf(s.SkippedNormalSummary, len(skippedNormal))))
@@ -154,7 +154,7 @@ func (r *Reporter) GenerateHTML(report *optimizer.Report) (string, error) {
 		sb.WriteString("        </div>\n\n")
 	}
 
-	// 4. 异常跳过的结构体
+	// 4. Error skipped structs
 	if len(skippedError) > 0 {
 		sb.WriteString("        <div class=\"section\">\n")
 		sb.WriteString(fmt.Sprintf("            <h2>%s (%s)</h2>\n\n", s.SkippedErrorTitle, fmt.Sprintf(s.SkippedErrorSummary, len(skippedError))))
@@ -168,7 +168,7 @@ func (r *Reporter) GenerateHTML(report *optimizer.Report) (string, error) {
 		sb.WriteString("        </div>\n\n")
 	}
 
-	// 5. 未变化的结构体（详细模式下显示）
+	// 5. Unchanged structs (detailed mode)
 	if r.level >= ReportLevelFull && len(unchanged) > 0 {
 		sb.WriteString("        <div class=\"section\">\n")
 		sb.WriteString(fmt.Sprintf("            <h2>%s (%s)</h2>\n\n", s.UnchangedTitle, fmt.Sprintf(s.UnchangedSummary, len(unchanged))))

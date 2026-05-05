@@ -12,16 +12,16 @@ import (
 	"strings"
 )
 
-// analyzeStructFromFile 只解析文件分析结构体（不加载包，快速路径）
+// analyzeStructFromFile analyzes a struct by parsing only the file (no package loading, fast path)
 func analyzeStructFromFile(filePath, structName, pkgPath string) (*StructInfo, *types.Struct, error) {
-	// 解析文件
+	// Parse file
 	fset := token.NewFileSet()
 	f, err := parser.ParseFile(fset, filePath, nil, parser.ParseComments)
 	if err != nil {
 		return nil, nil, fmt.Errorf("parse file failed: %w", err)
 	}
 
-	// 查找结构体定义
+	// Find struct definition
 	var foundDecl *ast.TypeSpec
 	for _, decl := range f.Decls {
 		genDecl, ok := decl.(*ast.GenDecl)
@@ -49,14 +49,14 @@ func analyzeStructFromFile(filePath, structName, pkgPath string) (*StructInfo, *
 		return nil, nil, fmt.Errorf("struct %s not found in file", structName)
 	}
 
-	// 从 AST 提取字段信息
+	// Extract field info from AST
 	info := &StructInfo{
 		Name:    structName,
 		PkgPath: pkgPath,
 		File:    filePath,
 	}
 
-	// 获取包目录（用于查找同包中的类型定义）
+	// Get the package directory (used to find type definitions in the same package)
 	pkgDir := ""
 	if filePath != "" {
 		pkgDir = filepath.Dir(filePath)
@@ -65,14 +65,14 @@ func analyzeStructFromFile(filePath, structName, pkgPath string) (*StructInfo, *
 	st, fields := extractFieldsFromAST(foundDecl, fset, pkgDir)
 	info.Fields = fields
 	info.OrigOrder = extractFieldNames(fields)
-	// 使用 CalcStructSizeFromFields 计算大小（基于字段的 size 和 align）
-	// 注意：不使用 types.Sizes，因为 st 是简化的 Struct，字段类型是 Invalid
+	// Use CalcStructSizeFromFields to compute size (based on field size and align).
+	// Note: Do not use types.Sizes because st is a simplified Struct with field type Invalid.
 	info.OrigSize = CalcStructSizeFromFields(fields)
 
 	return info, st, nil
 }
 
-// extractFieldsFromAST 从 AST 提取字段信息
+// extractFieldsFromAST extracts field info from an AST
 func extractFieldsFromAST(ts *ast.TypeSpec, fset *token.FileSet, pkgDir string) (*types.Struct, []FieldInfo) {
 	st, ok := ts.Type.(*ast.StructType)
 	if !ok {
@@ -86,10 +86,10 @@ func extractFieldsFromAST(ts *ast.TypeSpec, fset *token.FileSet, pkgDir string) 
 		typeName := extractTypeName(f.Type)
 		size, align := estimateFieldSizeWithLookup(f.Type, pkgDir)
 
-		// 判断是否是匿名字段
+		// Check if it's an embedded field
 		isEmbed := len(f.Names) == 0
 
-		// 获取字段名（用于 FieldInfo）
+		// Get field name (for FieldInfo)
 		fieldName := getFieldName(f)
 
 		fi := FieldInfo{
@@ -97,7 +97,7 @@ func extractFieldsFromAST(ts *ast.TypeSpec, fset *token.FileSet, pkgDir string) 
 			Size:     size,
 			Align:    align,
 			TypeName: typeName,
-			IsEmbed:  isEmbed, // 正确设置匿名字段标记
+			IsEmbed:  isEmbed, // correctly set the embedded field flag
 		}
 
 		if f.Tag != nil {
@@ -106,8 +106,8 @@ func extractFieldsFromAST(ts *ast.TypeSpec, fset *token.FileSet, pkgDir string) 
 
 		fields = append(fields, fi)
 
-		// 创建 types.Var 用于后续处理
-		// 注意：匿名字段在 types.Var 中使用类型名，避免 "multifields with the same name" 错误
+		// Create types.Var for subsequent processing.
+		// Note: embedded fields use the type name in types.Var to avoid "multifields with the same name" errors.
 		typesFieldName := fieldName
 		if isEmbed {
 			typesFieldName = typeName
@@ -115,11 +115,11 @@ func extractFieldsFromAST(ts *ast.TypeSpec, fset *token.FileSet, pkgDir string) 
 		varFields = append(varFields, types.NewField(f.Pos(), nil, typesFieldName, types.Typ[types.Invalid], false))
 	}
 
-	// 创建简化的 types.Struct
+	// Create a simplified types.Struct
 	return types.NewStruct(varFields, nil), fields
 }
 
-// extractTypeName 从 AST 提取类型名称（保留包名前缀）
+// extractTypeName extracts the type name from an AST expression (keeping the package prefix)
 func extractTypeName(expr ast.Expr) string {
 	switch t := expr.(type) {
 	case *ast.Ident:
@@ -127,7 +127,7 @@ func extractTypeName(expr ast.Expr) string {
 	case *ast.StarExpr:
 		return "*" + extractTypeName(t.X)
 	case *ast.SelectorExpr:
-		// 保留包名：pkg.TypeName
+		// Keep package name: pkg.TypeName
 		if ident, ok := t.X.(*ast.Ident); ok {
 			return ident.Name + "." + t.Sel.Name
 		}
@@ -145,32 +145,32 @@ func extractTypeName(expr ast.Expr) string {
 	}
 }
 
-// getFieldName 获取字段名称
+// getFieldName returns the field name
 func getFieldName(f *ast.Field) string {
 	if len(f.Names) > 0 && f.Names[0] != nil {
 		return f.Names[0].Name
 	}
-	// 匿名字段返回空字符串
+	// Embedded field returns an empty string
 	return ""
 }
 
-// estimateFieldSize 估算字段大小
+// estimateFieldSize estimates field size
 func estimateFieldSize(expr ast.Expr) (size, align int64) {
 	switch t := expr.(type) {
 	case *ast.Ident:
 		return sizeOfIdent(t.Name)
 	case *ast.StarExpr:
-		return 8, 8 // 指针
+		return 8, 8 // pointer
 	case *ast.ArrayType:
 		if t.Len == nil {
 			return 24, 8 // slice
 		}
-		// 解析固定长度数组
+		// Parse fixed-length array
 		elemSize, elemAlign := estimateFieldSize(t.Elt)
 		if length := parseArrayLength(t.Len); length > 0 {
 			return elemSize * length, elemAlign
 		}
-		return elemSize, elemAlign // 无法解析时回退
+		return elemSize, elemAlign // fallback when unable to parse
 	case *ast.MapType:
 		return 8, 8 // map
 	case *ast.ChanType:
@@ -182,50 +182,50 @@ func estimateFieldSize(expr ast.Expr) (size, align int64) {
 	}
 }
 
-// EstimateFieldSizeWithLookup 估算字段大小（带类型查找）- 导出用于测试
+// EstimateFieldSizeWithLookup estimates field size (with type lookup) - exported for testing
 func EstimateFieldSizeWithLookup(expr ast.Expr, pkgDir string) (size, align int64) {
 	return estimateFieldSizeWithLookup(expr, pkgDir)
 }
 
-// estimateFieldSizeWithLookupInternal 估算字段大小（带类型查找）- 内部实现
+// estimateFieldSizeWithLookup estimates field size (with type lookup)
 func estimateFieldSizeWithLookup(expr ast.Expr, pkgDir string) (size, align int64) {
 	switch t := expr.(type) {
 	case *ast.Ident:
-		// 对于标识符，尝试在同包中查找类型定义
+		// For identifiers, try to find the type definition within the same package
 		if pkgDir != "" {
 			underlyingKind := findTypeUnderlyingInPackage(pkgDir, t.Name)
 			if underlyingKind != types.Invalid {
 				return basicSize(underlyingKind)
 			}
-			// 如果不是基本类型，尝试查找是否是结构体类型
+			// If not a basic type, try to detect if it's a struct type
 			if structSize := findStructSizeInPackage(pkgDir, t.Name); structSize > 0 {
 				return structSize, 8
 			}
 		}
 		return sizeOfIdent(t.Name)
 	case *ast.SelectorExpr:
-		// 处理带包前缀的类型（如 time.Time）
+		// Handle type with package prefix (e.g. time.Time)
 		if ident, ok := t.X.(*ast.Ident); ok {
 			pkgName := ident.Name
 			typeName := t.Sel.Name
-			// 尝试查找标准库或已知外部包的结构体大小
+			// Try to find the struct size for standard library or known external packages
 			if size := getExternalStructSize(pkgName, typeName, pkgDir); size > 0 {
 				return size, 8
 			}
 		}
-		return 8, 8 // 未知外部类型
+		return 8, 8 // unknown external type
 	case *ast.StarExpr:
-		return 8, 8 // 指针
+		return 8, 8 // pointer
 	case *ast.ArrayType:
 		if t.Len == nil {
 			return 24, 8 // slice
 		}
-		// 解析固定长度数组
+		// Parse fixed-length array
 		elemSize, elemAlign := estimateFieldSizeWithLookup(t.Elt, pkgDir)
 		if length := parseArrayLength(t.Len); length > 0 {
 			return elemSize * length, elemAlign
 		}
-		return elemSize, elemAlign // 无法解析时回退
+		return elemSize, elemAlign // fallback when unable to parse
 	case *ast.MapType:
 		return 8, 8 // map
 	case *ast.ChanType:
@@ -233,7 +233,7 @@ func estimateFieldSizeWithLookup(expr ast.Expr, pkgDir string) (size, align int6
 	case *ast.InterfaceType:
 		return 16, 8 // interface
 	case *ast.StructType:
-		// 直接处理内联结构体（匿名嵌套结构体）
+		// Handle inline struct directly (anonymous nested struct)
 		size := calcInlineStructSize(t, pkgDir)
 		return size, 8
 	default:
@@ -241,17 +241,17 @@ func estimateFieldSizeWithLookup(expr ast.Expr, pkgDir string) (size, align int6
 	}
 }
 
-// getExternalStructSize 获取外部包（标准库/第三方库）中结构体的大小
+// getExternalStructSize returns the size of a struct in an external package (standard library / third party)
 func getExternalStructSize(pkgName, typeName, localPkgDir string) int64 {
-	// 标准库常见类型的大小
+	// Sizes for common standard library types
 	if pkgName == "time" {
 		switch typeName {
 		case "Time":
-			return 24 // time.Time 的实际大小
+			return 24 // actual size of time.Time
 		case "Duration":
 			return 8
 		case "Location":
-			return 8 // 指针
+			return 8 // pointer
 		}
 	}
 	if pkgName == "sync" {
@@ -273,7 +273,7 @@ func getExternalStructSize(pkgName, typeName, localPkgDir string) int64 {
 		case "Context":
 			return 16 // interface
 		case "CancelFunc":
-			return 8 // 函数指针
+			return 8 // function pointer
 		}
 	}
 	if pkgName == "bytes" {
@@ -319,9 +319,9 @@ func getExternalStructSize(pkgName, typeName, localPkgDir string) int64 {
 		}
 	}
 	
-	// 如果不是标准库，尝试在 GOPATH 或 module cache 中查找
+	// If not standard library, try to find in GOPATH or module cache
 	if localPkgDir != "" {
-		// 尝试在同级目录或 vendor 中查找
+		// Try to find in sibling directory or vendor
 		if size := findStructSizeInVendorOrDep(pkgName, typeName, localPkgDir); size > 0 {
 			return size
 		}
@@ -330,20 +330,20 @@ func getExternalStructSize(pkgName, typeName, localPkgDir string) int64 {
 	return 0
 }
 
-// findStructSizeInVendorOrDep 在 vendor 或依赖目录中查找结构体大小
+// findStructSizeInVendorOrDep finds struct size in vendor or dependency directories
 func findStructSizeInVendorOrDep(pkgName, typeName, localPkgDir string) int64 {
-	// 尝试在 vendor 目录查找
+	// Try to find in vendor directory
 	vendorDir := filepath.Join(localPkgDir, "..", "..", "vendor", pkgName)
 	if size := findStructSizeInPackage(vendorDir, typeName); size > 0 {
 		return size
 	}
 	
-	// 尝试在 GOPATH/pkg/mod 中查找（简化处理，只检查常见路径）
-	// 实际项目中可能需要更复杂的路径解析
+	// Try to find in GOPATH/pkg/mod (simplified, only checks common paths).
+	// Real projects may need more complex path resolution.
 	return 0
 }
 
-// findStructSizeInPackage 在包中查找结构体类型的大小
+// findStructSizeInPackage finds the size of a struct type within a package
 func findStructSizeInPackage(pkgDir, typeName string) int64 {
 	entries, err := os.ReadDir(pkgDir)
 	if err != nil {
@@ -364,7 +364,7 @@ func findStructSizeInPackage(pkgDir, typeName string) int64 {
 	return 0
 }
 
-// findStructSizeInFile 在文件中查找结构体类型的大小
+// findStructSizeInFile finds the size of a struct type in a file
 func findStructSizeInFile(filePath, typeName string) int64 {
 	fset := token.NewFileSet()
 	f, err := parser.ParseFile(fset, filePath, nil, 0)
@@ -393,7 +393,7 @@ func findStructSizeInFile(filePath, typeName string) int64 {
 	return 0
 }
 
-// calcInlineStructSize 计算内联结构体的大小
+// calcInlineStructSize calculates the size of an inline struct
 func calcInlineStructSize(st *ast.StructType, pkgDir string) int64 {
 	if st == nil || st.Fields == nil {
 		return 0
@@ -405,7 +405,7 @@ func calcInlineStructSize(st *ast.StructType, pkgDir string) int64 {
 	for _, field := range st.Fields.List {
 		size, align := estimateFieldSizeWithLookup(field.Type, pkgDir)
 
-		// 对齐
+		// Alignment
 		if offset%align != 0 {
 			offset += align - (offset % align)
 		}
@@ -416,7 +416,7 @@ func calcInlineStructSize(st *ast.StructType, pkgDir string) int64 {
 		}
 	}
 
-	// 末尾填充
+	// Trailing padding
 	if offset%maxAlign != 0 {
 		offset += maxAlign - (offset % maxAlign)
 	}
@@ -424,8 +424,8 @@ func calcInlineStructSize(st *ast.StructType, pkgDir string) int64 {
 	return offset
 }
 
-// findTypeUnderlyingInPackage 在包中查找类型的底层类型
-// 返回 types.BasicKind 如果是基本类型，否则返回 types.Invalid
+// findTypeUnderlyingInPackage finds the underlying type of a type within a package.
+// Returns types.BasicKind if it is a basic type, otherwise returns types.Invalid.
 func findTypeUnderlyingInPackage(pkgDir, typeName string) types.BasicKind {
 	entries, err := os.ReadDir(pkgDir)
 	if err != nil {
@@ -446,7 +446,7 @@ func findTypeUnderlyingInPackage(pkgDir, typeName string) types.BasicKind {
 	return types.Invalid
 }
 
-// findTypeUnderlyingInFile 在文件中查找类型的底层类型
+// findTypeUnderlyingInFile finds the underlying type of a type within a file
 func findTypeUnderlyingInFile(filePath, typeName string) types.BasicKind {
 	fset := token.NewFileSet()
 	f, err := parser.ParseFile(fset, filePath, nil, 0)
@@ -466,7 +466,7 @@ func findTypeUnderlyingInFile(filePath, typeName string) types.BasicKind {
 				continue
 			}
 
-			// 检查底层类型
+			// Check underlying type
 			return getBasicKindFromExpr(ts.Type)
 		}
 	}
@@ -474,23 +474,23 @@ func findTypeUnderlyingInFile(filePath, typeName string) types.BasicKind {
 	return types.Invalid
 }
 
-// getBasicKindFromExpr 从 AST 表达式获取基本类型种类
+// getBasicKindFromExpr gets the basic type kind from an AST expression
 func getBasicKindFromExpr(expr ast.Expr) types.BasicKind {
 	switch t := expr.(type) {
 	case *ast.Ident:
 		return identToBasicKind(t.Name)
 	case *ast.ArrayType:
-		// 数组/切片
+		// Array/slice
 		return types.Invalid
 	case *ast.StarExpr:
-		// 指针
+		// Pointer
 		return types.Invalid
 	default:
 		return types.Invalid
 	}
 }
 
-// identToBasicKind 将标识符名称转换为基本类型种类
+// identToBasicKind converts an identifier name to a basic type kind
 func identToBasicKind(name string) types.BasicKind {
 	switch name {
 	case "bool":
@@ -528,7 +528,7 @@ func identToBasicKind(name string) types.BasicKind {
 	}
 }
 
-// sizeOfIdent 根据标识符名称估算大小
+// sizeOfIdent estimates the size from an identifier name
 func sizeOfIdent(name string) (int64, int64) {
 	switch name {
 	case "bool", "byte":
@@ -542,7 +542,7 @@ func sizeOfIdent(name string) (int64, int64) {
 	case "int64", "uint64":
 		return 8, 8
 	case "int", "uint", "uintptr":
-		return 8, 8 // 64 位系统
+		return 8, 8 // 64-bit system
 	case "float32":
 		return 4, 4
 	case "float64":
@@ -550,16 +550,16 @@ func sizeOfIdent(name string) (int64, int64) {
 	case "string":
 		return 16, 8
 	default:
-		return 8, 8 // 未知类型
+		return 8, 8 // unknown type
 	}
 }
 
-// parseArrayLength 解析数组长度
+// parseArrayLength parses the array length
 func parseArrayLength(expr ast.Expr) int64 {
 	switch e := expr.(type) {
 	case *ast.BasicLit:
 		if e.Kind == token.INT {
-			// 移除数字后缀（如 10u）
+			// Remove numeric suffix (e.g. 10u)
 			value := strings.TrimRight(e.Value, "uU")
 			if n, err := strconv.ParseInt(value, 0, 64); err == nil {
 				return n
@@ -571,14 +571,14 @@ func parseArrayLength(expr ast.Expr) int64 {
 	return 0
 }
 
-// extractFieldNames 提取字段名称
+// extractFieldNames extracts field names
 func extractFieldNames(fields []FieldInfo) []string {
 	var names []string
 	for _, f := range fields {
 		if f.Name != "" {
 			names = append(names, f.Name)
 		} else {
-			// 匿名字段使用类型名
+			// Embedded field uses type name
 			names = append(names, f.TypeName)
 		}
 	}

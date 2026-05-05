@@ -6,7 +6,7 @@ import (
 	"strings"
 )
 
-// FieldInfo 字段信息
+// FieldInfo holds field information
 type FieldInfo struct {
 	Name         string
 	Type         types.Type
@@ -21,13 +21,13 @@ type FieldInfo struct {
 	Tag          string
 }
 
-// FieldAnalyzer 字段分析器
+// FieldAnalyzer analyzes struct fields
 type FieldAnalyzer struct {
 	info *types.Info
 	fset *token.FileSet
 }
 
-// NewFieldAnalyzer 创建字段分析器
+// NewFieldAnalyzer creates a new field analyzer
 func NewFieldAnalyzer(info *types.Info, fset *token.FileSet) *FieldAnalyzer {
 	return &FieldAnalyzer{
 		info: info,
@@ -35,7 +35,7 @@ func NewFieldAnalyzer(info *types.Info, fset *token.FileSet) *FieldAnalyzer {
 	}
 }
 
-// AnalyzeStruct 分析结构体字段
+// AnalyzeStruct analyzes the fields of a struct
 func (fa *FieldAnalyzer) AnalyzeStruct(st *types.Struct, structName, pkgPath, filePath string) *StructInfo {
 	info := &StructInfo{
 		Name:    structName,
@@ -47,19 +47,19 @@ func (fa *FieldAnalyzer) AnalyzeStruct(st *types.Struct, structName, pkgPath, fi
 		return info
 	}
 
-	// 分析字段
+	// Analyze fields
 	fields, origOrder := fa.analyzeFields(st, structName, pkgPath, filePath)
 	info.Fields = fields
 	info.OrigOrder = origOrder
 
-	// 计算原始大小 - 使用 types.Sizes（与 unsafe.Sizeof 一致）
-	// 注意：types.Info 没有 Sizes 字段，需要在调用时传入
+	// Calculate original size using types.Sizes (consistent with unsafe.Sizeof).
+	// Note: types.Info does not have a Sizes field; it must be passed in by the caller.
 	info.OrigSize = CalcStructSize(st, nil)
 
 	return info
 }
 
-// analyzeFields 分析结构体字段
+// analyzeFields analyzes the fields of a struct
 func (fa *FieldAnalyzer) analyzeFields(structType *types.Struct, structName, pkgPath, filePath string) ([]FieldInfo, []string) {
 	var fields []FieldInfo
 	var origOrder []string
@@ -71,7 +71,7 @@ func (fa *FieldAnalyzer) analyzeFields(structType *types.Struct, structName, pkg
 		typeName := fa.getTypeName(field.Type())
 		pkg := fa.getTypePkg(field.Type())
 
-		// 快速判断是否是标准库或第三方包
+		// Quickly check if it is a standard library or third-party package
 		isStdLib := isStandardLibraryPkg(pkg)
 		isThirdParty := !isStdLib && pkg != "" && !isProjectPkgFast(pkg)
 
@@ -88,7 +88,7 @@ func (fa *FieldAnalyzer) analyzeFields(structType *types.Struct, structName, pkg
 			TypeName:     typeName,
 		}
 
-		// 获取 tag
+		// Get tag
 		if structType.Tag(i) != "" {
 			fi.Tag = structType.Tag(i)
 		}
@@ -104,12 +104,12 @@ func (fa *FieldAnalyzer) analyzeFields(structType *types.Struct, structName, pkg
 	return fields, origOrder
 }
 
-// getFieldName 获取字段名称
+// getFieldName returns the field name
 func (fa *FieldAnalyzer) getFieldName(field *types.Var) string {
 	return field.Name()
 }
 
-// getTypePkg 获取类型的包路径
+// getTypePkg returns the package path of a type
 func (fa *FieldAnalyzer) getTypePkg(typ types.Type) string {
 	if typ == nil {
 		return ""
@@ -135,14 +135,14 @@ func (fa *FieldAnalyzer) getTypePkg(typ types.Type) string {
 	}
 }
 
-// getTypeName 获取类型名称（保留包名前缀）
+// getTypeName returns the type name (keeping the package prefix)
 func (fa *FieldAnalyzer) getTypeName(typ types.Type) string {
 	if typ == nil {
 		return ""
 	}
 	switch t := typ.(type) {
 	case *types.Named:
-		// 保留包名：pkg.TypeName
+		// Keep package name: pkg.TypeName
 		if pkg := t.Obj().Pkg(); pkg != nil {
 			return pkg.Path() + "." + t.Obj().Name()
 		}
@@ -160,7 +160,7 @@ func (fa *FieldAnalyzer) getTypeName(typ types.Type) string {
 	}
 }
 
-// isProjectPkgFast 快速判断是否是项目包
+// isProjectPkgFast quick check for whether it is a project package
 func isProjectPkgFast(pkgPath string) bool {
 	if pkgPath == "" {
 		return false

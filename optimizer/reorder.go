@@ -4,15 +4,15 @@ import (
 	"sort"
 )
 
-// ReorderFields 重排字段以优化内存对齐
-// 只有当能节省内存时才调整顺序，否则保持原顺序
-// reservedFields 中的字段始终排在最后
+// ReorderFields reorders fields to optimize memory alignment.
+// Only reorders when it actually saves memory, otherwise keeps the original order.
+// Fields in reservedFields are always placed last.
 func ReorderFields(fields []FieldInfo, sortSameSize bool, reservedFields []string) []FieldInfo {
 	if len(fields) <= 1 {
 		return fields
 	}
 
-	// 分离预留字段和普通字段
+	// Separate reserved fields and normal fields
 	var reserved []FieldInfo
 	var normal []FieldInfo
 
@@ -29,27 +29,27 @@ func ReorderFields(fields []FieldInfo, sortSameSize bool, reservedFields []strin
 		}
 	}
 
-	// 对普通字段排序
+	// Sort normal fields
 	sorted := reorderFieldsInternal(normal, sortSameSize)
 
-	// 预留字段追加到末尾
+	// Append reserved fields to the end
 	sorted = append(sorted, reserved...)
 
 	return sorted
 }
 
-// reorderFieldsInternal 内部字段排序逻辑
-// 注意：这个函数现在总是返回排序结果，由调用者决定是否采用
+// reorderFieldsInternal implements the internal field sorting logic.
+// Note: this function always returns the sorted result; the caller decides whether to adopt it.
 func reorderFieldsInternal(fields []FieldInfo, sortSameSize bool) []FieldInfo {
 	if len(fields) <= 1 {
 		return fields
 	}
 
-	// 创建字段副本
+	// Create a copy of the fields
 	result := make([]FieldInfo, len(fields))
 	copy(result, fields)
 
-	// 排序：按大小降序，相同大小按对齐降序
+	// Sort: descending by size, then by alignment for equal sizes
 	sort.SliceStable(result, func(i, j int) bool {
 		if result[i].Size != result[j].Size {
 			return result[i].Size > result[j].Size
@@ -62,11 +62,11 @@ func reorderFieldsInternal(fields []FieldInfo, sortSameSize bool) []FieldInfo {
 		return result[i].Name < result[j].Name
 	})
 
-	// 总是返回排序结果，由调用者决定是否采用
+	// Always return the sorted result; the caller decides whether to adopt it
 	return result
 }
 
-// calcSizeFromFields 计算字段总大小（含填充）
+// calcSizeFromFields calculates the total size of fields (including padding)
 func calcSizeFromFields(fields []FieldInfo) int64 {
 	if len(fields) == 0 {
 		return 0
@@ -76,7 +76,7 @@ func calcSizeFromFields(fields []FieldInfo) int64 {
 	var maxAlign int64 = 1
 
 	for _, field := range fields {
-		// 对齐
+		// Alignment
 		if offset%field.Align != 0 {
 			offset += field.Align - (offset % field.Align)
 		}
@@ -87,7 +87,7 @@ func calcSizeFromFields(fields []FieldInfo) int64 {
 		}
 	}
 
-	// 末尾填充
+	// Trailing padding
 	if offset%maxAlign != 0 {
 		offset += maxAlign - (offset % maxAlign)
 	}

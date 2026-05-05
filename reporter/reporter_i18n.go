@@ -1,6 +1,6 @@
 package reporter
 
-// 版本信息
+// Version information
 const Version = "1.7.7"
 
 // Lang represents a supported language
