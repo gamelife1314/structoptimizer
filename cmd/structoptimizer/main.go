@@ -38,9 +38,10 @@ type Config struct {
 	PkgScope       string // 包范围限制
 	PkgWorkerLimit int    // 包并发限制
 	ShowVersion    bool   // 显示版本
-	ReservedFields string   // 预留字段名称（逗号分隔）
-	Recursive      bool     // 递归扫描子包（-package 模式）
-	Lang           reporter.Lang // 报告语言
+	ReservedFields     string        // 预留字段名称（逗号分隔）
+	Recursive          bool          // 递归扫描子包（-package 模式）
+	Lang               reporter.Lang // 报告语言
+	AllowExternalPkgs  bool          // 允许扫描跨包结构体（包括 vendor 目录）
 }
 
 func main() {
@@ -117,6 +118,7 @@ func main() {
 		PkgWorkerLimit: cfg.PkgWorkerLimit,
 		ReservedFields: reservedFields,
 		Recursive:      cfg.Recursive,
+		AllowExternalPkgs: cfg.AllowExternalPkgs,
 	}
 	opt := optimizer.NewOptimizer(optimizerCfg, anlz)
 
@@ -187,6 +189,7 @@ func parseFlags() *Config {
 	flag.StringVar(&cfg.ReservedFields, "reserved-fields", "", "预留字段名称（逗号分隔，始终排在最后，如：reserved,padding,XXX）")
 	flag.BoolVar(&cfg.Recursive, "recursive", false, "递归扫描子包（仅 -package 模式有效）")
 	flag.StringVar((*string)(&cfg.Lang), "lang", "zh", "报告语言（zh=中文, en=英文）")
+	flag.BoolVar(&cfg.AllowExternalPkgs, "allow-external-pkgs", false, "允许扫描跨包结构体（包括 vendor 目录，默认关闭）")
 
 	// 详细程度
 	v := flag.Bool("v", false, "显示详细信息")
