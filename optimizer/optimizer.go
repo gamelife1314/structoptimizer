@@ -258,8 +258,8 @@ func (o *Optimizer) optimizeStruct(pkgPath, structName, filePath string, depth i
 		o.mu.Unlock()
 	}()
 
-	// 检查是否是 vendor 中的包或第三方包，如果是则跳过
-	if isVendorPackage(pkgPath) {
+	// 检查是否是 vendor 中的包或第三方包（AllowExternalPkgs=true 时允许扫描）
+	if !o.config.AllowExternalPkgs && isVendorPackage(pkgPath) {
 		o.Log(3, "跳过 vendor 中的结构体：%s", key)
 		info := &StructInfo{
 			Name:       structName,
@@ -275,8 +275,8 @@ func (o *Optimizer) optimizeStruct(pkgPath, structName, filePath string, depth i
 		return info, nil
 	}
 
-	// 检查是否是项目内部的包
-	if !o.isProjectPackage(pkgPath) {
+	// 检查是否是项目内部的包（AllowExternalPkgs=true 时允许跨包扫描）
+	if !o.config.AllowExternalPkgs && !o.isProjectPackage(pkgPath) {
 		o.Log(3, "跳过非项目内部包结构体：%s", key)
 		info := &StructInfo{
 			Name:    structName,

@@ -69,9 +69,11 @@ func (o *Optimizer) collectStructs(pkgPath, structName, filePath string, depth, 
 		return
 	}
 
-	// 检查是否是第三方包
-	if isVendorPackage(pkgPath) || !o.isProjectPackage(pkgPath) {
-		return
+	// 检查是否是第三方包（AllowExternalPkgs=true 时允许跨包扫描）
+	if !o.config.AllowExternalPkgs {
+		if isVendorPackage(pkgPath) || !o.isProjectPackage(pkgPath) {
+			return
+		}
 	}
 
 	// 检查文件路径是否包含应该跳过的目录
@@ -111,18 +113,23 @@ func (o *Optimizer) collectStructs(pkgPath, structName, filePath string, depth, 
 
 	// 递归收集嵌套结构体（跨包分析）
 	for _, field := range nestedFields {
-		// 跳过标准库和第三方包
-		if isStandardLibraryPkg(field.PkgPath) || isVendorPackage(field.PkgPath) {
+		// 永远跳过标准库
+		if isStandardLibraryPkg(field.PkgPath) {
 			continue
 		}
 
-		// 检查包范围限制（前缀匹配）
-		if o.config.PkgScope != "" && !strings.HasPrefix(field.PkgPath, o.config.PkgScope) {
+		// AllowExternalPkgs=false 时才跳过 vendor 包
+		if !o.config.AllowExternalPkgs && isVendorPackage(field.PkgPath) {
+			continue
+		}
+
+		// 检查包范围限制（AllowExternalPkgs=true 时可跳过此限制）
+		if !o.config.AllowExternalPkgs && o.config.PkgScope != "" && !strings.HasPrefix(field.PkgPath, o.config.PkgScope) {
 			o.Log(3, "跳过跨包字段：%s (包：%s, 范围：%s)", field.Name, field.PkgPath, o.config.PkgScope)
 			continue
 		}
 
-		if o.isProjectPackage(field.PkgPath) {
+		if o.config.AllowExternalPkgs || o.isProjectPackage(field.PkgPath) {
 			// 无论同包还是跨包，都不传递 filePath
 			// 让 parseStructFromFileOnly 通过 findFilesWithStruct 自动查找包含该结构体的文件
 			// 这样可以正确处理同包不同文件中的嵌套结构体

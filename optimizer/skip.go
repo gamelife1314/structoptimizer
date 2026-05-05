@@ -20,13 +20,13 @@ func (o *Optimizer) shouldSkip(info *StructInfo, st *types.Struct, key string) s
 		return "单字段结构体"
 	}
 
-	// 检查是否是 vendor 中的第三方包结构体
-	if isVendorPackage(info.PkgPath) {
+	// 检查是否是 vendor 中的第三方包结构体（AllowExternalPkgs=true 时允许扫描）
+	if !o.config.AllowExternalPkgs && isVendorPackage(info.PkgPath) {
 		return "vendor 中的第三方包结构体"
 	}
 
-	// 检查是否是项目内部的包
-	if !o.isProjectPackage(info.PkgPath) {
+	// 检查是否是项目内部的包（AllowExternalPkgs=true 时允许跨包扫描）
+	if !o.config.AllowExternalPkgs && !o.isProjectPackage(info.PkgPath) {
 		if isStandardLibrary(info.PkgPath) {
 			return "Go 标准库结构体"
 		}

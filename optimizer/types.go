@@ -67,8 +67,9 @@ type Config struct {
 	Timeout        int
 	PkgScope       string
 	PkgWorkerLimit int      // 包并发限制（默认 4，防止 OOM）
-	ReservedFields []string // 预留字段名称（始终排在最后）
-	Recursive      bool     // 递归扫描子包（-package 模式）
+	ReservedFields   []string // 预留字段名称（始终排在最后）
+	Recursive        bool     // 递归扫描子包（-package 模式）
+	AllowExternalPkgs bool    // 允许扫描跨包结构体（包括 vendor 目录）
 }
 
 // StructInfo 结构体信息
