@@ -45,41 +45,37 @@ type Config struct {
 }
 
 func main() {
-	// 解析命令行参数
 	cfg := parseFlags()
 
-	// 显示版本
 	if cfg.ShowVersion {
 		fmt.Printf("structoptimizer version %s\n", reporter.Version)
 		os.Exit(0)
 	}
 
-	// 验证参数
 	if err := validateFlags(cfg); err != nil {
-		fmt.Fprintf(os.Stderr, "错误：%v\n", err)
+		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 		flag.Usage()
 		os.Exit(1)
 	}
 
-	// 解析逗号分隔的参数
+	// Parse comma-separated lists
 	skipDirs := parseCommaList(cfg.SkipDirs)
 	skipFiles := parseCommaList(cfg.SkipFiles)
 	skipByMethods := parseCommaList(cfg.SkipByMethods)
 	skipByNames := parseCommaList(cfg.SkipByNames)
 	reservedFields := parseCommaList(cfg.ReservedFields)
 
-	// 如果使用了 -skip-by-methods，需要用户确认
-	// 暂时注释掉用于测试
+	// TODO: enable user confirmation for -skip-by-methods
 	/*
 		if len(skipByMethods) > 0 {
 			if !confirmSkipByMethods() {
-				fmt.Println("已取消执行")
+				fmt.Println("Canceled")
 				os.Exit(0)
 			}
 		}
 	*/
 
-	// 创建分析器
+	// Create analyzer
 	analyzerCfg := &analyzer.Config{
 		TargetDir:     cfg.TargetDir,
 		StructName:    cfg.Struct,
@@ -122,14 +118,14 @@ func main() {
 	}
 	opt := optimizer.NewOptimizer(optimizerCfg, anlz)
 
-	// 执行优化
+	// Execute optimization
 	report, err := opt.Optimize()
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "优化失败：%v\n", err)
+		fmt.Fprintf(os.Stderr, "Optimization failed: %v\n", err)
 		os.Exit(1)
 	}
 
-	// 生成报告
+	// Generate report
 	var reportLevel reporter.ReportLevel
 	if cfg.Verbose >= 3 {
 		reportLevel = reporter.ReportLevelFull
@@ -141,11 +137,11 @@ func main() {
 
 	rep := reporter.NewReporterWithLang(cfg.ReportFormat, cfg.Output, reportLevel, cfg.Lang)
 	if err := rep.Generate(report); err != nil {
-		fmt.Fprintf(os.Stderr, "生成报告失败：%v\n", err)
+		fmt.Fprintf(os.Stderr, "Report generation failed: %v\n", err)
 		os.Exit(1)
 	}
 
-	// 写入源文件
+	// Write to source files
 	if cfg.Write {
 		writerCfg := &writer.Config{
 			Backup:  cfg.Backup,
@@ -155,7 +151,7 @@ func main() {
 
 		optimized := opt.GetOptimized()
 		if err := w.WriteFiles(optimized); err != nil {
-			fmt.Fprintf(os.Stderr, "写入文件失败：%v\n", err)
+			fmt.Fprintf(os.Stderr, "Write files failed: %v\n", err)
 			os.Exit(1)
 		}
 	}
@@ -167,48 +163,48 @@ func main() {
 func parseFlags() *Config {
 	cfg := &Config{}
 
-	flag.BoolVar(&cfg.ShowVersion, "version", false, "显示版本号")
-	flag.StringVar(&cfg.Struct, "struct", "", "结构体名称（格式：包路径。结构体名）")
-	flag.StringVar(&cfg.Package, "package", "", "包路径（与 -struct 互斥）")
-	flag.StringVar(&cfg.SourceFile, "source-file", "", "源文件路径")
-	flag.BoolVar(&cfg.Write, "write", false, "直接写入源文件")
-	flag.BoolVar(&cfg.Backup, "backup", true, "修改前备份源文件")
-	flag.StringVar(&cfg.SkipDirs, "skip-dirs", "", "跳过的目录（支持通配符，逗号分隔）")
-	flag.StringVar(&cfg.SkipFiles, "skip-files", "", "跳过的文件（支持通配符，逗号分隔）")
-	flag.StringVar(&cfg.SkipByMethods, "skip-by-methods", "", "具有这些方法的结构体跳过（逗号分隔）")
-	flag.StringVar(&cfg.SkipByNames, "skip-by-names", "", "指定名称的结构体跳过（逗号分隔）")
-	flag.StringVar(&cfg.Output, "output", "", "报告输出路径")
-	flag.StringVar(&cfg.ReportFormat, "format", "md", "报告格式（txt/md/html）")
-	flag.BoolVar(&cfg.SortSameSize, "sort-same-size", false, "大小相同时按字段大小重排")
-	flag.StringVar(&cfg.ProjectType, "prj-type", "gomod", "项目类型（gomod/gopath）")
-	flag.StringVar(&cfg.GOPATH, "gopath", "", "GOPATH 路径（GOPATH 项目可选）")
-	flag.IntVar(&cfg.MaxDepth, "max-depth", 50, "最大递归深度（默认 50）")
-	flag.IntVar(&cfg.Timeout, "timeout", 1200, "超时时间（秒，默认 20 分钟）")
-	flag.StringVar(&cfg.PkgScope, "pkg-scope", "", "包范围限制（GOPATH 模式必填，只分析此包内的结构体）")
-	flag.IntVar(&cfg.PkgWorkerLimit, "pkg-limit", 4, "包并发限制（默认 4，降低可防止 OOM）")
-	flag.StringVar(&cfg.ReservedFields, "reserved-fields", "", "预留字段名称（逗号分隔，始终排在最后，如：reserved,padding,XXX）")
-	flag.BoolVar(&cfg.Recursive, "recursive", false, "递归扫描子包（仅 -package 模式有效）")
-	flag.StringVar((*string)(&cfg.Lang), "lang", "zh", "报告语言（zh=中文, en=英文）")
-	flag.BoolVar(&cfg.AllowExternalPkgs, "allow-external-pkgs", false, "允许扫描跨包结构体（包括 vendor 目录，默认关闭）")
+	flag.BoolVar(&cfg.ShowVersion, "version", false, "Show version information")
+	flag.StringVar(&cfg.Struct, "struct", "", "Struct name (format: package.path.StructName)")
+	flag.StringVar(&cfg.Package, "package", "", "Package path (mutually exclusive with -struct)")
+	flag.StringVar(&cfg.SourceFile, "source-file", "", "Source file path")
+	flag.BoolVar(&cfg.Write, "write", false, "Write changes to source files")
+	flag.BoolVar(&cfg.Backup, "backup", true, "Backup source files before modification")
+	flag.StringVar(&cfg.SkipDirs, "skip-dirs", "", "Skip directories (wildcards, comma-separated)")
+	flag.StringVar(&cfg.SkipFiles, "skip-files", "", "Skip files (wildcards, comma-separated)")
+	flag.StringVar(&cfg.SkipByMethods, "skip-by-methods", "", "Skip structs with these methods (comma-separated)")
+	flag.StringVar(&cfg.SkipByNames, "skip-by-names", "", "Skip structs with these names (comma-separated)")
+	flag.StringVar(&cfg.Output, "output", "", "Report output path")
+	flag.StringVar(&cfg.ReportFormat, "format", "md", "Report format (txt/md/html)")
+	flag.BoolVar(&cfg.SortSameSize, "sort-same-size", false, "Reorder fields even when size is the same")
+	flag.StringVar(&cfg.ProjectType, "prj-type", "gomod", "Project type: gomod or gopath")
+	flag.StringVar(&cfg.GOPATH, "gopath", "", "GOPATH path (optional, uses env if not set)")
+	flag.IntVar(&cfg.MaxDepth, "max-depth", 50, "Maximum recursion depth (default: 50)")
+	flag.IntVar(&cfg.Timeout, "timeout", 1200, "Timeout in seconds (default: 1200)")
+	flag.StringVar(&cfg.PkgScope, "pkg-scope", "", "Package scope limit (required for GOPATH mode)")
+	flag.IntVar(&cfg.PkgWorkerLimit, "pkg-limit", 4, "Package concurrency limit (default: 4, lower to prevent OOM)")
+	flag.StringVar(&cfg.ReservedFields, "reserved-fields", "", "Fields to keep at the end (comma-separated, e.g. reserved,padding,XXX)")
+	flag.BoolVar(&cfg.Recursive, "recursive", false, "Recursively scan all sub-packages (-package mode only)")
+	flag.StringVar((*string)(&cfg.Lang), "lang", "zh", "Report language (zh=Chinese, en=English)")
+	flag.BoolVar(&cfg.AllowExternalPkgs, "allow-external-pkgs", false, "Allow scanning cross-package structs (including vendor, default: false)")
 
-	// 详细程度
-	v := flag.Bool("v", false, "显示详细信息")
-	vv := flag.Bool("vv", false, "显示调试信息")
-	vvv := flag.Bool("vvv", false, "显示跟踪信息")
+	// Verbosity levels
+	v := flag.Bool("v", false, "Show verbose output")
+	vv := flag.Bool("vv", false, "Show debug output")
+	vvv := flag.Bool("vvv", false, "Show trace output")
 
 	flag.Usage = func() {
-		fmt.Fprintf(os.Stderr, "用法：%s [选项] <项目目录>\n\n", os.Args[0])
-		fmt.Fprintf(os.Stderr, "Golang 结构体对齐优化工具\n\n")
-		fmt.Fprintf(os.Stderr, "参数:\n")
-		fmt.Fprintf(os.Stderr, "  <项目目录>  Go Module 项目的根目录（包含 go.mod），GOPATH 项目可省略\n\n")
-		fmt.Fprintf(os.Stderr, "选项:\n")
+		fmt.Fprintf(os.Stderr, "Usage: %s [options] <project_dir>\n\n", os.Args[0])
+		fmt.Fprintf(os.Stderr, "Golang struct alignment optimization tool\n\n")
+		fmt.Fprintf(os.Stderr, "Arguments:\n")
+		fmt.Fprintf(os.Stderr, "  <project_dir>  Go Module project root (contains go.mod), optional for GOPATH\n\n")
+		fmt.Fprintf(os.Stderr, "Options:\n")
 		flag.PrintDefaults()
-		fmt.Fprintf(os.Stderr, "\n示例:\n")
-		fmt.Fprintf(os.Stderr, "  # Go Module 项目\n")
+		fmt.Fprintf(os.Stderr, "\nExamples:\n")
+		fmt.Fprintf(os.Stderr, "  # Go Module project\n")
 		fmt.Fprintf(os.Stderr, "  %s -struct=pkg.Context /path/to/project\n", os.Args[0])
-		fmt.Fprintf(os.Stderr, "  # GOPATH 项目\n")
+		fmt.Fprintf(os.Stderr, "  # GOPATH project\n")
 		fmt.Fprintf(os.Stderr, "  %s -prj-type=gopath -struct=example.com/pkg.MyStruct\n", os.Args[0])
-		fmt.Fprintf(os.Stderr, "  # 自定义最大深度和超时时间\n")
+		fmt.Fprintf(os.Stderr, "  # Custom max depth and timeout\n")
 		fmt.Fprintf(os.Stderr, "  %s -struct=pkg.Context -max-depth=100 -timeout=600 /path/to/project\n", os.Args[0])
 	}
 
@@ -236,52 +232,52 @@ func parseFlags() *Config {
 	return cfg
 }
 
-// validateFlags 验证命令行参数
+// validateFlags validates command-line arguments
 func validateFlags(cfg *Config) error {
-	// -struct 和 -package 互斥
+	// -struct and -package are mutually exclusive
 	if cfg.Struct != "" && cfg.Package != "" {
-		return fmt.Errorf("-struct 和 -package 不能同时使用")
+		return fmt.Errorf("-struct and -package cannot be used together")
 	}
 
-	// 至少需要一个
+	// At least one must be specified
 	if cfg.Struct == "" && cfg.Package == "" {
-		return fmt.Errorf("必须指定 -struct 或 -package")
+		return fmt.Errorf("must specify -struct or -package")
 	}
 
-	// 验证结构体名称格式
+	// Validate struct name format
 	if cfg.Struct != "" {
 		if !strings.Contains(cfg.Struct, ".") {
-			return fmt.Errorf("结构体名称格式错误，应为：包路径。结构体名")
+			return fmt.Errorf("invalid struct name format, expected: package.path.StructName")
 		}
 	}
 
-	// Go Module 项目需要指定目录
+	// Go Module project requires a target directory
 	if cfg.ProjectType == "gomod" && cfg.TargetDir == "" {
-		return fmt.Errorf("Go Module 项目需要指定项目目录")
+		return fmt.Errorf("Go Module project requires a target directory")
 	}
 
-	// GOPATH 模式下必须指定包范围
+	// GOPATH mode requires pkg-scope
 	if cfg.ProjectType == "gopath" && cfg.PkgScope == "" {
-		return fmt.Errorf("GOPATH 模式下必须指定 -pkg-scope 参数，用于限制分析范围")
+		return fmt.Errorf("GOPATH mode requires -pkg-scope parameter to limit analysis scope")
 	}
 
-	// 验证报告格式
+	// Validate report format
 	if cfg.ReportFormat != "" {
 		validFormats := map[string]bool{"txt": true, "md": true, "html": true}
 		if !validFormats[cfg.ReportFormat] {
-			return fmt.Errorf("无效的报告格式：%s（支持：txt, md, html）", cfg.ReportFormat)
+			return fmt.Errorf("invalid report format: %s (supported: txt, md, html)", cfg.ReportFormat)
 		}
 	}
 
-	// 验证报告语言（空字符串默认为中文）
+	// Validate report language
 	if cfg.Lang != "" && cfg.Lang != reporter.LangZH && cfg.Lang != reporter.LangEN {
-		return fmt.Errorf("无效的报告语言：%s（支持：zh, en）", cfg.Lang)
+		return fmt.Errorf("invalid report language: %s (supported: zh, en)", cfg.Lang)
 	}
 
 	return nil
 }
 
-// parseCommaList 解析逗号分隔的列表
+// parseCommaList splits a comma-separated string into a slice
 func parseCommaList(s string) []string {
 	if s == "" {
 		return nil
@@ -298,16 +294,16 @@ func parseCommaList(s string) []string {
 	return result
 }
 
-// confirmSkipByMethods 确认是否使用 -skip-by-methods
+// confirmSkipByMethods prompts for confirmation when using -skip-by-methods
 func confirmSkipByMethods() bool {
-	fmt.Println("⚠️  警告：-skip-by-methods 需要加载包并检查每个结构体的方法")
-	fmt.Println("   这会导致运行速度显著变慢，尤其是大型项目或嵌套层次深的结构体")
+	fmt.Println("⚠️  Warning: -skip-by-methods requires loading packages and checking each struct's methods")
+	fmt.Println("   This can slow down execution significantly, especially for large projects")
 	fmt.Println()
-	fmt.Println("   建议：")
-	fmt.Println("   - 小型项目（<100 个结构体）可以使用")
-	fmt.Println("   - 大型项目建议使用 -skip-by-names 代替（极快）")
+	fmt.Println("   Recommendation:")
+	fmt.Println("   - Small projects (<100 structs) can use this")
+	fmt.Println("   - Large projects should use -skip-by-names instead (much faster)")
 	fmt.Println()
-	fmt.Print("是否继续执行？[y/N]: ")
+	fmt.Print("Continue? [y/N]: ")
 
 	reader := bufio.NewReader(os.Stdin)
 	input, err := reader.ReadString('\n')
