@@ -50,14 +50,16 @@ func reorderFieldsInternal(fields []FieldInfo, sortSameSize bool) []FieldInfo {
 	copy(result, fields)
 
 	// 排序：按大小降序，相同大小按对齐降序
-	sort.Slice(result, func(i, j int) bool {
+	sort.SliceStable(result, func(i, j int) bool {
 		if result[i].Size != result[j].Size {
 			return result[i].Size > result[j].Size
 		}
 		if sortSameSize {
-			return result[i].Align > result[j].Align
+			if result[i].Align != result[j].Align {
+				return result[i].Align > result[j].Align
+			}
 		}
-		return false
+		return result[i].Name < result[j].Name
 	})
 
 	// 总是返回排序结果，由调用者决定是否采用

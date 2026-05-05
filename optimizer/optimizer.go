@@ -78,8 +78,6 @@ func NewOptimizer(cfg *Config, analyzer *analyzer.Analyzer) *Optimizer {
 		workerLimit:      10,             // 结构体并发限制
 		pkgWorkerLimit:   pkgWorkerLimit, // 包并发限制（防止 OOM）
 		pkgCache:         make(map[string]*packages.Package),
-		structCache:      make(map[string]*types.Struct),
-		filePathCache:    make(map[string]string),
 		report: &Report{
 			StructReports: make([]*StructReport, 0),
 		},
@@ -359,11 +357,9 @@ func (o *Optimizer) optimizeStruct(pkgPath, structName, filePath string, depth i
 			return info, nil
 		}
 
-		// 创建字段分析器（使用完整的类型信息）
-		o.fieldAnalyzer = NewFieldAnalyzer(pkg.TypesInfo, pkg.Fset)
+		fieldAnalyzer := NewFieldAnalyzer(pkg.TypesInfo, pkg.Fset)
 
-		// 分析结构体
-		info = o.fieldAnalyzer.AnalyzeStruct(st, structName, pkgPath, filePath)
+		info = fieldAnalyzer.AnalyzeStruct(st, structName, pkgPath, filePath)
 		
 		// 使用 types.Sizes 重新计算大小（与 unsafe.Sizeof 一致）
 		sizes := types.SizesFor("gc", "amd64")
@@ -373,7 +369,7 @@ func (o *Optimizer) optimizeStruct(pkgPath, structName, filePath string, depth i
 	}
 
 	// 检查是否应该跳过
-	if skipReason := o.shouldSkip(info, st, key); skipReason != "" {
+	if skipReason := o.shouldSkip(info, key); skipReason != "" {
 		o.Log(2, "跳过结构体：%s, 原因：%s", key, skipReason)
 		info.Skipped = true
 		info.SkipReason = skipReason
@@ -484,13 +480,21 @@ func (o *Optimizer) addReport(info *StructInfo, skipReason string, depth int) {
 	o.mu.Unlock()
 }
 
-// GetOptimized 获取已优化的结构体信息
+// GetOptimized returns the optimized struct info map (thread-safe)
 func (o *Optimizer) GetOptimized() map[string]*StructInfo {
-	return o.optimized
+	o.mu.Lock()
+	result := make(map[string]*StructInfo, len(o.optimized))
+	for k, v := range o.optimized {
+		result[k] = v
+	}
+	o.mu.Unlock()
+	return result
 }
 
-// GetReport 获取报告
+// GetReport returns the report (thread-safe)
 func (o *Optimizer) GetReport() *Report {
+	o.mu.Lock()
+	defer o.mu.Unlock()
 	return o.report
 }
 

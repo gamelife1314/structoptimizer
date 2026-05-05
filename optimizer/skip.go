@@ -1,7 +1,6 @@
 package optimizer
 
 import (
-	"go/types"
 	"path/filepath"
 	"strings"
 
@@ -9,7 +8,7 @@ import (
 )
 
 // shouldSkip 检查是否应该跳过
-func (o *Optimizer) shouldSkip(info *StructInfo, st *types.Struct, key string) string {
+func (o *Optimizer) shouldSkip(info *StructInfo, key string) string {
 	// 空结构体
 	if len(info.Fields) == 0 {
 		return "空结构体"

@@ -1,7 +1,6 @@
 package optimizer
 
 import (
-	"go/types"
 	"sync"
 
 	"golang.org/x/tools/go/packages"
@@ -11,13 +10,12 @@ import (
 
 // Optimizer 优化器
 type Optimizer struct {
-	config        *Config
-	analyzer      *analyzer.Analyzer
-	optimized     map[string]*StructInfo
-	report        *Report
-	fieldAnalyzer *FieldAnalyzer
-	processing    map[string]bool
-	maxDepth      int
+	config    *Config
+	analyzer  *analyzer.Analyzer
+	optimized map[string]*StructInfo
+	report    *Report
+	processing map[string]bool
+	maxDepth  int
 
 	// 方法索引器
 	methodIndex *MethodIndex
@@ -32,9 +30,7 @@ type Optimizer struct {
 	pkgWorkerLimit   int // 包并发限制
 
 	// 缓存优化
-	pkgCache      map[string]*packages.Package
-	structCache   map[string]*types.Struct
-	filePathCache map[string]string
+	pkgCache map[string]*packages.Package
 }
 
 // StructTask 结构体处理任务

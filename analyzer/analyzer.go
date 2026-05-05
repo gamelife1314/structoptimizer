@@ -214,21 +214,17 @@ func (a *Analyzer) getModulePath() string {
 
 // LoadPackage 加载包（线程安全，带错误处理）
 func (a *Analyzer) LoadPackage(pkgPath string) (*packages.Package, error) {
-	// 检查缓存（读锁）
-	a.mu.RLock()
+	a.mu.Lock()
 	if pkg, ok := a.pkgMap[pkgPath]; ok {
-		a.mu.RUnlock()
+		a.mu.Unlock()
 		return pkg, nil
 	}
-	a.mu.RUnlock()
-
-	// 检查是否已加载
-	a.mu.RLock()
 	if a.loadedPkgs[pkgPath] {
-		a.mu.RUnlock()
+		a.mu.Unlock()
 		return nil, fmt.Errorf("package already loaded: %s", pkgPath)
 	}
-	a.mu.RUnlock()
+	a.loadedPkgs[pkgPath] = true
+	a.mu.Unlock()
 
 	// 根据项目类型构建环境
 	isGoMod := a.config.ProjectType != "gopath"
@@ -779,7 +775,7 @@ func (a *Analyzer) IsExternalPackage(pkgPath string) bool {
 	// 检查是否在项目内
 	if a.config.TargetDir != "" {
 		// 尝试加载包来判断
-		if pkg, ok := a.pkgMap[pkgPath]; ok {
+		if pkg, ok := a.pkgMap[pkgPath]; ok && len(pkg.GoFiles) > 0 {
 			return !strings.HasPrefix(pkg.GoFiles[0], a.config.TargetDir)
 		}
 	}

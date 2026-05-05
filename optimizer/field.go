@@ -76,7 +76,7 @@ func (fa *FieldAnalyzer) analyzeFields(structType *types.Struct, structName, pkg
 		isThirdParty := !isStdLib && pkg != "" && !isProjectPkgFast(pkg)
 
 		fi := FieldInfo{
-			Name:         fa.getFieldName(field, i),
+			Name:         fa.getFieldName(field),
 			Type:         field.Type(),
 			Size:         size,
 			Align:        align,
@@ -105,8 +105,7 @@ func (fa *FieldAnalyzer) analyzeFields(structType *types.Struct, structName, pkg
 }
 
 // getFieldName 获取字段名称
-func (fa *FieldAnalyzer) getFieldName(field *types.Var, index int) string {
-	// 直接返回字段名，匿名字段返回空字符串
+func (fa *FieldAnalyzer) getFieldName(field *types.Var) string {
 	return field.Name()
 }
 
