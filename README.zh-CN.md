@@ -165,6 +165,8 @@ structoptimizer -package=example.com/mypkg -write -backup ./myproject
   -pkg-limit int        包并发限制（默认 4，降低可防止 OOM）
   -gopath string        GOPATH 路径（GOPATH 项目可选）
   -recursive            递归扫描子包（仅 -package 模式有效）
+  -lang string          报告语言：zh、en（默认：zh）
+  -allow-external-pkgs  允许扫描跨包结构体（包括 vendor 目录，默认关闭）
   -v, -vv, -vvv         详细输出级别
   -version              显示版本信息
 ```
@@ -281,6 +283,31 @@ structoptimizer -prj-type=gopath \
 - 使用 vendor 目录的项目
 - 同一 GOPATH 工作区中的多个项目
 
+#### 2.3. 允许跨包扫描（`-allow-external-pkgs`）（新增）
+
+默认情况下，StructOptimizer 会跳过 `-pkg-scope` 范围外的结构体和 vendor 包。使用 `-allow-external-pkgs` 可以将其纳入分析：
+
+```bash
+# GOPATH 项目 - 将 vendor 包纳入分析范围
+structoptimizer -prj-type=gopath \
+  -package=github.com/myproject/pkg \
+  -pkg-scope=github.com/myproject \
+  -allow-external-pkgs \
+  -recursive
+
+# 现在将扫描：
+# ✅ github.com/myproject/pkg
+# ✅ github.com/myproject/pkg/apis
+# ✅ vendor/github.com/external/lib  (之前会被跳过)
+# ✅ github.com/otherproject/pkg    (之前超出范围会被跳过)
+# ❌ Go 标准库（始终跳过）
+```
+
+**使用场景：**
+- 需要优化引用了 vendor 目录中类型的结构体
+- GOPATH 项目，vendor 包中包含值得优化的结构体
+- `-pkg-scope` 限制过严但仍希望保留包隔离
+
 #### 3. 跳过第三方代码
 
 ```bash
@@ -326,7 +353,7 @@ structoptimizer -prj-type=gopath \
 ```markdown
 ╔════════════════════════════════════════════════════════════════════════════════╗
 ║                     StructOptimizer 优化报告                                   ║
-║  版本 v1.6.2                                                                   ║
+║  版本 v1.7.6                                                                   ║
 ╚════════════════════════════════════════════════════════════════════════════════╝
 生成时间：2026-04-18 14:41:15
 

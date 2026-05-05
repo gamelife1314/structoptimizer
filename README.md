@@ -165,6 +165,8 @@ Options:
   -pkg-limit int        Package concurrency limit (default: 4)
   -gopath string        GOPATH path (optional, uses env if not set)
   -recursive            Recursively scan all sub-packages (-package mode only)
+  -lang string          Report language: zh, en (default: zh)
+  -allow-external-pkgs  Allow scanning cross-package structs (including vendor, default: false)
   -v, -vv, -vvv         Verbose output levels
   -version              Show version information
 ```
@@ -281,6 +283,31 @@ structoptimizer -prj-type=gopath \
 - Projects using vendor directory
 - Multiple projects in same GOPATH workspace
 
+#### 2.3. Allow Cross-Package Scanning (`-allow-external-pkgs`) (NEW)
+
+By default, StructOptimizer skips structs outside the `-pkg-scope` range and vendor packages. Use `-allow-external-pkgs` to include them:
+
+```bash
+# GOPATH project - include vendor packages in analysis
+structoptimizer -prj-type=gopath \
+  -package=github.com/myproject/pkg \
+  -pkg-scope=github.com/myproject \
+  -allow-external-pkgs \
+  -recursive
+
+# This will now scan:
+# ✅ github.com/myproject/pkg
+# ✅ github.com/myproject/pkg/apis
+# ✅ vendor/github.com/external/lib  (previously skipped)
+# ✅ github.com/otherproject/pkg    (previously skipped, if outside scope)
+# ❌ Go standard library (always skipped)
+```
+
+**Use cases:**
+- Need to optimize structs that reference types in vendor directories
+- GOPATH projects where vendor packages contain structs worth optimizing
+- When `-pkg-scope` is too restrictive but you still want package isolation
+
 #### 3. Skip Third-Party Code
 
 ```bash
@@ -326,7 +353,7 @@ structoptimizer -prj-type=gopath \
 ```markdown
 ╔════════════════════════════════════════════════════════════════════════════════╗
 ║                     StructOptimizer Optimization Report                        ║
-║  Version v1.6.2                                                                ║
+║  Version v1.7.6                                                                ║
 ╚════════════════════════════════════════════════════════════════════════════════╝
 Generated: 2026-04-18 14:41:15
 
