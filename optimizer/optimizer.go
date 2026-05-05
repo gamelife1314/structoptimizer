@@ -185,15 +185,18 @@ func (o *Optimizer) optimizeInternal() (*Report, error) {
 		}
 	}
 
-	// Only sum depth-0 struct sizes to avoid double-counting nested children.
-	// Root structs already contain their nested children's sizes as fields.
+	isStructMode := o.report.RootStruct != ""
+
 	for _, sr := range o.report.StructReports {
-		if sr.Depth == 0 {
+		// In -struct mode, count all depths: when allocating the root struct,
+		// all nested child structs are also created in memory.
+		// In -package mode, only count depth-0 (the package's own structs).
+		if isStructMode || sr.Depth == 0 {
 			o.report.TotalOrigSize += sr.OrigSize
 			o.report.TotalOptSize += sr.OptSize
 		}
-		// Track root struct size separately
-		if o.report.RootStruct != "" && sr.PkgPath+"."+sr.Name == o.report.RootStruct {
+
+		if isStructMode && sr.PkgPath+"."+sr.Name == o.report.RootStruct {
 			o.report.RootStructSize = sr.OrigSize
 			o.report.RootStructOptSize = sr.OptSize
 		}
