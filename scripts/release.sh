@@ -46,9 +46,9 @@ echo "  ✓ design.md"
 
 # 3. README - specific version example
 if [ -n "$PREV" ]; then
-    sed -i "s/VERSION=v${PREV}/VERSION=v${VERSION}/g" README.md
-    sed -i "s/VERSION=v${PREV}/VERSION=v${VERSION}/g" README.zh-CN.md
-    sed -i "s/download/v${PREV}/download/v${VERSION}/g" docs/CONFIG.md
+    sed -i "s|VERSION=v${PREV}|VERSION=v${VERSION}|g" README.md
+    sed -i "s|VERSION=v${PREV}|VERSION=v${VERSION}|g" README.zh-CN.md
+    sed -i "s|download/v${PREV}|download/v${VERSION}|g" docs/CONFIG.md
     echo "  ✓ README.md"
     echo "  ✓ README.zh-CN.md"
     echo "  ✓ docs/CONFIG.md"

@@ -38,7 +38,36 @@ jobs:
           fi
           echo "✅ design.md version matches"
 
-      - name: Check tag vs code version (on tag push)
+      - name: Check README versions
+        run: |
+          CODE_VER="${{ steps.code_version.outputs.version }}"
+          for f in README.md README.zh-CN.md; do
+            README_VER=$(grep -oP 'VERSION=v\K[0-9]+\.[0-9]+\.[0-9]+' "$f" | head -1)
+            echo "$f version: ${README_VER:-not found}"
+            if [ -z "${README_VER}" ]; then
+              echo "WARNING: No VERSION=vX.Y.Z found in $f"
+              continue
+            fi
+            if [ "${README_VER}" != "${CODE_VER}" ]; then
+              echo "ERROR: $f version (${README_VER}) does not match code version (${CODE_VER})"
+              exit 1
+            fi
+            echo "✅ $f version matches"
+          done
+
+      - name: Check CONFIG.md version
+        run: |
+          CODE_VER="${{ steps.code_version.outputs.version }}"
+          CONFIG_VER=$(grep -oP 'download/v\K[0-9]+\.[0-9]+\.[0-9]+' docs/CONFIG.md | head -1)
+          echo "docs/CONFIG.md version: ${CONFIG_VER:-not found}"
+          if [ -z "${CONFIG_VER}" ]; then
+            echo "WARNING: No version found in docs/CONFIG.md"
+          elif [ "${CONFIG_VER}" != "${CODE_VER}" ]; then
+            echo "ERROR: docs/CONFIG.md version (${CONFIG_VER}) does not match code version (${CODE_VER})"
+            exit 1
+          else
+            echo "✅ docs/CONFIG.md version matches"
+          fi
         if: startsWith(github.ref, 'refs/tags/')
         run: |
           TAG_VER=$(echo "${{ github.ref }}" | sed 's|refs/tags/v||')
