@@ -47,7 +47,7 @@ func isStructType(typ types.Type) bool {
 }
 
 // collectStructs collects all structs that need processing (parses files only, does not load packages)
-func (o *Optimizer) collectStructs(pkgPath, structName, filePath string, depth, level int) {
+func (o *Optimizer) collectStructs(pkgPath, structName, filePath string, depth, level int, parentKey string) {
 	key := pkgPath + "." + structName
 
 	// Dedup check: check optimized and collecting while holding the lock
@@ -105,6 +105,7 @@ func (o *Optimizer) collectStructs(pkgPath, structName, filePath string, depth, 
 		FilePath:   filePath,
 		Depth:      depth,
 		Level:      level,
+		ParentKey:  parentKey,
 	}
 
 	o.mu.Lock()
@@ -134,7 +135,7 @@ func (o *Optimizer) collectStructs(pkgPath, structName, filePath string, depth, 
 			// Let parseStructFromFileOnly auto-locate the file containing the struct
 			// via findFilesWithStruct. This correctly handles nested structs
 			// defined in different files within the same package.
-			o.collectStructs(field.PkgPath, field.Name, "", depth+1, level+1)
+			o.collectStructs(field.PkgPath, field.Name, "", depth+1, level+1, key)
 		}
 	}
 }
@@ -459,7 +460,7 @@ func (o *Optimizer) collectNestedFromFields(fields []nestedField, pkgPath, fileP
 		}
 
 		if o.isProjectPackage(field.PkgPath) {
-			o.collectStructs(field.PkgPath, field.Name, filePath, depth+1, level+1)
+			o.collectStructs(field.PkgPath, field.Name, filePath, depth+1, level+1, pkgPath+"."+"unknown")
 		}
 	}
 }

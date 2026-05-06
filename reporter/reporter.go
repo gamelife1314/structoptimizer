@@ -75,6 +75,9 @@ func (r *Reporter) GenerateTXT(report *optimizer.Report) (string, error) {
 	}
 	sb.WriteString("└────────────────────────────────────────────────────────────────────────────────┘\n\n")
 
+	// Struct hierarchy tree (struct mode only)
+	addHierarchySectionTXT(&sb, report)
+
 	// Classify struct reports
 	optimized, skippedNormal, skippedError, unchanged := classifyStructReports(report, s)
 

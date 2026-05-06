@@ -130,7 +130,7 @@ func (o *Optimizer) optimizeInternal() (*Report, error) {
 		o.report.RootStruct = o.config.StructName
 
 		o.Log(1, "Collecting struct: %s.%s", pkgPath, structName)
-		o.collectStructs(pkgPath, structName, "", 0, 0)
+		o.collectStructs(pkgPath, structName, "", 0, 0, "")
 	} else if o.config.Package != "" {
 		// Optimize all structs in a package
 		o.Log(1, "Collecting package: %s", o.config.Package)
@@ -152,7 +152,7 @@ func (o *Optimizer) optimizeInternal() (*Report, error) {
 		}
 
 		for _, st := range structs {
-			o.collectStructs(st.PkgPath, st.Name, st.File, 0, 0)
+			o.collectStructs(st.PkgPath, st.Name, st.File, 0, 0, "")
 		}
 	}
 
@@ -209,7 +209,7 @@ func (o *Optimizer) optimizeInternal() (*Report, error) {
 }
 
 // optimizeStruct optimizes a single struct (recursive)
-func (o *Optimizer) optimizeStruct(pkgPath, structName, filePath string, depth int) (*StructInfo, error) {
+func (o *Optimizer) optimizeStruct(pkgPath, structName, filePath string, depth int, parentKey string) (*StructInfo, error) {
 	key := pkgPath + "." + structName
 
 	// Check recursion depth limit
@@ -223,7 +223,7 @@ func (o *Optimizer) optimizeStruct(pkgPath, structName, filePath string, depth i
 			SkipReason: fmt.Sprintf("Exceeded max recursion depth (%d)", o.maxDepth),
 		}
 		o.optimized[key] = info
-		o.addReport(info, info.SkipReason, depth)
+		o.addReport(info, info.SkipReason, depth, parentKey)
 		return info, nil
 	}
 
@@ -247,7 +247,7 @@ func (o *Optimizer) optimizeStruct(pkgPath, structName, filePath string, depth i
 		}
 		o.optimized[key] = info
 		o.mu.Unlock()
-		o.addReport(info, "Circular reference", depth)
+		o.addReport(info, "Circular reference", depth, parentKey)
 		return info, nil
 	}
 
@@ -275,7 +275,7 @@ func (o *Optimizer) optimizeStruct(pkgPath, structName, filePath string, depth i
 		o.mu.Lock()
 		o.optimized[key] = info
 		o.mu.Unlock()
-		o.addReport(info, "Third-party package struct in vendor", depth)
+		o.addReport(info, "Third-party package struct in vendor", depth, parentKey)
 		return info, nil
 	}
 
@@ -302,7 +302,7 @@ func (o *Optimizer) optimizeStruct(pkgPath, structName, filePath string, depth i
 				return "Go standard library struct"
 			}
 			return "Non-project internal package struct"
-		}(), depth)
+		}(), depth, parentKey)
 		return info, nil
 	}
 
@@ -341,7 +341,7 @@ func (o *Optimizer) optimizeStruct(pkgPath, structName, filePath string, depth i
 			o.mu.Lock()
 			o.optimized[key] = info
 			o.mu.Unlock()
-			o.addReport(info, info.SkipReason, depth)
+			o.addReport(info, info.SkipReason, depth, parentKey)
 			return info, nil
 		}
 
@@ -359,7 +359,7 @@ func (o *Optimizer) optimizeStruct(pkgPath, structName, filePath string, depth i
 			o.mu.Lock()
 			o.optimized[key] = info
 			o.mu.Unlock()
-			o.addReport(info, info.SkipReason, depth)
+			o.addReport(info, info.SkipReason, depth, parentKey)
 			return info, nil
 		}
 
@@ -383,7 +383,7 @@ func (o *Optimizer) optimizeStruct(pkgPath, structName, filePath string, depth i
 		o.mu.Lock()
 		o.optimized[key] = info
 		o.mu.Unlock()
-		o.addReport(info, skipReason, depth)
+		o.addReport(info, skipReason, depth, parentKey)
 		return info, nil
 	}
 
@@ -416,7 +416,7 @@ func (o *Optimizer) optimizeStruct(pkgPath, structName, filePath string, depth i
 	o.mu.Lock()
 	o.optimized[key] = info
 	o.mu.Unlock()
-	o.addReport(info, "", depth)
+	o.addReport(info, "", depth, parentKey)
 
 	return info, nil
 }
@@ -434,7 +434,7 @@ func (o *Optimizer) createSkippedInfo(key, filePath, reason string) *StructInfo 
 }
 
 // addReport adds a report entry
-func (o *Optimizer) addReport(info *StructInfo, skipReason string, depth int) {
+func (o *Optimizer) addReport(info *StructInfo, skipReason string, depth int, parentKey string) {
 	// Build field type map and field size map.
 	// Note: key format is consistent with OrigOrder/OptOrder (plain field name, embedded fields use type name).
 	fieldTypes := make(map[string]string)
@@ -474,6 +474,7 @@ func (o *Optimizer) addReport(info *StructInfo, skipReason string, depth int) {
 		Skipped:    info.Skipped,
 		SkipReason: skipReason,
 		Depth:      depth,
+		ParentKey:  parentKey,
 		HasEmbed:   hasEmbed,
 	}
 

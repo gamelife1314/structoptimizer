@@ -92,6 +92,9 @@ func (r *Reporter) GenerateHTML(report *optimizer.Report) (string, error) {
 	sb.WriteString("            </table>\n")
 	sb.WriteString("        </div>\n\n")
 
+	// Struct hierarchy tree (struct mode only)
+	addHierarchySectionHTML(&sb, report)
+
 	// Classify struct reports
 	optimized, skippedNormal, skippedError, unchanged := classifyStructReports(report, s)
 

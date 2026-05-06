@@ -48,6 +48,9 @@ func (r *Reporter) GenerateMD(report *optimizer.Report) (string, error) {
 	}
 	sb.WriteString("\n")
 
+	// Struct hierarchy tree (struct mode only)
+	addHierarchySectionMD(&sb, report)
+
 	// Classify struct reports
 	optimized, skippedNormal, skippedError, unchanged := classifyStructReports(report, s)
 

@@ -104,7 +104,7 @@ func (o *Optimizer) processByPackageParallel(level int, pkgTasks map[string][]*S
 			for _, task := range taskList {
 				key := task.PkgPath + "." + task.StructName
 				o.Log(3, "Optimizing struct: %s (level:%d)", key, task.Level)
-				o.optimizeStruct(task.PkgPath, task.StructName, task.FilePath, task.Depth)
+				o.optimizeStruct(task.PkgPath, task.StructName, task.FilePath, task.Depth, task.ParentKey)
 			}
 		}(pkgPath, tasks)
 	}

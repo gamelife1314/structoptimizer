@@ -40,6 +40,7 @@ type StructTask struct {
 	FilePath   string
 	Depth      int
 	Level      int
+	ParentKey  string // "pkg.StructName" of parent, empty for root
 }
 
 // Config holds the optimizer configuration
@@ -98,7 +99,8 @@ type StructReport struct {
 	Skipped    bool
 	SkipReason string
 	Depth      int
-	HasEmbed   bool // whether it contains embedded fields
+	ParentKey  string // "pkg.StructName" of parent, empty for root
+	HasEmbed   bool   // whether it contains embedded fields
 }
 
 // Report is the optimization report
