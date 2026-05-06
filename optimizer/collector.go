@@ -248,23 +248,32 @@ func (o *Optimizer) extractFieldInfo(field *ast.Field, importMap map[string]stri
 		}
 	}
 
-	// Check if it is a struct
+	// Strip slice/array/pointer prefixes to get the base element type
+	// for struct/interface detection. E.g. []A -> A, []*A -> A, *A -> A.
+	baseTypeName := typeName
+	baseTypeName = strings.TrimPrefix(baseTypeName, "[]")
+	baseTypeName = strings.TrimPrefix(baseTypeName, "*")
+	// Strip [N] array prefix, with optional trailing *
+	if len(baseTypeName) > 0 && baseTypeName[0] == '[' {
+		if idx := strings.IndexByte(baseTypeName, ']'); idx > 0 {
+			baseTypeName = baseTypeName[idx+1:]
+			baseTypeName = strings.TrimPrefix(baseTypeName, "*")
+		}
+	}
+
+	// Check if the base element type is a struct
 	isStruct := false
 
-	// 1. First check if it is a basic type
-	if !isBasicType(typeName) {
-		// 2. For unexported types in the same package, scan package files to find the definition
+	if !isBasicType(baseTypeName) {
 		if fieldPkg == pkgPath && pkgDir != "" {
-			isStruct = o.isStructTypeInPackage(pkgDir, typeName, pkgPath)
+			isStruct = o.isStructTypeInPackage(pkgDir, baseTypeName, pkgPath)
 		} else if fieldPkg != pkgPath {
-			// For cross-package, need to check if it's an interface type.
-			// Interface types should not be optimized, so mark as non-struct.
-			isStruct = !o.isInterfaceTypeCrossPackage(fieldPkg, typeName)
+			isStruct = !o.isInterfaceTypeCrossPackage(fieldPkg, baseTypeName)
 		}
 	}
 
 	return nestedField{
-		Name:     typeName,
+		Name:     baseTypeName,
 		PkgPath:  fieldPkg,
 		IsStruct: isStruct,
 	}

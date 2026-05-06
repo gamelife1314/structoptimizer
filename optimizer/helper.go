@@ -14,10 +14,13 @@ func isStandardLibraryPkg(pkgPath string) bool {
 	if strings.Contains(pkgPath, ".") {
 		return false
 	}
-	if !strings.Contains(pkgPath, "/") || strings.HasPrefix(pkgPath, "go/") {
+	if strings.HasPrefix(pkgPath, "go/") {
 		return true
 	}
-	return false
+	if strings.Contains(pkgPath, "/") {
+		return false
+	}
+	return isStandardLibrary(pkgPath)
 }
 
 // isVendorPackage checks if it is a vendor package or third-party package

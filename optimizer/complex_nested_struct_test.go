@@ -407,3 +407,101 @@ type ComplexStruct struct {
 		t.Log("✅ 所有字段大小验证通过")
 	}
 }
+
+// TestSliceOfStructRecursiveOptimization verifies that structs referenced
+// via slices/pointers ([]A, []*A) are recursively collected and optimized.
+func TestSliceOfStructRecursiveOptimization(t *testing.T) {
+	tmpDir, err := os.MkdirTemp("", "slice_struct_*")
+	if err != nil {
+		t.Fatalf("Failed to create temp dir: %v", err)
+	}
+	defer os.RemoveAll(tmpDir)
+
+	goModContent := `module testslice
+
+go 1.21
+`
+	if err := os.WriteFile(filepath.Join(tmpDir, "go.mod"), []byte(goModContent), 0644); err != nil {
+		t.Fatalf("Failed to write go.mod: %v", err)
+	}
+
+	mainContent := `package testslice
+
+type A struct {
+	Field1 bool
+	Field2 uint64
+	Field3 bool
+}
+
+type B struct {
+	Field1 bool
+	Field2 uint64
+	Field3 bool
+}
+
+type XXX struct {
+	isOK         bool
+	information  []A
+	information1 []*B
+	isSuccess    bool
+}
+`
+	if err := os.WriteFile(filepath.Join(tmpDir, "main.go"), []byte(mainContent), 0644); err != nil {
+		t.Fatalf("Failed to write main.go: %v", err)
+	}
+
+	analyzerCfg := &analyzer.Config{
+		TargetDir:   tmpDir,
+		StructName:  "testslice.XXX",
+		Verbose:     0,
+		ProjectType: "gomod",
+	}
+	anlz := analyzer.NewAnalyzer(analyzerCfg)
+
+	optimizerCfg := &optimizer.Config{
+		TargetDir:   tmpDir,
+		StructName:  "testslice.XXX",
+		Verbose:     0,
+		ProjectType: "gomod",
+		MaxDepth:    50,
+		Timeout:     300,
+	}
+	opt := optimizer.NewOptimizer(optimizerCfg, anlz)
+
+	report, err := opt.Optimize()
+	if err != nil {
+		t.Fatalf("Optimize failed: %v", err)
+	}
+
+	// Verify A (via []A) and B (via []*B) were both collected and optimized
+	foundA, foundB := false, false
+	for _, sr := range report.StructReports {
+		if sr.Name == "A" {
+			foundA = true
+			if sr.OptSize >= sr.OrigSize {
+				t.Errorf("A should be optimized: OptSize(%d) >= OrigSize(%d)", sr.OptSize, sr.OrigSize)
+			}
+		}
+		if sr.Name == "B" {
+			foundB = true
+			if sr.OptSize >= sr.OrigSize {
+				t.Errorf("B should be optimized: OptSize(%d) >= OrigSize(%d)", sr.OptSize, sr.OrigSize)
+			}
+		}
+	}
+
+	if !foundA {
+		t.Errorf("A was not collected as a nested struct of XXX via []A field")
+	}
+	if !foundB {
+		t.Errorf("B was not collected as a nested struct of XXX via []*B field")
+	}
+
+	t.Logf("✅ Total structs collected: %d", report.TotalStructs)
+	if foundA {
+		t.Logf("✅ A successfully collected and optimized via []A slice field")
+	}
+	if foundB {
+		t.Logf("✅ B successfully collected and optimized via []*B pointer-slice field")
+	}
+}
