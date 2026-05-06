@@ -33,7 +33,3 @@ go.work.sum
 .qwen
 .idea
 .codemate
-
-# Testdata dependencies (generated during tests)
-testdata/gopath_test_project/pkg/
-testdata/gopath_complex_project/pkg/
