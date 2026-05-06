@@ -1,0 +1,17 @@
+Package: structoptimizer
+Version: 1.8.7
+Architecture: arm64
+Maintainer: gamelife1314
+Installed-Size: 5248
+Filename: pool/main/structoptimizer_1.8.7_arm64.deb
+Size: 2135852
+MD5sum: 6917d80dd41a0003e35d5a25b6f9bf1f
+SHA1: 975f0aa63243f005a5a2cb4debfd1647c92cec69
+SHA256: 7c7a7e5e763a2d67a749fb2f9df03551eafd02079297833f9a528cf9ed0bf71f
+Section: default
+Priority: optional
+Homepage: https://github.com/gamelife1314/structoptimizer
+Description: Go struct alignment optimization tool
+License: MIT
+Vendor: none
+

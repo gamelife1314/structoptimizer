@@ -1,0 +1,7 @@
+Origin: StructOptimizer
+Label: StructOptimizer
+Suite: stable
+Codename: stable
+Architectures: amd64 arm64
+Components: main
+Description: Go struct alignment optimization tool
