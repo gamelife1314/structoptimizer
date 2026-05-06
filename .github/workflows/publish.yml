@@ -111,73 +111,28 @@ jobs:
           chmod +x structoptimizer
           file structoptimizer
 
-      - name: Build DEB package
+      - name: Build DEB and RPM packages
         env:
           VERSION: ${{ steps.version.outputs.version }}
         run: |
+          sudo gem install fpm -q
           V="${VERSION#v}"
-          mkdir -p pkg-deb/DEBIAN
-          mkdir -p pkg-deb/usr/bin
-          cp structoptimizer pkg-deb/usr/bin/
-
-          cat > pkg-deb/DEBIAN/control <<CTRL
-          Package: structoptimizer
-          Version: ${V}
-          Architecture: ${{ matrix.deb_arch }}
-          Maintainer: gamelife1314
-          Section: devel
-          Priority: optional
-          Homepage: https://github.com/gamelife1314/structoptimizer
-          Description: Go struct alignment optimization tool
-           StructOptimizer analyzes Go source code to detect structs with
-           suboptimal field ordering. It reduces memory padding by rearranging
-           struct fields from largest to smallest alignment.
-          CTRL
-
-          dpkg-deb --build pkg-deb "structoptimizer_${V}_${{ matrix.deb_arch }}.deb"
-
-      - name: Build RPM package
-        env:
-          VERSION: ${{ steps.version.outputs.version }}
-        run: |
-          V="${VERSION#v}"
-          NAME=structoptimizer
-
-          mkdir -p pkg-rpm/{BUILD,RPMS,SOURCES,SPECS,SRPMS}
-          mkdir -p pkg-rpm/BUILDROOT/${NAME}-${V}-1.${{ matrix.rpm_arch }}/usr/bin
-          cp structoptimizer pkg-rpm/BUILDROOT/${NAME}-${V}-1.${{ matrix.rpm_arch }}/usr/bin/
-
-          cat > pkg-rpm/SPECS/${NAME}.spec <<SPEC
-          Name: ${NAME}
-          Version: ${V}
-          Release: 1
-          Summary: Go struct alignment optimization tool
-          License: MIT
-          URL: https://github.com/gamelife1314/structoptimizer
-          BuildArch: ${{ matrix.rpm_arch }}
-
-          %description
-          StructOptimizer analyzes Go source code to detect structs with
-          suboptimal field ordering. It reduces memory padding by rearranging
-          struct fields from largest to smallest alignment.
-
-          %install
-          mkdir -p %{buildroot}/usr/bin
-          cp structoptimizer %{buildroot}/usr/bin/
-
-          %files
-          /usr/bin/structoptimizer
-
-          %changelog
-          * $(date '+%a %b %d %Y') gamelife1314 - ${V}-1
-          - Release ${V}
-          SPEC
-
-          rpmbuild --define "_topdir $(pwd)/pkg-rpm" \
-            --define "_buildrootdir $(pwd)/pkg-rpm/BUILDROOT" \
-            -bb pkg-rpm/SPECS/${NAME}.spec
-
-          cp pkg-rpm/RPMS/${{ matrix.rpm_arch }}/${NAME}-${V}-1.${{ matrix.rpm_arch }}.rpm .
+          mkdir -p pkg-root/usr/bin
+          cp structoptimizer pkg-root/usr/bin/
+          fpm -s dir -t deb -n structoptimizer -v "${V}" \
+            --architecture ${{ matrix.deb_arch }} \
+            --maintainer gamelife1314 \
+            --description "Go struct alignment optimization tool" \
+            --url "https://github.com/gamelife1314/structoptimizer" \
+            --license MIT \
+            -C pkg-root .
+          fpm -s dir -t rpm -n structoptimizer -v "${V}" \
+            --architecture ${{ matrix.rpm_arch }} \
+            --maintainer gamelife1314 \
+            --description "Go struct alignment optimization tool" \
+            --url "https://github.com/gamelife1314/structoptimizer" \
+            --license MIT \
+            -C pkg-root .
 
       - name: Upload DEB artifact
         uses: actions/upload-artifact@v4
