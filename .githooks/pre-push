@@ -1,0 +1,98 @@
+#!/usr/bin/env bash
+# Pre-push hook: verify version consistency when pushing tags
+# Install: git config core.hooksPath .githooks
+
+set -euo pipefail
+
+# Check if any tag is being pushed
+TAGS_PUSHED=false
+while IFS=' ' read -r local_ref local_sha remote_ref remote_sha; do
+    if [[ "$local_ref" == refs/tags/v* ]]; then
+        TAGS_PUSHED=true
+        TAG_NAME="${local_ref#refs/tags/}"
+        TAG_VER="${TAG_NAME#v}"
+        break
+    fi
+done
+
+if [ "$TAGS_PUSHED" = false ]; then
+    exit 0
+fi
+
+echo ""
+echo "========================================"
+echo "  Pre-push: Checking version consistency"
+echo "  Tag: $TAG_NAME"
+echo "========================================"
+
+# Extract code version
+CODE_VER=$(grep 'const Version' reporter/reporter_i18n.go | grep -o '[0-9]\+\.[0-9]\+\.[0-9]\+')
+if [ -z "$CODE_VER" ]; then
+    echo "ERROR: Cannot extract version from reporter/reporter_i18n.go"
+    exit 1
+fi
+
+ERRORS=0
+
+# 1. Check reporter_i18n.go vs tag
+if [ "$CODE_VER" != "$TAG_VER" ]; then
+    echo "ERROR: reporter/reporter_i18n.go version ($CODE_VER) != tag version ($TAG_VER)"
+    ERRORS=$((ERRORS + 1))
+else
+    echo "  ✓ reporter/reporter_i18n.go = $CODE_VER"
+fi
+
+# 2. Check design.md
+DESIGN_VER=$(grep '\*\*Version:\*\*' design.md | grep -o '[0-9]\+\.[0-9]\+\.[0-9]\+')
+if [ "${DESIGN_VER:-}" != "$TAG_VER" ]; then
+    echo "ERROR: design.md version (${DESIGN_VER:-not found}) != tag version ($TAG_VER)"
+    ERRORS=$((ERRORS + 1))
+else
+    echo "  ✓ design.md = $DESIGN_VER"
+fi
+
+# 3. Check README.md
+README_VER=$(grep -oP 'VERSION=v\K[0-9]+\.[0-9]+\.[0-9]+' README.md | head -1)
+if [ "${README_VER:-}" != "$TAG_VER" ]; then
+    echo "ERROR: README.md version (${README_VER:-not found}) != tag version ($TAG_VER)"
+    ERRORS=$((ERRORS + 1))
+else
+    echo "  ✓ README.md = $README_VER"
+fi
+
+# 4. Check README.zh-CN.md
+README_ZH_VER=$(grep -oP 'VERSION=v\K[0-9]+\.[0-9]+\.[0-9]+' README.zh-CN.md | head -1)
+if [ "${README_ZH_VER:-}" != "$TAG_VER" ]; then
+    echo "ERROR: README.zh-CN.md version (${README_ZH_VER:-not found}) != tag version ($TAG_VER)"
+    ERRORS=$((ERRORS + 1))
+else
+    echo "  ✓ README.zh-CN.md = $README_ZH_VER"
+fi
+
+# 5. Check docs/CONFIG.md
+CONFIG_VER=$(grep -oP 'download/v\K[0-9]+\.[0-9]+\.[0-9]+' docs/CONFIG.md | head -1)
+if [ "${CONFIG_VER:-}" != "$TAG_VER" ]; then
+    echo "ERROR: docs/CONFIG.md version (${CONFIG_VER:-not found}) != tag version ($TAG_VER)"
+    ERRORS=$((ERRORS + 1))
+else
+    echo "  ✓ docs/CONFIG.md = $CONFIG_VER"
+fi
+
+echo ""
+if [ $ERRORS -gt 0 ]; then
+    echo "========================================"
+    echo "  FAILED: $ERRORS version mismatch(es)"
+    echo "========================================"
+    echo ""
+    echo "Fix with: ./scripts/release.sh $TAG_VER"
+    echo "Then: git add -u && git commit --amend --no-edit"
+    echo "Then: git tag -d $TAG_NAME && git tag $TAG_NAME"
+    echo ""
+    exit 1
+fi
+
+echo "========================================"
+echo "  PASSED: All versions consistent"
+echo "========================================"
+echo ""
+exit 0
