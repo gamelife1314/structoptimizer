@@ -64,7 +64,7 @@ func TestFormatSize(t *testing.T) {
 		bytes int64
 		want  string
 	}{
-		{"bytes", 100, "100 字节"},
+		{"bytes", 100, "100 bytes"},
 		{"KB", 1024, "1.00 KB"},
 		{"KB fraction", 1536, "1.50 KB"},
 		{"MB", 1048576, "1.00 MB"},

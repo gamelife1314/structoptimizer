@@ -64,7 +64,7 @@ func NewAnalyzer(cfg *Config) *Analyzer {
 // BuildStructIndex builds the struct index (modeled after gopls file scanning)
 // Quickly scans all files to build the struct location index without loading packages
 func (a *Analyzer) BuildStructIndex() error {
-	a.Log(1, "构建结构体索引...")
+	a.Log(1, "Building struct index...")
 	start := time.Now()
 
 	// Determine the search directory
@@ -79,7 +79,7 @@ func (a *Analyzer) BuildStructIndex() error {
 		return err
 	}
 
-	a.Log(1, "索引构建完成：共 %d 个结构体，耗时 %v", len(a.structIndex), time.Since(start))
+	a.Log(1, "Indexing complete: %d structs, took %v", len(a.structIndex), time.Since(start))
 	return nil
 }
 
@@ -111,7 +111,7 @@ func (a *Analyzer) scanDirectory(dir string) error {
 
 		filePath := filepath.Join(dir, name)
 		if err := a.scanFile(filePath); err != nil {
-			a.Log(2, "扫描文件失败：%v", err)
+			a.Log(2, "Failed to scan file: %v", err)
 			continue // continue processing other files
 		}
 	}
@@ -246,11 +246,11 @@ func (a *Analyzer) LoadPackage(pkgPath string) (*packages.Package, error) {
 		}
 
 		loadDir = "" // GOPATH mode, look up packages via GOPATH
-		a.Log(1, "使用 GOPATH 模式加载包：%s (GOPATH=%s)", pkgPath, gopath)
+		a.Log(1, "Loading package in GOPATH mode: %s (GOPATH=%s)", pkgPath, gopath)
 	} else {
 		// Go Module mode
 		loadDir = a.config.TargetDir
-		a.Log(1, "使用 Go Module 模式加载包：%s", pkgPath)
+		a.Log(1, "Loading package in Go Module mode: %s", pkgPath)
 	}
 
 	cfg := &packages.Config{
@@ -292,7 +292,7 @@ func (a *Analyzer) LoadPackage(pkgPath string) (*packages.Package, error) {
 
 	// Package has errors, log but still cache (avoid retry)
 	if len(pkg.Errors) > 0 {
-		a.Log(2, "包 %s 有错误：%v", pkgPath, pkg.Errors)
+		a.Log(2, "Package %s has errors: %v", pkgPath, pkg.Errors)
 		a.mu.Lock()
 		a.pkgMap[pkgPath] = pkg
 		a.loadedPkgs[pkgPath] = true
@@ -324,7 +324,7 @@ func (a *Analyzer) FindStructByName(pkgPath, structName string) (*types.Struct, 
 	}
 
 	// Slow path: load the full package, then search
-	a.Log(3, "快速查找失败，加载包：%s", pkgPath)
+	a.Log(3, "Fast lookup failed, loading package: %s", pkgPath)
 	pkg, err := a.LoadPackage(pkgPath)
 	if err != nil {
 		return nil, "", err
@@ -341,7 +341,7 @@ func (a *Analyzer) findStructFast(pkgPath, structName string) (*types.Struct, st
 	// Determine the search directory
 	searchDir := a.getPackageDir(pkgPath)
 	if searchDir == "" {
-		return nil, "", fmt.Errorf("无法确定包目录：%s", pkgPath)
+		return nil, "", fmt.Errorf("cannot determine package directory: %s", pkgPath)
 	}
 
 	// Find files containing the struct
@@ -631,7 +631,7 @@ func (a *Analyzer) FindAllStructs(pkgPath string) ([]StructDef, error) {
 
 // FindAllStructsRecursive recursively finds structs in a package and all sub-packages
 func (a *Analyzer) FindAllStructsRecursive(rootPkgPath string) ([]StructDef, error) {
-	a.Log(1, "递归扫描包：%s 及其所有子包", rootPkgPath)
+	a.Log(1, "Recursively scanning package: %s and all sub-packages", rootPkgPath)
 
 	// Collect all sub-package paths
 	var allPkgPaths []string
@@ -648,7 +648,7 @@ func (a *Analyzer) FindAllStructsRecursive(rootPkgPath string) ([]StructDef, err
 		// Load the current package to get its imports
 		pkg, err := a.LoadPackage(currentPkg)
 		if err != nil {
-			a.Log(2, "加载包 %s 失败：%v", currentPkg, err)
+			a.Log(2, "Failed to load package %s: %v", currentPkg, err)
 			// Even if loading fails, add to the scan list
 			allPkgPaths = append(allPkgPaths, currentPkg)
 			continue
@@ -673,21 +673,21 @@ func (a *Analyzer) FindAllStructsRecursive(rootPkgPath string) ([]StructDef, err
 		}
 	}
 
-	a.Log(2, "找到 %d 个子包", len(allPkgPaths))
+	a.Log(2, "Found %d sub-packages", len(allPkgPaths))
 
 	// Collect structs from all packages
 	var allStructs []StructDef
 	for _, pkgPath := range allPkgPaths {
 		structs, err := a.FindAllStructs(pkgPath)
 		if err != nil {
-			a.Log(2, "扫描包 %s 失败：%v", pkgPath, err)
+			a.Log(2, "Failed to scan package %s: %v", pkgPath, err)
 			continue
 		}
 		allStructs = append(allStructs, structs...)
-		a.Log(3, "包 %s: 找到 %d 个结构体", pkgPath, len(structs))
+		a.Log(3, "Package %s: found %d structs", pkgPath, len(structs))
 	}
 
-	a.Log(1, "递归扫描完成：共找到 %d 个结构体", len(allStructs))
+	a.Log(1, "Recursive scan complete: found %d structs", len(allStructs))
 	return allStructs, nil
 }
 
@@ -888,7 +888,7 @@ func (a *Analyzer) LoadPackages(pkgPaths []string) error {
 		return nil
 	}
 
-	a.Log(1, "批量加载 %d 个包...", len(pkgPaths))
+	a.Log(1, "Batch loading %d packages...", len(pkgPaths))
 	start := time.Now()
 
 	// Filter already-loaded packages
@@ -905,7 +905,7 @@ func (a *Analyzer) LoadPackages(pkgPaths []string) error {
 	}
 
 	if len(toLoad) == 0 {
-		a.Log(2, "所有包已缓存")
+		a.Log(2, "All packages cached")
 		return nil
 	}
 
@@ -945,14 +945,14 @@ func (a *Analyzer) LoadPackages(pkgPaths []string) error {
 	a.mu.Lock()
 	for _, pkg := range pkgs {
 		if len(pkg.Errors) > 0 {
-			a.Log(2, "包 %s 有错误：%v", pkg.PkgPath, pkg.Errors)
+			a.Log(2, "Package %s has errors: %v", pkg.PkgPath, pkg.Errors)
 		}
 		a.pkgMap[pkg.PkgPath] = pkg
 		a.loadedPkgs[pkg.PkgPath] = true
 	}
 	a.mu.Unlock()
 
-	a.Log(1, "批量加载完成：加载 %d 个包，耗时 %v", len(pkgs), time.Since(start))
+	a.Log(1, "Batch load complete: loaded %d packages, took %v", len(pkgs), time.Since(start))
 	return nil
 }
 

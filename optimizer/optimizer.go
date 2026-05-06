@@ -90,8 +90,8 @@ func NewOptimizer(cfg *Config, analyzer *analyzer.Analyzer) *Optimizer {
 //	Phase 1: Collect struct location info only (no package loading, no field analysis)
 //	Phase 2: Optimize all collected structs in parallel (load packages on demand)
 func (o *Optimizer) Optimize() (*Report, error) {
-	o.Log(1, "开始优化...")
-	o.Log(1, "配置：最大深度=%d, 超时=%d 秒", o.maxDepth, o.config.Timeout)
+	o.Log(1, "Starting optimization...")
+	o.Log(1, "Config: max depth=%d, timeout=%d seconds", o.maxDepth, o.config.Timeout)
 
 	// Set up timeout
 	done := make(chan struct{})
@@ -108,7 +108,7 @@ func (o *Optimizer) Optimize() (*Report, error) {
 	case <-done:
 		return result, err
 	case <-time.After(time.Duration(o.config.Timeout) * time.Second):
-		o.Log(0, "错误：优化超时（%d 秒）", o.config.Timeout)
+		o.Log(0, "Error: optimization timed out (%d seconds)", o.config.Timeout)
 		// Note: the goroutine will continue until completion, but the result will be discarded.
 		// This is acceptable because the user already received a response after the timeout.
 		return nil, fmt.Errorf("optimization timeout after %d seconds", o.config.Timeout)
@@ -118,7 +118,7 @@ func (o *Optimizer) Optimize() (*Report, error) {
 // optimizeInternal performs the actual optimization logic (two-phase)
 func (o *Optimizer) optimizeInternal() (*Report, error) {
 	// ==================== Phase 1: Collect structs ====================
-	o.Log(1, "阶段 1/2: 收集结构体（只解析文件，不加载包）...")
+	o.Log(1, "Phase 1/2: Collecting structs (file parsing only, no package loading)...")
 	if o.config.StructName != "" {
 		// Optimize a specific struct
 		pkgPath, structName := analyzer.ParseStructName(o.config.StructName)
@@ -129,18 +129,18 @@ func (o *Optimizer) optimizeInternal() (*Report, error) {
 		// Set the root struct
 		o.report.RootStruct = o.config.StructName
 
-		o.Log(1, "收集结构体：%s.%s", pkgPath, structName)
+		o.Log(1, "Collecting struct: %s.%s", pkgPath, structName)
 		o.collectStructs(pkgPath, structName, "", 0, 0)
 	} else if o.config.Package != "" {
 		// Optimize all structs in a package
-		o.Log(1, "收集包：%s", o.config.Package)
+		o.Log(1, "Collecting package: %s", o.config.Package)
 		
 		var structs []analyzer.StructDef
 		var err error
 		
 		if o.config.Recursive {
 			// Recursively scan all sub-packages
-			o.Log(1, "递归模式：扫描 %s 及其所有子包", o.config.Package)
+			o.Log(1, "Recursive mode: scanning %s and all sub-packages", o.config.Package)
 			structs, err = o.analyzer.FindAllStructsRecursive(o.config.Package)
 		} else {
 			// Scan only the current package
@@ -156,17 +156,17 @@ func (o *Optimizer) optimizeInternal() (*Report, error) {
 		}
 	}
 
-	o.Log(1, "阶段 1 完成：共收集到 %d 个结构体任务", len(o.structQueue))
+	o.Log(1, "Phase 1 complete: collected %d struct tasks", len(o.structQueue))
 
 	// Print the list of collected structs
-	o.Log(2, "收集到的结构体列表:")
+	o.Log(2, "Collected struct list:")
 	for i, task := range o.structQueue {
-		o.Log(3, "  [%d] %s.%s (层级:%d, 文件:%s)",
+		o.Log(3, "  [%d] %s.%s (level:%d, file:%s)",
 			i+1, task.PkgPath, task.StructName, task.Level, filepath.Base(task.FilePath))
 	}
 
 	// ==================== Phase 2: Parallel optimization ====================
-	o.Log(1, "阶段 2/2: 并行优化结构体（按需加载包）...")
+	o.Log(1, "Phase 2/2: Optimizing structs in parallel (loading packages on demand)...")
 	o.processStructsParallel()
 
 	// Generate report
@@ -202,7 +202,7 @@ func (o *Optimizer) optimizeInternal() (*Report, error) {
 		}
 	}
 
-	o.Log(1, "优化完成：共处理 %d 个结构体，优化 %d 个，跳过 %d 个，节省 %d 字节",
+	o.Log(1, "Optimization complete: %d structs processed, %d optimized, %d skipped, %d bytes saved",
 		o.report.TotalStructs, o.report.OptimizedCount, o.report.SkippedCount, o.report.TotalSaved)
 
 	return o.report, nil
@@ -214,13 +214,13 @@ func (o *Optimizer) optimizeStruct(pkgPath, structName, filePath string, depth i
 
 	// Check recursion depth limit
 	if depth > o.maxDepth {
-		o.Log(2, "跳过结构体（超过最大深度 %d）：%s", o.maxDepth, key)
+		o.Log(2, "Skipping struct (exceeded max depth %d): %s", o.maxDepth, key)
 		info := &StructInfo{
 			Name:       structName,
 			PkgPath:    pkgPath,
 			File:       filePath,
 			Skipped:    true,
-			SkipReason: fmt.Sprintf("超过最大递归深度 (%d)", o.maxDepth),
+			SkipReason: fmt.Sprintf("Exceeded max recursion depth (%d)", o.maxDepth),
 		}
 		o.optimized[key] = info
 		o.addReport(info, info.SkipReason, depth)
@@ -231,23 +231,23 @@ func (o *Optimizer) optimizeStruct(pkgPath, structName, filePath string, depth i
 	o.mu.Lock()
 	if info, ok := o.optimized[key]; ok {
 		o.mu.Unlock()
-		o.Log(3, "结构体已处理：%s", key)
+		o.Log(3, "Struct already processed: %s", key)
 		return info, nil
 	}
 
 	// Detect circular reference: if already processing, there's a circular reference
 	if o.processing[key] {
-		o.Log(2, "检测到循环引用，跳过：%s", key)
+		o.Log(2, "Detected circular reference, skipping: %s", key)
 		info := &StructInfo{
 			Name:       structName,
 			PkgPath:    pkgPath,
 			File:       filePath,
 			Skipped:    true,
-			SkipReason: "循环引用",
+			SkipReason: "Circular reference",
 		}
 		o.optimized[key] = info
 		o.mu.Unlock()
-		o.addReport(info, "循环引用", depth)
+		o.addReport(info, "Circular reference", depth)
 		return info, nil
 	}
 
@@ -264,24 +264,24 @@ func (o *Optimizer) optimizeStruct(pkgPath, structName, filePath string, depth i
 
 	// Check if it's a vendor package or third-party package (scan allowed when AllowExternalPkgs=true)
 	if !o.config.AllowExternalPkgs && isVendorPackage(pkgPath) {
-		o.Log(3, "跳过 vendor 中的结构体：%s", key)
+		o.Log(3, "Skipping vendor struct: %s", key)
 		info := &StructInfo{
 			Name:       structName,
 			PkgPath:    pkgPath,
 			File:       filePath,
 			Skipped:    true,
-			SkipReason: "vendor 中的第三方包结构体",
+			SkipReason: "Third-party package struct in vendor",
 		}
 		o.mu.Lock()
 		o.optimized[key] = info
 		o.mu.Unlock()
-		o.addReport(info, "vendor 中的第三方包结构体", depth)
+		o.addReport(info, "Third-party package struct in vendor", depth)
 		return info, nil
 	}
 
 	// Check if it's an internal project package (cross-package scan allowed when AllowExternalPkgs=true)
 	if !o.config.AllowExternalPkgs && !o.isProjectPackage(pkgPath) {
-		o.Log(3, "跳过非项目内部包结构体：%s", key)
+		o.Log(3, "Skipping non-project internal package struct: %s", key)
 		info := &StructInfo{
 			Name:    structName,
 			PkgPath: pkgPath,
@@ -289,9 +289,9 @@ func (o *Optimizer) optimizeStruct(pkgPath, structName, filePath string, depth i
 			Skipped: true,
 			SkipReason: func() string {
 				if isStandardLibrary(pkgPath) {
-					return "Go 标准库结构体"
+					return "Go standard library struct"
 				}
-				return "非项目内部包结构体"
+				return "Non-project internal package struct"
 			}(),
 		}
 		o.mu.Lock()
@@ -299,16 +299,16 @@ func (o *Optimizer) optimizeStruct(pkgPath, structName, filePath string, depth i
 		o.mu.Unlock()
 		o.addReport(info, func() string {
 			if isStandardLibrary(pkgPath) {
-				return "Go 标准库结构体"
+				return "Go standard library struct"
 			}
-			return "非项目内部包结构体"
+			return "Non-project internal package struct"
 		}(), depth)
 		return info, nil
 	}
 
-	o.Log(2, "[%d] 处理结构体：%s", depth, key)
+	o.Log(2, "[%d] Processing struct: %s", depth, key)
 	if filePath != "" {
-		o.Log(3, "    文件路径：%s", filepath.Base(filePath))
+		o.Log(3, "    File path: %s", filepath.Base(filePath))
 	}
 
 	// Optimization phase: prefer parsing files, do not load packages.
@@ -321,22 +321,22 @@ func (o *Optimizer) optimizeStruct(pkgPath, structName, filePath string, depth i
 	if filePath != "" {
 		info, st, err = analyzeStructFromFile(filePath, structName, pkgPath)
 		if err != nil {
-			o.Log(3, "文件解析失败，加载包：%v", err)
+			o.Log(3, "File parsing failed, loading package: %v", err)
 		}
 	}
 
 	// File parsing failed, load the package (slow path)
 	if info == nil {
-		o.Log(2, "加载包获取类型信息：%s", pkgPath)
+		o.Log(2, "Loading package for type info: %s", pkgPath)
 		pkg, err := o.analyzer.LoadPackage(pkgPath)
 		if err != nil {
-			o.Log(1, "警告：加载包失败，跳过：%s (%v)", key, err)
+			o.Log(1, "Warning: failed to load package, skipping: %s (%v)", key, err)
 			info = &StructInfo{
 				Name:       structName,
 				PkgPath:    pkgPath,
 				File:       filePath,
 				Skipped:    true,
-				SkipReason: "加载包失败：" + err.Error(),
+				SkipReason: "Failed to load package: " + err.Error(),
 			}
 			o.mu.Lock()
 			o.optimized[key] = info
@@ -348,13 +348,13 @@ func (o *Optimizer) optimizeStruct(pkgPath, structName, filePath string, depth i
 		// Find the struct in the package
 		st, filePath, err = o.findStructInPackage(pkg, structName)
 		if err != nil {
-			o.Log(1, "警告：查找结构体失败，跳过：%s (%v)", key, err)
+			o.Log(1, "Warning: failed to find struct, skipping: %s (%v)", key, err)
 			info = &StructInfo{
 				Name:       structName,
 				PkgPath:    pkgPath,
 				File:       filePath,
 				Skipped:    true,
-				SkipReason: "查找失败：" + err.Error(),
+				SkipReason: "Lookup failed: " + err.Error(),
 			}
 			o.mu.Lock()
 			o.optimized[key] = info
@@ -376,7 +376,7 @@ func (o *Optimizer) optimizeStruct(pkgPath, structName, filePath string, depth i
 
 	// Check if it should be skipped
 	if skipReason := o.shouldSkip(info, key); skipReason != "" {
-		o.Log(2, "跳过结构体：%s, 原因：%s", key, skipReason)
+		o.Log(2, "Skipping struct: %s, reason: %s", key, skipReason)
 		info.Skipped = true
 		info.SkipReason = skipReason
 		info.OptSize = info.OrigSize // skipped structs: optimized size equals original size
@@ -403,14 +403,14 @@ func (o *Optimizer) optimizeStruct(pkgPath, structName, filePath string, depth i
 		info.OptOrder = extractFieldNamesFromInfo(sortedFields)
 		info.Optimized = true
 
-		o.Log(2, "结构体优化：%s %d -> %d 字节 (节省:%d)",
+		o.Log(2, "Struct optimized: %s %d -> %d bytes (saved:%d)",
 			key, info.OrigSize, info.OptSize, info.OrigSize-info.OptSize)
 	} else {
 		// Cannot save memory, keep original order, do not adopt new order.
 		info.OptSize = info.OrigSize
 		info.OptOrder = info.OrigOrder
 		// info.Optimized remains false, will not trigger file rewrite
-		o.Log(2, "结构体无需优化：%s", key)
+		o.Log(2, "Struct optimization not needed: %s", key)
 	}
 
 	o.mu.Lock()

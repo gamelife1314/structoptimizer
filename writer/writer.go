@@ -59,18 +59,18 @@ func (w *SourceWriter) BackupFile(filePath string) (string, error) {
 		return "", err
 	}
 
-	w.log(1, "已备份文件：%s -> %s", filePath, backupName)
+	w.log(1, "Backed up file: %s -> %s", filePath, backupName)
 	return backupName, nil
 }
 
 // WriteStruct writes the optimized struct to the source file
 func (w *SourceWriter) WriteStruct(filePath string, info *optimizer.StructInfo) error {
-	w.log(1, "写入优化后的结构体到文件：%s", filePath)
+	w.log(1, "Writing optimized struct to file: %s", filePath)
 
 	// Parse the file
 	f, err := parser.ParseFile(w.fset, filePath, nil, parser.ParseComments)
 	if err != nil {
-		return fmt.Errorf("解析文件失败：%v", err)
+		return fmt.Errorf("failed to parse file: %v", err)
 	}
 
 	// Find and modify the struct
@@ -102,22 +102,22 @@ func (w *SourceWriter) WriteStruct(filePath string, info *optimizer.StructInfo) 
 	})
 
 	if !modified {
-		return fmt.Errorf("未找到结构体：%s", info.Name)
+		return fmt.Errorf("struct not found: %s", info.Name)
 	}
 
 	// Write back to file
 	var buf bytes.Buffer
 	err = printer.Fprint(&buf, w.fset, f)
 	if err != nil {
-		return fmt.Errorf("格式化代码失败：%v", err)
+		return fmt.Errorf("failed to format code: %v", err)
 	}
 
 	err = os.WriteFile(filePath, buf.Bytes(), 0644)
 	if err != nil {
-		return fmt.Errorf("写入文件失败：%v", err)
+		return fmt.Errorf("failed to write file: %v", err)
 	}
 
-	w.log(1, "已写入优化后的结构体：%s", info.Name)
+	w.log(1, "Optimized struct written: %s", info.Name)
 	return nil
 }
 
@@ -181,15 +181,15 @@ func (w *SourceWriter) RewriteFile(filePath string, optimizedStructs map[string]
 	// Canonicalize file path (handles cross-platform path separator differences)
 	absFilePath, err := filepath.Abs(filePath)
 	if err != nil {
-		return fmt.Errorf("规范化文件路径失败：%v", err)
+		return fmt.Errorf("failed to canonicalize file path: %v", err)
 	}
 
-	w.log(1, "重写文件：%s", filePath)
+	w.log(1, "Rewriting file: %s", filePath)
 
 	// Parse the file
 	f, err := parser.ParseFile(w.fset, filePath, nil, parser.ParseComments)
 	if err != nil {
-		return fmt.Errorf("解析文件失败：%v", err)
+		return fmt.Errorf("failed to parse file: %v", err)
 	}
 
 	// Collect all structs in this file that need modification (indexed by struct name)
@@ -251,21 +251,21 @@ func (w *SourceWriter) RewriteFile(filePath string, optimizedStructs map[string]
 	var buf bytes.Buffer
 	err = printer.Fprint(&buf, w.fset, f)
 	if err != nil {
-		return fmt.Errorf("格式化代码失败：%v", err)
+		return fmt.Errorf("failed to format code: %v", err)
 	}
 
 	// Apply go/format standard formatting (removes blank lines, preserves comments)
 	formatted, err := format.Source(buf.Bytes())
 	if err != nil {
-		return fmt.Errorf("go fmt 格式化失败：%v", err)
+		return fmt.Errorf("go fmt format failed: %v", err)
 	}
 
 	err = os.WriteFile(filePath, formatted, 0644)
 	if err != nil {
-		return fmt.Errorf("写入文件失败：%v", err)
+		return fmt.Errorf("failed to write file: %v", err)
 	}
 
-	w.log(1, "文件已重写：%s (已使用 go fmt 格式化)", filePath)
+	w.log(1, "File rewritten: %s (formatted with go fmt)", filePath)
 	return nil
 }
 
@@ -285,7 +285,7 @@ func (w *SourceWriter) WriteFiles(optimized map[string]*optimizer.StructInfo) er
 		if w.config.Backup {
 			backupPath, err := w.BackupFile(filePath)
 			if err != nil {
-				w.log(0, "备份文件失败：%v", err)
+				w.log(0, "Failed to back up file: %v", err)
 				continue
 			}
 			// Clean up old backups (keep the most recent 3)
@@ -297,7 +297,7 @@ func (w *SourceWriter) WriteFiles(optimized map[string]*optimizer.StructInfo) er
 		// Write
 		err := w.RewriteFile(filePath, optimized)
 		if err != nil {
-			w.log(0, "写入文件失败：%v", err)
+			w.log(0, "Failed to write file: %v", err)
 			continue
 		}
 	}
@@ -321,7 +321,7 @@ func (w *SourceWriter) cleanupOldBackups(filePath string) {
 		// Delete oldest files
 		for i := 0; i < len(matches)-3; i++ {
 			os.Remove(matches[i])
-			w.log(2, "清理旧备份文件：%s", matches[i])
+			w.log(2, "Cleaning old backup file: %s", matches[i])
 		}
 	}
 }
@@ -396,7 +396,7 @@ func BackupAndWrite(filePath, content string, backup bool) error {
 		origContent, err := os.ReadFile(filePath)
 		if err == nil {
 			if err := os.WriteFile(backupName, origContent, 0644); err != nil {
-				return fmt.Errorf("备份文件失败：%v", err)
+				return fmt.Errorf("failed to back up file: %v", err)
 			}
 		}
 	}

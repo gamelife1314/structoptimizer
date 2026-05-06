@@ -31,7 +31,7 @@ func (o *Optimizer) processStructsParallel() {
 		}
 	}
 
-	o.Log(2, "结构体层级分布：共 %d 层", maxLevel+1)
+	o.Log(2, "Struct level distribution: %d levels total", maxLevel+1)
 
 	// Start from leaf nodes (max level) and work upward level by level
 	for level := maxLevel; level >= 0; level-- {
@@ -42,21 +42,21 @@ func (o *Optimizer) processStructsParallel() {
 		for _, tasks := range pkgTasks {
 			totalStructs += len(tasks)
 		}
-		o.Log(2, "处理第 %d 层，共 %d 个包，%d 个结构体", level, len(pkgTasks), totalStructs)
+		o.Log(2, "Processing level %d, %d packages, %d structs", level, len(pkgTasks), totalStructs)
 
 		// Process by package in parallel
 		o.processByPackageParallel(level, pkgTasks)
 
 		// Force GC after each level to free memory
 		if level > 0 {
-			o.Log(3, "第 %d 层处理完成，执行 GC...", level)
+			o.Log(3, "Level %d processing complete, running GC...", level)
 			runtime.GC()
 		}
 	}
 
 	// Run one final GC
 	runtime.GC()
-	o.Log(2, "所有层级处理完成，执行最终 GC")
+	o.Log(2, "All levels processed, running final GC")
 }
 
 // processByPackageParallel processes structs at the same level in parallel by package.
@@ -79,7 +79,7 @@ func (o *Optimizer) processByPackageParallel(level int, pkgTasks map[string][]*S
 				if r := recover(); r != nil {
 					// Record the panic message and full stack trace
 					stack := debug.Stack()
-					o.Log(0, "处理包 %s 时发生 panic: %v\n堆栈跟踪:\n%s", pkg, r, stack)
+					o.Log(0, "Panic processing package %s: %v\nStack trace:\n%s", pkg, r, stack)
 					// Mark all remaining structs in this package as skipped
 					for _, task := range taskList {
 						key := task.PkgPath + "." + task.StructName
@@ -90,7 +90,7 @@ func (o *Optimizer) processByPackageParallel(level int, pkgTasks map[string][]*S
 								PkgPath:    task.PkgPath,
 								File:       task.FilePath,
 								Skipped:    true,
-								SkipReason: fmt.Sprintf("包处理时发生 panic: %v", r),
+								SkipReason: fmt.Sprintf("Panic during package processing: %v", r),
 							}
 						}
 						o.mu.Unlock()
@@ -98,12 +98,12 @@ func (o *Optimizer) processByPackageParallel(level int, pkgTasks map[string][]*S
 				}
 			}()
 
-			o.Log(3, "处理包：%s (%d 个结构体)", pkg, len(taskList))
+			o.Log(3, "Processing package: %s (%d structs)", pkg, len(taskList))
 
 			// Process structs within the package serially (avoid intra-package contention)
 			for _, task := range taskList {
 				key := task.PkgPath + "." + task.StructName
-				o.Log(3, "优化结构体：%s (层级:%d)", key, task.Level)
+				o.Log(3, "Optimizing struct: %s (level:%d)", key, task.Level)
 				o.optimizeStruct(task.PkgPath, task.StructName, task.FilePath, task.Depth)
 			}
 		}(pkgPath, tasks)

@@ -21,7 +21,7 @@ func MatchDirPattern(pattern, dirName string) bool {
 // FormatSize formats a byte size for display
 func FormatSize(bytes int64) string {
 	if bytes < 1024 {
-		return fmt.Sprintf("%d 字节", bytes)
+		return fmt.Sprintf("%d bytes", bytes)
 	}
 	if bytes < 1024*1024 {
 		return fmt.Sprintf("%.2f KB", float64(bytes)/1024)

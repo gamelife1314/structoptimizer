@@ -87,7 +87,7 @@ func (mi *MethodIndex) indexPkg(pkgPath string) error {
 	}
 
 	if dir == "" {
-		return fmt.Errorf("无法获取包目录：%s", pkgPath)
+		return fmt.Errorf("cannot get package directory: %s", pkgPath)
 	}
 
 	// Scan files
@@ -183,7 +183,7 @@ func (mi *MethodIndex) getPkgDirFromGOPATH(pkgPath string) (string, error) {
 		// Default GOPATH
 		home, err := os.UserHomeDir()
 		if err != nil {
-			return "", fmt.Errorf("无法获取用户主目录")
+			return "", fmt.Errorf("cannot get user home directory")
 		}
 		gopath = filepath.Join(home, "go")
 	}
@@ -202,5 +202,5 @@ func (mi *MethodIndex) getPkgDirFromGOPATH(pkgPath string) (string, error) {
 		}
 	}
 
-	return "", fmt.Errorf("在 GOPATH 中未找到包：%s", pkgPath)
+	return "", fmt.Errorf("package not found in GOPATH: %s", pkgPath)
 }

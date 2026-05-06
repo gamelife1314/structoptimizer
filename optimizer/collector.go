@@ -78,7 +78,7 @@ func (o *Optimizer) collectStructs(pkgPath, structName, filePath string, depth, 
 
 	// Check if the file path contains directories that should be skipped
 	if filePath != "" && o.shouldSkipDir(filePath) {
-		o.Log(3, "跳过目录中的结构体：%s (文件：%s)", key, filePath)
+		o.Log(3, "Skipping struct in skipped dir: %s (file: %s)", key, filePath)
 		return
 	}
 
@@ -87,14 +87,14 @@ func (o *Optimizer) collectStructs(pkgPath, structName, filePath string, depth, 
 	if err != nil {
 		// Only log real errors (not basic types)
 		if !strings.Contains(err.Error(), "struct ") {
-			o.Log(2, "解析文件失败：%s.%s: %v", pkgPath, structName, err)
+			o.Log(2, "Failed to parse file: %s.%s: %v", pkgPath, structName, err)
 		}
 		return
 	}
 
 	// Check if the resolved file path contains directories that should be skipped
 	if filePath != "" && o.shouldSkipDir(filePath) {
-		o.Log(3, "跳过目录中的结构体：%s (文件：%s)", key, filePath)
+		o.Log(3, "Skipping struct in skipped dir: %s (file: %s)", key, filePath)
 		return
 	}
 
@@ -125,7 +125,7 @@ func (o *Optimizer) collectStructs(pkgPath, structName, filePath string, depth, 
 
 		// Check package scope restriction (skippable when AllowExternalPkgs=true)
 		if !o.config.AllowExternalPkgs && o.config.PkgScope != "" && !strings.HasPrefix(field.PkgPath, o.config.PkgScope) {
-			o.Log(3, "跳过跨包字段：%s (包：%s, 范围：%s)", field.Name, field.PkgPath, o.config.PkgScope)
+			o.Log(3, "Skipping cross-package field: %s (package: %s, scope: %s)", field.Name, field.PkgPath, o.config.PkgScope)
 			continue
 		}
 
@@ -144,7 +144,7 @@ func (o *Optimizer) parseStructFromFileOnly(pkgPath, structName, filePath string
 	// Determine the search directory
 	searchDir := o.getPackageDir(pkgPath)
 	if searchDir == "" {
-		return nil, "", fmt.Errorf("无法确定包目录：%s", pkgPath)
+		return nil, "", fmt.Errorf("cannot determine package directory: %s", pkgPath)
 	}
 
 	// If no file path specified, find files containing the struct
