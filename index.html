@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>StructOptimizer - Package Repository</title>
+<style>
+  :root {
+    --bg: #0d1117; --card: #161b22; --border: #30363d;
+    --text: #c9d1d9; --muted: #8b949e; --accent: #58a6ff;
+    --green: #3fb950; --orange: #d2991d; --red: #f85149;
+    --code-bg: #1c2128;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    background: var(--bg); color: var(--text); line-height: 1.6;
+    max-width: 860px; margin: 0 auto; padding: 40px 20px;
+  }
+  .header {
+    text-align: center; margin-bottom: 40px;
+  }
+  .header h1 { font-size: 2rem; margin-bottom: 8px; }
+  .header p { color: var(--muted); }
+  .header .badges { margin-top: 12px; display: flex; gap: 10px; justify-content: center; }
+  .badge {
+    display: inline-block; padding: 2px 10px; border-radius: 20px;
+    font-size: 0.8rem; font-weight: 600; background: var(--card); border: 1px solid var(--border);
+  }
+  .badge.green { color: var(--green); border-color: var(--green); }
+  .badge.blue { color: var(--accent); border-color: var(--accent); }
+  .card {
+    background: var(--card); border: 1px solid var(--border);
+    border-radius: 8px; padding: 24px; margin-bottom: 20px;
+  }
+  .card h3 { font-size: 1.1rem; margin-bottom: 12px; display: flex; align-items: center; gap: 8px; }
+  .card h3 .icon { font-size: 1.3rem; }
+  pre {
+    background: var(--code-bg); border: 1px solid var(--border);
+    border-radius: 6px; padding: 14px 18px; overflow-x: auto;
+    font-size: 0.85rem; line-height: 1.5; white-space: pre-wrap;
+  }
+  .copy-btn {
+    float: right; cursor: pointer; background: var(--border); color: var(--text);
+    border: none; border-radius: 4px; padding: 2px 8px; font-size: 0.75rem;
+    margin-top: -2px;
+  }
+  .copy-btn:hover { background: var(--accent); color: #fff; }
+  a { color: var(--accent); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+  .footer {
+    text-align: center; margin-top: 40px; padding-top: 20px;
+    border-top: 1px solid var(--border); color: var(--muted); font-size: 0.85rem;
+  }
+  code { font-family: 'SF Mono', 'Fira Code', monospace; font-size: 0.85em; }
+  .tag { color: var(--orange); }
+  .cmd { color: var(--accent); }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <h1>StructOptimizer</h1>
+  <p>Go struct alignment optimization tool &mdash; Package Repository</p>
+  <div class="badges">
+    <span class="badge blue">APT</span>
+    <span class="badge green">YUM/DNF</span>
+    <span class="badge">Homebrew</span>
+    <span class="badge">Go Install</span>
+  </div>
+  <p style="margin-top:14px;color:var(--muted)">
+    <a href="https://github.com/gamelife1314/structoptimizer">View on GitHub &rarr;</a>
+    &nbsp;|&nbsp;
+    <a href="https://github.com/gamelife1314/structoptimizer/releases">Releases &rarr;</a>
+  </p>
+</div>
+
+<div class="card">
+  <h3><span class="icon">&#x1F427;</span> Homebrew (macOS / Linux)</h3>
+  <pre><button class="copy-btn" onclick="copy(this)">Copy</button>
+brew tap gamelife1314/structoptimizer
+<span class="cmd">brew</span> install structoptimizer</pre>
+</div>
+
+<div class="card">
+  <h3><span class="icon">&#x1F4E6;</span> APT (Debian / Ubuntu)</h3>
+  <pre><button class="copy-btn" onclick="copy(this)">Copy</button>
+echo <span class="tag">"deb [trusted=yes] https://gamelife1314.github.io/structoptimizer/apt stable main"</span> \
+  | sudo tee /etc/apt/sources.list.d/structoptimizer.list
+<span class="cmd">sudo apt update && sudo apt install structoptimizer</span></pre>
+</div>
+
+<div class="card">
+  <h3><span class="icon">&#x1F40B;</span> YUM / DNF (RHEL / Fedora)</h3>
+  <pre><button class="copy-btn" onclick="copy(this)">Copy</button>
+sudo tee /etc/yum.repos.d/structoptimizer.repo <span class="tag">&lt;&lt;EOF</span>
+<span class="tag">[structoptimizer]
+name=StructOptimizer
+baseurl=https://gamelife1314.github.io/structoptimizer/yum
+enabled=1
+gpgcheck=0
+EOF</span>
+<span class="cmd">sudo yum install structoptimizer
+# or: sudo dnf install structoptimizer</span></pre>
+</div>
+
+<div class="card">
+  <h3><span class="icon">&#x2699;</span> Go Install</h3>
+  <pre><button class="copy-btn" onclick="copy(this)">Copy</button>
+<span class="cmd">go install</span> github.com/gamelife1314/structoptimizer/cmd/structoptimizer@latest</pre>
+</div>
+
+<div class="card">
+  <h3><span class="icon">&#x1F310;</span> Universal Installer</h3>
+  <pre><button class="copy-btn" onclick="copy(this)">Copy</button>
+curl -fsSL https://raw.githubusercontent.com/gamelife1314/structoptimizer/main/install.sh | bash</pre>
+</div>
+
+<div class="footer">
+  <p>MIT Licensed &middot; Built with Go &middot; <a href="https://github.com/gamelife1314/structoptimizer">gamelife1314/structoptimizer</a></p>
+</div>
+
+<script>
+function copy(btn) {
+  const pre = btn.parentElement;
+  const text = pre.innerText.replace(/^Copy\n?/, '').trim();
+  navigator.clipboard.writeText(text).then(() => {
+    btn.textContent = 'Copied!';
+    setTimeout(() => btn.textContent = 'Copy', 2000);
+  });
+}
+</script>
+</body>
+</html>
