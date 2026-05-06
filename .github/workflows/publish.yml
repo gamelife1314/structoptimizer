@@ -1,9 +1,8 @@
 name: Publish to Package Managers
 
 on:
-  push:
-    tags:
-      - 'v*'
+  release:
+    types: [published]
 
 permissions:
   contents: write
@@ -20,7 +19,7 @@ jobs:
 
       - name: Set version
         id: version
-        run: echo "version=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
+        run: echo "version=${{ github.event.release.tag_name }}" >> $GITHUB_OUTPUT
 
       - name: Download release assets
         id: download
@@ -87,7 +86,7 @@ jobs:
     steps:
       - name: Set version
         id: version
-        run: echo "version=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
+        run: echo "version=${{ github.event.release.tag_name }}" >> $GITHUB_OUTPUT
 
       - name: Download binary
         run: |
@@ -192,10 +191,19 @@ jobs:
         with:
           ref: gh-pages
           path: gh-pages
+          fetch-depth: 0
+        continue-on-error: true
+
+      - name: Initialize gh-pages if not exists
+        working-directory: gh-pages
+        run: |
+          if [ ! -f index.html ]; then
+            mkdir -p apt yum
+          fi
 
       - name: Set version
         id: version
-        run: echo "version=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
+        run: echo "version=${{ github.event.release.tag_name }}" >> $GITHUB_OUTPUT
 
       - name: Download all DEB artifacts
         uses: actions/download-artifact@v4
