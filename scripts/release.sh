@@ -44,17 +44,13 @@ echo "  ✓ reporter/reporter_i18n.go"
 sed -i "s/\*\*Version:\*\* [0-9.]*/\*\*Version:\*\* ${VERSION}/" design.md
 echo "  ✓ design.md"
 
-# 3. README - specific version example
-if [ -n "$PREV" ]; then
-    sed -i "s|VERSION=v${PREV}|VERSION=v${VERSION}|g" README.md
-    sed -i "s|VERSION=v${PREV}|VERSION=v${VERSION}|g" README.zh-CN.md
-    sed -i "s|download/v${PREV}|download/v${VERSION}|g" docs/CONFIG.md
-    echo "  ✓ README.md"
-    echo "  ✓ README.zh-CN.md"
-    echo "  ✓ docs/CONFIG.md"
-else
-    echo "  ⚠ No previous tag found, skipping README/docs version update"
-fi
+# 3. README - specific version example (match any previous version)
+sed -i "s|VERSION=v[0-9]\+\.[0-9]\+\.[0-9]\+|VERSION=v${VERSION}|g" README.md
+sed -i "s|VERSION=v[0-9]\+\.[0-9]\+\.[0-9]\+|VERSION=v${VERSION}|g" README.zh-CN.md
+sed -i "s|download/v[0-9]\+\.[0-9]\+\.[0-9]\+/|download/v${VERSION}/|g" docs/CONFIG.md
+echo "  ✓ README.md"
+echo "  ✓ README.zh-CN.md"
+echo "  ✓ docs/CONFIG.md"
 
 echo ""
 echo "Done. Next steps:"
