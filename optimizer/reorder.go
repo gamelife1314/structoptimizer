@@ -5,7 +5,7 @@ import (
 )
 
 // ReorderFields reorders fields to optimize memory alignment.
-// Only reorders when it actually saves memory, otherwise keeps the original order.
+// Returns the sorted order; the caller decides whether to adopt it (only if it saves memory).
 // Fields in reservedFields are always placed last.
 func ReorderFields(fields []FieldInfo, sortSameSize bool, reservedFields []string) []FieldInfo {
 	if len(fields) <= 1 {
@@ -66,31 +66,3 @@ func reorderFieldsInternal(fields []FieldInfo, sortSameSize bool) []FieldInfo {
 	return result
 }
 
-// calcSizeFromFields calculates the total size of fields (including padding)
-func calcSizeFromFields(fields []FieldInfo) int64 {
-	if len(fields) == 0 {
-		return 0
-	}
-
-	var offset int64 = 0
-	var maxAlign int64 = 1
-
-	for _, field := range fields {
-		// Alignment
-		if offset%field.Align != 0 {
-			offset += field.Align - (offset % field.Align)
-		}
-
-		offset += field.Size
-		if field.Align > maxAlign {
-			maxAlign = field.Align
-		}
-	}
-
-	// Trailing padding
-	if offset%maxAlign != 0 {
-		offset += maxAlign - (offset % maxAlign)
-	}
-
-	return offset
-}

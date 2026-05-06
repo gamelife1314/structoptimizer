@@ -1,11 +1,14 @@
 package optimizer
 
 import (
+	"context"
 	"fmt"
 	"go/ast"
 	"go/token"
 	"go/types"
+	"os"
 	"path/filepath"
+	"runtime"
 	"time"
 
 	"golang.org/x/tools/go/packages"
@@ -73,11 +76,8 @@ func NewOptimizer(cfg *Config, analyzer *analyzer.Analyzer) *Optimizer {
 		maxDepth:         maxDepth,
 		methodIndex:      NewMethodIndex(),
 		structQueue:      make([]*StructTask, 0),
-		structByLevel:    make(map[int][]*StructTask),
 		structByPkgLevel: make(map[int]map[string][]*StructTask),
-		workerLimit:      10,             // struct-level concurrency limit
-		pkgWorkerLimit:   pkgWorkerLimit, // package-level concurrency limit (prevent OOM)
-		pkgCache:         make(map[string]*packages.Package),
+		pkgWorkerLimit:   pkgWorkerLimit,
 		report: &Report{
 			StructReports: make([]*StructReport, 0),
 		},
@@ -93,30 +93,38 @@ func (o *Optimizer) Optimize() (*Report, error) {
 	o.Log(1, "Starting optimization...")
 	o.Log(1, "Config: max depth=%d, timeout=%d seconds", o.maxDepth, o.config.Timeout)
 
-	// Set up timeout
-	done := make(chan struct{})
-	var result *Report
-	var err error
+	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(o.config.Timeout)*time.Second)
+	defer cancel()
 
+	type result struct {
+		report *Report
+		err    error
+	}
+
+	done := make(chan result, 1)
 	go func() {
-		defer close(done)
-		result, err = o.optimizeInternal()
+		report, err := o.optimizeInternal(ctx)
+		done <- result{report, err}
 	}()
 
-	// Wait for completion or timeout
 	select {
-	case <-done:
-		return result, err
-	case <-time.After(time.Duration(o.config.Timeout) * time.Second):
+	case r := <-done:
+		return r.report, r.err
+	case <-ctx.Done():
 		o.Log(0, "Error: optimization timed out (%d seconds)", o.config.Timeout)
-		// Note: the goroutine will continue until completion, but the result will be discarded.
-		// This is acceptable because the user already received a response after the timeout.
 		return nil, fmt.Errorf("optimization timeout after %d seconds", o.config.Timeout)
 	}
 }
 
 // optimizeInternal performs the actual optimization logic (two-phase)
-func (o *Optimizer) optimizeInternal() (*Report, error) {
+func (o *Optimizer) optimizeInternal(ctx context.Context) (*Report, error) {
+	// Check context cancellation periodically
+	select {
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	default:
+	}
+
 	// ==================== Phase 1: Collect structs ====================
 	o.Log(1, "Phase 1/2: Collecting structs (file parsing only, no package loading)...")
 	if o.config.StructName != "" {
@@ -223,7 +231,7 @@ func (o *Optimizer) optimizeStruct(pkgPath, structName, filePath string, depth i
 			SkipReason: fmt.Sprintf("Exceeded max recursion depth (%d)", o.maxDepth),
 		}
 		o.optimized[key] = info
-		o.addReport(info, info.SkipReason, depth, parentKey)
+		o.addReport(info, info.SkipReason, SkipMaxDepth, depth, parentKey)
 		return info, nil
 	}
 
@@ -247,7 +255,7 @@ func (o *Optimizer) optimizeStruct(pkgPath, structName, filePath string, depth i
 		}
 		o.optimized[key] = info
 		o.mu.Unlock()
-		o.addReport(info, "Circular reference", depth, parentKey)
+		o.addReport(info, "Circular reference", SkipCircular, depth, parentKey)
 		return info, nil
 	}
 
@@ -275,34 +283,30 @@ func (o *Optimizer) optimizeStruct(pkgPath, structName, filePath string, depth i
 		o.mu.Lock()
 		o.optimized[key] = info
 		o.mu.Unlock()
-		o.addReport(info, "Third-party package struct in vendor", depth, parentKey)
+		o.addReport(info, "Third-party package struct in vendor", SkipVendor, depth, parentKey)
 		return info, nil
 	}
 
 	// Check if it's an internal project package (cross-package scan allowed when AllowExternalPkgs=true)
 	if !o.config.AllowExternalPkgs && !o.isProjectPackage(pkgPath) {
 		o.Log(3, "Skipping non-project internal package struct: %s", key)
+		skipReason := "Non-project internal package struct"
+		skipCat := SkipNonProject
+		if isStandardLibrary(pkgPath) {
+			skipReason = "Go standard library struct"
+			skipCat = SkipStdLib
+		}
 		info := &StructInfo{
-			Name:    structName,
-			PkgPath: pkgPath,
-			File:    filePath,
-			Skipped: true,
-			SkipReason: func() string {
-				if isStandardLibrary(pkgPath) {
-					return "Go standard library struct"
-				}
-				return "Non-project internal package struct"
-			}(),
+			Name:       structName,
+			PkgPath:    pkgPath,
+			File:       filePath,
+			Skipped:    true,
+			SkipReason: skipReason,
 		}
 		o.mu.Lock()
 		o.optimized[key] = info
 		o.mu.Unlock()
-		o.addReport(info, func() string {
-			if isStandardLibrary(pkgPath) {
-				return "Go standard library struct"
-			}
-			return "Non-project internal package struct"
-		}(), depth, parentKey)
+		o.addReport(info, skipReason, skipCat, depth, parentKey)
 		return info, nil
 	}
 
@@ -314,11 +318,11 @@ func (o *Optimizer) optimizeStruct(pkgPath, structName, filePath string, depth i
 	// Optimization phase: prefer parsing files, do not load packages.
 	// Only load packages when file parsing fails.
 	var info *StructInfo
-	var err error
 	var st *types.Struct
 
 	// Try parsing only the file (fast path)
 	if filePath != "" {
+		var err error
 		info, st, err = analyzeStructFromFile(filePath, structName, pkgPath)
 		if err != nil {
 			o.Log(3, "File parsing failed, loading package: %v", err)
@@ -341,7 +345,7 @@ func (o *Optimizer) optimizeStruct(pkgPath, structName, filePath string, depth i
 			o.mu.Lock()
 			o.optimized[key] = info
 			o.mu.Unlock()
-			o.addReport(info, info.SkipReason, depth, parentKey)
+			o.addReport(info, info.SkipReason, SkipLoadFailed, depth, parentKey)
 			return info, nil
 		}
 
@@ -359,23 +363,23 @@ func (o *Optimizer) optimizeStruct(pkgPath, structName, filePath string, depth i
 			o.mu.Lock()
 			o.optimized[key] = info
 			o.mu.Unlock()
-			o.addReport(info, info.SkipReason, depth, parentKey)
+			o.addReport(info, info.SkipReason, SkipLookupFailed, depth, parentKey)
 			return info, nil
 		}
 
 		fieldAnalyzer := NewFieldAnalyzer(pkg.TypesInfo, pkg.Fset)
 
 		info = fieldAnalyzer.AnalyzeStruct(st, structName, pkgPath, filePath)
-		
-		// Recalculate size using types.Sizes (consistent with unsafe.Sizeof)
-		sizes := types.SizesFor("gc", "amd64")
+
+		// Recalculate size using types.Sizes (consistent with unsafe.Sizeof, uses runtime.GOARCH)
+		sizes := types.SizesFor("gc", runtime.GOARCH)
 		if sizes != nil {
 			info.OrigSize = sizes.Sizeof(st)
 		}
 	}
 
 	// Check if it should be skipped
-	if skipReason := o.shouldSkip(info, key); skipReason != "" {
+	if skipReason, skipCat := o.shouldSkip(info, key); skipReason != "" {
 		o.Log(2, "Skipping struct: %s, reason: %s", key, skipReason)
 		info.Skipped = true
 		info.SkipReason = skipReason
@@ -383,7 +387,7 @@ func (o *Optimizer) optimizeStruct(pkgPath, structName, filePath string, depth i
 		o.mu.Lock()
 		o.optimized[key] = info
 		o.mu.Unlock()
-		o.addReport(info, skipReason, depth, parentKey)
+		o.addReport(info, skipReason, skipCat, depth, parentKey)
 		return info, nil
 	}
 
@@ -394,7 +398,7 @@ func (o *Optimizer) optimizeStruct(pkgPath, structName, filePath string, depth i
 	sortedFields := ReorderFields(info.Fields, o.config.SortSameSize, o.config.ReservedFields)
 
 	// Calculate the size after sorting (using accurate type info)
-	sortedOptSize := CalcOptimizedSize(sortedFields, o.analyzer.GetTypesInfo())
+	sortedOptSize := CalcOptimizedSize(sortedFields)
 
 	// Decide whether to adopt the sorted result: only if it saves memory
 	if sortedOptSize < info.OrigSize {
@@ -416,7 +420,7 @@ func (o *Optimizer) optimizeStruct(pkgPath, structName, filePath string, depth i
 	o.mu.Lock()
 	o.optimized[key] = info
 	o.mu.Unlock()
-	o.addReport(info, "", depth, parentKey)
+	o.addReport(info, "", SkipNone, depth, parentKey)
 
 	return info, nil
 }
@@ -434,7 +438,7 @@ func (o *Optimizer) createSkippedInfo(key, filePath, reason string) *StructInfo 
 }
 
 // addReport adds a report entry
-func (o *Optimizer) addReport(info *StructInfo, skipReason string, depth int, parentKey string) {
+func (o *Optimizer) addReport(info *StructInfo, skipReason string, skipCat SkipCategory, depth int, parentKey string) {
 	// Build field type map and field size map.
 	// Note: key format is consistent with OrigOrder/OptOrder (plain field name, embedded fields use type name).
 	fieldTypes := make(map[string]string)
@@ -461,21 +465,22 @@ func (o *Optimizer) addReport(info *StructInfo, skipReason string, depth int, pa
 	}
 
 	report := &StructReport{
-		Name:       info.Name,
-		PkgPath:    info.PkgPath,
-		File:       info.File,
-		OrigSize:   info.OrigSize,
-		OptSize:    info.OptSize,
-		Saved:      info.OrigSize - info.OptSize,
-		OrigFields: info.OrigOrder,
-		OptFields:  info.OptOrder,
-		FieldTypes: fieldTypes,
-		FieldSizes: fieldSizes,
-		Skipped:    info.Skipped,
-		SkipReason: skipReason,
-		Depth:      depth,
-		ParentKey:  parentKey,
-		HasEmbed:   hasEmbed,
+		Name:         info.Name,
+		PkgPath:      info.PkgPath,
+		File:         info.File,
+		OrigSize:     info.OrigSize,
+		OptSize:      info.OptSize,
+		Saved:        info.OrigSize - info.OptSize,
+		OrigFields:   info.OrigOrder,
+		OptFields:    info.OptOrder,
+		FieldTypes:   fieldTypes,
+		FieldSizes:   fieldSizes,
+		Skipped:      info.Skipped,
+		SkipReason:   skipReason,
+		SkipCategory: skipCat,
+		Depth:        depth,
+		ParentKey:    parentKey,
+		HasEmbed:     hasEmbed,
 	}
 
 	if info.OptSize == 0 && info.OrigSize == 0 {
@@ -506,7 +511,7 @@ func (o *Optimizer) GetReport() *Report {
 	return o.report
 }
 
-// Log outputs a log message
+// Log outputs a log message to stderr
 func (o *Optimizer) Log(level int, format string, args ...interface{}) {
 	if level <= o.config.Verbose {
 		timestamp := time.Now().Format("2006-01-02 15:04:05.000")
@@ -519,7 +524,7 @@ func (o *Optimizer) Log(level int, format string, args ...interface{}) {
 		case 3:
 			levelPrefix = "[TRACE]"
 		}
-		fmt.Printf("%s %s "+format+"\n", append([]interface{}{timestamp, levelPrefix}, args...)...)
+		fmt.Fprintf(os.Stderr, "%s %s "+format+"\n", append([]interface{}{timestamp, levelPrefix}, args...)...)
 	}
 }
 

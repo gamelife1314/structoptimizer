@@ -200,7 +200,7 @@ func TestAddReportEmbedDetection(t *testing.T) {
 		OptOrder:  []string{"Field1", "InnerStruct", "Field2"},
 	}
 
-	opt.addReport(info, "", 0, "")
+	opt.addReport(info, "", SkipNone, 0, "")
 
 	// 验证报告生成
 	if len(opt.report.StructReports) != 1 {

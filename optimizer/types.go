@@ -3,34 +3,50 @@ package optimizer
 import (
 	"sync"
 
-	"golang.org/x/tools/go/packages"
-
 	"github.com/gamelife1314/structoptimizer/analyzer"
+)
+
+// SkipCategory classifies why a struct was skipped
+type SkipCategory int
+
+const (
+	SkipNone        SkipCategory = iota
+	SkipEmpty                    // empty struct
+	SkipSingleField              // single-field struct
+	SkipByMethod                 // skipped by method pattern
+	SkipByName                   // skipped by name pattern
+	SkipVendor                   // vendor/third-party package
+	SkipStdLib                   // standard library
+	SkipNonProject               // non-project internal package
+	SkipCircular                 // circular reference
+	SkipMaxDepth                 // exceeded max recursion depth
+	SkipLoadFailed               // failed to load package
+	SkipLookupFailed             // failed to find struct in package
+	SkipPanic                    // panic during processing
 )
 
 // Optimizer is the struct optimizer
 type Optimizer struct {
-	config    *Config
-	analyzer  *analyzer.Analyzer
-	optimized map[string]*StructInfo
-	report    *Report
+	config     *Config
+	analyzer   *analyzer.Analyzer
+	optimized  map[string]*StructInfo
+	report     *Report
 	processing map[string]bool
-	maxDepth  int
+	maxDepth   int
+
+	// Module path cache (read once from go.mod)
+	modulePath    string
+	modulePathSet bool
 
 	// Method indexer
 	methodIndex *MethodIndex
 
 	// Parallel processing related
 	structQueue      []*StructTask
-	structByLevel    map[int][]*StructTask
 	structByPkgLevel map[int]map[string][]*StructTask // grouped by level and package
 	collecting       map[string]bool
 	mu               sync.Mutex
-	workerLimit      int
 	pkgWorkerLimit   int // package-level concurrency limit
-
-	// Cache optimization
-	pkgCache map[string]*packages.Package
 }
 
 // StructTask represents a struct processing task
@@ -86,21 +102,22 @@ type StructInfo struct {
 
 // StructReport represents a struct optimization report
 type StructReport struct {
-	Name       string
-	PkgPath    string
-	File       string
-	OrigSize   int64
-	OptSize    int64
-	Saved      int64
-	OrigFields []string
-	OptFields  []string
-	FieldTypes map[string]string // field_name -> type_name
-	FieldSizes map[string]int64  // field_name -> size (bytes)
-	Skipped    bool
-	SkipReason string
-	Depth      int
-	ParentKey  string // "pkg.StructName" of parent, empty for root
-	HasEmbed   bool   // whether it contains embedded fields
+	Name         string
+	PkgPath      string
+	File         string
+	OrigSize     int64
+	OptSize      int64
+	Saved        int64
+	OrigFields   []string
+	OptFields    []string
+	FieldTypes   map[string]string // field_name -> type_name
+	FieldSizes   map[string]int64  // field_name -> size (bytes)
+	Skipped      bool
+	SkipReason   string
+	SkipCategory SkipCategory // enum-based skip classification
+	Depth        int
+	ParentKey    string // "pkg.StructName" of parent, empty for root
+	HasEmbed     bool   // whether it contains embedded fields
 }
 
 // Report is the optimization report

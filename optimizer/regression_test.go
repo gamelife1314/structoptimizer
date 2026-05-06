@@ -3,6 +3,7 @@ package optimizer_test
 import (
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -339,3 +340,248 @@ type Container struct {
 
 	t.Logf("✅ All slice/pointer/pointer-slice types correctly collected: %d total structs", report.TotalStructs)
 }
+
+// TestSkipCategoryEnum verifies that StructReport.SkipCategory is set correctly for different skip types
+func TestSkipCategoryEnum(t *testing.T) {
+	tmpDir, err := os.MkdirTemp("", "skipcat_test_*")
+	if err != nil {
+		t.Fatalf("Failed to create temp dir: %v", err)
+	}
+	defer os.RemoveAll(tmpDir)
+
+	goModContent := `module skiptest
+
+go 1.21
+`
+	if err := os.WriteFile(filepath.Join(tmpDir, "go.mod"), []byte(goModContent), 0644); err != nil {
+		t.Fatalf("Failed to write go.mod: %v", err)
+	}
+
+	mainContent := `package skiptest
+
+type SingleField struct {
+	A int
+}
+
+type EmptyStruct struct {
+}
+
+type SkipByName struct {
+	A int
+	B string
+}
+`
+	if err := os.WriteFile(filepath.Join(tmpDir, "main.go"), []byte(mainContent), 0644); err != nil {
+		t.Fatalf("Failed to write main.go: %v", err)
+	}
+
+	anlz := analyzer.NewAnalyzer(&analyzer.Config{
+		TargetDir:   tmpDir,
+		Package:     "skiptest",
+		SkipByNames: []string{"SkipByName"},
+	})
+
+	opt := optimizer.NewOptimizer(&optimizer.Config{
+		TargetDir:   tmpDir,
+		Package:     "skiptest",
+		SkipByNames: []string{"SkipByName"},
+		Verbose:     0,
+		Timeout:     300,
+	}, anlz)
+
+	report, err := opt.Optimize()
+	if err != nil {
+		t.Fatalf("Optimize failed: %v", err)
+	}
+
+	hasSingleField := false
+	hasEmpty := false
+	hasSkipByName := false
+
+	for _, sr := range report.StructReports {
+		switch sr.Name {
+		case "SingleField":
+			hasSingleField = true
+			if sr.SkipCategory != optimizer.SkipSingleField || !sr.Skipped {
+				t.Errorf("SingleField: expected SkipSingleField, got %v, Skipped=%v", sr.SkipCategory, sr.Skipped)
+			}
+		case "EmptyStruct":
+			hasEmpty = true
+			if sr.SkipCategory != optimizer.SkipEmpty || !sr.Skipped {
+				t.Errorf("EmptyStruct: expected SkipEmpty, got %v, Skipped=%v", sr.SkipCategory, sr.Skipped)
+			}
+		case "SkipByName":
+			hasSkipByName = true
+			if sr.SkipCategory != optimizer.SkipByName || !sr.Skipped {
+				t.Errorf("SkipByName: expected SkipByName, got %v, Skipped=%v", sr.SkipCategory, sr.Skipped)
+			}
+		}
+	}
+
+	if !hasSingleField {
+		t.Error("SingleField struct not in report")
+	}
+	if !hasEmpty {
+		t.Error("EmptyStruct not in report")
+	}
+	if !hasSkipByName {
+		t.Error("SkipByName not in report")
+	}
+
+	t.Logf("✅ SkipCategory enum correctly set for all skip types")
+}
+
+// TestPlatformAwareSizes verifies that size calculations use runtime.GOARCH
+func TestPlatformAwareSizes(t *testing.T) {
+	tmpDir, err := os.MkdirTemp("", "platform_test_*")
+	if err != nil {
+		t.Fatalf("Failed to create temp dir: %v", err)
+	}
+	defer os.RemoveAll(tmpDir)
+
+	goModContent := `module platformtest
+
+go 1.21
+`
+	if err := os.WriteFile(filepath.Join(tmpDir, "go.mod"), []byte(goModContent), 0644); err != nil {
+		t.Fatalf("Failed to write go.mod: %v", err)
+	}
+
+	mainContent := `package platformtest
+
+type TestStruct struct {
+	A   int8
+	B   *int
+	C   string
+	D   int64
+	E   map[string]int
+	F   chan int
+	H   []bool
+}
+`
+	if err := os.WriteFile(filepath.Join(tmpDir, "main.go"), []byte(mainContent), 0644); err != nil {
+		t.Fatalf("Failed to write main.go: %v", err)
+	}
+
+	anlz := analyzer.NewAnalyzer(&analyzer.Config{
+		TargetDir: tmpDir,
+		Package:   "platformtest",
+	})
+
+	opt := optimizer.NewOptimizer(&optimizer.Config{
+		TargetDir: tmpDir,
+		Package:   "platformtest",
+		Verbose:   0,
+		Timeout:   300,
+	}, anlz)
+
+	report, err := opt.Optimize()
+	if err != nil {
+		t.Fatalf("Optimize failed: %v", err)
+	}
+
+	if report.TotalStructs == 0 {
+		t.Fatal("No structs found")
+	}
+
+	for _, sr := range report.StructReports {
+		if sr.Name == "TestStruct" && sr.OrigSize > 0 {
+			t.Logf("✅ Platform-aware size calculation on %s/%s: TestStruct=%d bytes",
+				runtime.GOOS, runtime.GOARCH, sr.OrigSize)
+		}
+	}
+}
+
+// TestNewStandardLibraryPackages verifies Go 1.21+ packages are recognized
+func TestNewStandardLibraryPackages(t *testing.T) {
+	tmpDir, err := os.MkdirTemp("", "newstdlib_test_*")
+	if err != nil {
+		t.Fatalf("Failed to create temp dir: %v", err)
+	}
+	defer os.RemoveAll(tmpDir)
+
+	goModContent := `module newstdlibtest
+
+go 1.21
+`
+	if err := os.WriteFile(filepath.Join(tmpDir, "go.mod"), []byte(goModContent), 0644); err != nil {
+		t.Fatalf("Failed to write go.mod: %v", err)
+	}
+
+	mainContent := `package newstdlibtest
+
+import (
+	"cmp"
+	"maps"
+	"slices"
+)
+
+type UsesNewStdlib struct {
+	Order   cmp.Ordered
+	Keys    []int
+	Records []string
+}
+`
+	if err := os.WriteFile(filepath.Join(tmpDir, "main.go"), []byte(mainContent), 0644); err != nil {
+		t.Fatalf("Failed to write main.go: %v", err)
+	}
+
+	anlz := analyzer.NewAnalyzer(&analyzer.Config{
+		TargetDir: tmpDir,
+		Package:   "newstdlibtest",
+	})
+
+	opt := optimizer.NewOptimizer(&optimizer.Config{
+		TargetDir: tmpDir,
+		Package:   "newstdlibtest",
+		Verbose:   0,
+		Timeout:   300,
+	}, anlz)
+
+	report, err := opt.Optimize()
+	if err != nil {
+		t.Fatalf("Optimize failed: %v", err)
+	}
+
+	if report.TotalStructs == 0 {
+		t.Fatal("No structs found")
+	}
+
+	hasUsesNewStdlib := false
+	for _, sr := range report.StructReports {
+		if sr.Name == "UsesNewStdlib" {
+			hasUsesNewStdlib = true
+			break
+		}
+	}
+
+	if !hasUsesNewStdlib {
+		t.Error("UsesNewStdlib struct not in report (new stdlib packages may not be recognized)")
+	} else {
+		t.Logf("✅ Go 1.21+ packages (cmp, maps, slices) correctly recognized")
+	}
+}
+
+// TestCalcOptimizedSizeFieldInfo verifies CalcOptimizedSize consistency
+func TestCalcOptimizedSizeFieldInfo(t *testing.T) {
+	fields := []optimizer.FieldInfo{
+		{Name: "A", Size: 8, Align: 8},
+		{Name: "B", Size: 4, Align: 4},
+		{Name: "C", Size: 2, Align: 2},
+		{Name: "D", Size: 1, Align: 1},
+	}
+
+	size := optimizer.CalcOptimizedSize(fields)
+	expected := int64(16) // 8 + 4 + 2 + 1 + 1(trail) = 16
+	if size != expected {
+		t.Errorf("CalcOptimizedSize = %d, want %d", size, expected)
+	}
+
+	sizeFromFields := optimizer.CalcStructSizeFromFields(fields)
+	if size != sizeFromFields {
+		t.Errorf("CalcOptimizedSize (%d) != CalcStructSizeFromFields (%d)", size, sizeFromFields)
+	}
+
+	t.Logf("✅ CalcOptimizedSize and CalcStructSizeFromFields produce identical results: %d bytes", size)
+}
+

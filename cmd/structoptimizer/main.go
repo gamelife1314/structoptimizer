@@ -1,7 +1,6 @@
 package main
 
 import (
-	"bufio"
 	"flag"
 	"fmt"
 	"os"
@@ -64,16 +63,6 @@ func main() {
 	skipByMethods := parseCommaList(cfg.SkipByMethods)
 	skipByNames := parseCommaList(cfg.SkipByNames)
 	reservedFields := parseCommaList(cfg.ReservedFields)
-
-	// TODO: enable user confirmation for -skip-by-methods
-	/*
-		if len(skipByMethods) > 0 {
-			if !confirmSkipByMethods() {
-				fmt.Println("Canceled")
-				os.Exit(0)
-			}
-		}
-	*/
 
 	// Create analyzer
 	analyzerCfg := &analyzer.Config{
@@ -292,25 +281,4 @@ func parseCommaList(s string) []string {
 		}
 	}
 	return result
-}
-
-// confirmSkipByMethods prompts for confirmation when using -skip-by-methods
-func confirmSkipByMethods() bool {
-	fmt.Println("⚠️  Warning: -skip-by-methods requires loading packages and checking each struct's methods")
-	fmt.Println("   This can slow down execution significantly, especially for large projects")
-	fmt.Println()
-	fmt.Println("   Recommendation:")
-	fmt.Println("   - Small projects (<100 structs) can use this")
-	fmt.Println("   - Large projects should use -skip-by-names instead (much faster)")
-	fmt.Println()
-	fmt.Print("Continue? [y/N]: ")
-
-	reader := bufio.NewReader(os.Stdin)
-	input, err := reader.ReadString('\n')
-	if err != nil {
-		return false
-	}
-
-	input = strings.TrimSpace(strings.ToLower(input))
-	return input == "y" || input == "yes"
 }

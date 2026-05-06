@@ -25,16 +25,12 @@ func isStandardLibraryPkg(pkgPath string) bool {
 
 // isVendorPackage checks if it is a vendor package or third-party package
 func isVendorPackage(pkgPath string) bool {
-	// 1. Empty package path (usually a standard library or built-in type)
 	if pkgPath == "" {
 		return true
 	}
-
-	// 2. Check if it contains a vendor directory
 	if strings.Contains(pkgPath, "/vendor/") || strings.HasPrefix(pkgPath, "vendor/") {
 		return true
 	}
-
 	return false
 }
 
@@ -43,11 +39,9 @@ func isStandardLibrary(pkgPath string) bool {
 	if pkgPath == "" {
 		return true
 	}
-	// Standard libraries do not contain dots
 	if strings.Contains(pkgPath, ".") {
 		return false
 	}
-	// Single-segment package name, check against known standard libraries
 	standardLibs := map[string]bool{
 		"fmt": true, "os": true, "io": true, "net": true, "http": true,
 		"reflect": true, "errors": true, "bytes": true, "strings": true,
@@ -62,90 +56,99 @@ func isStandardLibrary(pkgPath string) bool {
 		"flag": true, "log": true, "testing": true, "testing/iotest": true,
 		"iotest": true, "quick": true, "exec": true, "signal": true,
 		"path": true, "file": true, "filepath": true,
+		// Go 1.21+ packages
+		"cmp": true, "maps": true, "slices": true,
+		// Go 1.23+ packages
+		"iter": true, "unique": true, "structs": true,
+		// Go 1.24+ packages
+		"weak": true,
 	}
 	return standardLibs[pkgPath]
 }
 
 // isProjectPackage checks if it is an internal project package
 func (o *Optimizer) isProjectPackage(pkgPath string) bool {
-	// Empty package path is not a project package
 	if pkgPath == "" {
 		return false
 	}
-
-	// Packages in vendor are not project packages
 	if isVendorPackage(pkgPath) {
 		return false
 	}
-
-	// Standard libraries are not project packages
 	if isStandardLibrary(pkgPath) {
 		return false
 	}
 
-	// In GOPATH mode, check if it is under the project path
 	if o.config.ProjectType == "gopath" {
 		gopath := o.config.GOPATH
 		if gopath == "" {
 			gopath = os.Getenv("GOPATH")
 		}
 		if gopath != "" {
-			// Check if the package path starts with GOPATH/src/
 			if strings.HasPrefix(pkgPath, "src/") {
-				// Extract the project path
 				relPath := strings.TrimPrefix(pkgPath, "src/")
-				// Check if it contains vendor
 				if strings.Contains(relPath, "/vendor/") {
 					return false
 				}
 				return true
 			}
 		}
-		// In GOPATH mode, if not vendor and not standard library, consider it a project package
 		return true
 	}
 
-	// In Go Module mode, check if it is a package of the current project
 	if o.config.ProjectType == "gomod" || o.config.ProjectType == "" {
-		// Get the project root directory
 		targetDir := o.config.TargetDir
 		if targetDir == "" {
 			targetDir = "."
 		}
 
-		// Try to read go.mod to get the module path
-		goModPath := filepath.Join(targetDir, "go.mod")
-		if data, err := os.ReadFile(goModPath); err == nil {
-			// Parse the first line of go.mod to get the module path
-			lines := strings.Split(string(data), "\n")
-			for _, line := range lines {
-				line = strings.TrimSpace(line)
-				if strings.HasPrefix(line, "module ") {
-					modulePath := strings.TrimSpace(strings.TrimPrefix(line, "module "))
-					// Check if the package path starts with the module path
-					if strings.HasPrefix(pkgPath, modulePath) {
-						// Ensure it is a sub-path, not a prefix match
-						remaining := strings.TrimPrefix(pkgPath, modulePath)
-						if remaining == "" || strings.HasPrefix(remaining, "/") {
-							return true
-						}
-					}
-					// Package from another module, not a project package
-					return false
+		modulePath := o.cachedModulePath(targetDir)
+		if modulePath != "" {
+			if strings.HasPrefix(pkgPath, modulePath) {
+				remaining := strings.TrimPrefix(pkgPath, modulePath)
+				if remaining == "" || strings.HasPrefix(remaining, "/") {
+					return true
 				}
 			}
+			return false
 		}
 
-		// If go.mod cannot be parsed, conservative: consider it a project package if not vendor/stdlib
 		return true
 	}
 
-	// Default to considering it a project package
 	return true
 }
 
-// fieldOrderSame checks if field order is the same
-func (o *Optimizer) fieldOrderSame(orig, opt []string) bool {
+// cachedModulePath returns the module path from go.mod, reading only once and caching the result
+func (o *Optimizer) cachedModulePath(targetDir string) string {
+	if o.modulePathSet {
+		return o.modulePath
+	}
+	o.modulePathSet = true
+	o.modulePath = readModulePath(targetDir)
+	return o.modulePath
+}
+
+// readModulePath reads the module path from go.mod
+func readModulePath(targetDir string) string {
+	if targetDir == "" {
+		return ""
+	}
+	goModPath := filepath.Join(targetDir, "go.mod")
+	data, err := os.ReadFile(goModPath)
+	if err != nil {
+		return ""
+	}
+	for _, line := range strings.Split(string(data), "\n") {
+		line = strings.TrimSpace(line)
+		if strings.HasPrefix(line, "module ") {
+			return strings.TrimSpace(strings.TrimPrefix(line, "module "))
+		}
+	}
+	return ""
+}
+
+// fieldOrderSame checks if field order is the same (standalone function)
+func fieldOrderSame(orig, opt []string) bool {
 	if len(orig) != len(opt) {
 		return false
 	}
@@ -160,8 +163,8 @@ func (o *Optimizer) fieldOrderSame(orig, opt []string) bool {
 // getPackageDir returns the directory where the package is located
 func (o *Optimizer) getPackageDir(pkgPath string) string {
 	if o.config.TargetDir != "" {
-		// Go Module mode
-		relPath := strings.TrimPrefix(pkgPath, o.getModulePath())
+		modulePath := o.cachedModulePath(o.config.TargetDir)
+		relPath := strings.TrimPrefix(pkgPath, modulePath)
 		relPath = strings.TrimPrefix(relPath, "/")
 		if relPath != "" {
 			return filepath.Join(o.config.TargetDir, relPath)
@@ -169,7 +172,6 @@ func (o *Optimizer) getPackageDir(pkgPath string) string {
 		return o.config.TargetDir
 	}
 
-	// GOPATH mode
 	gopath := o.config.GOPATH
 	if gopath == "" {
 		gopath = os.Getenv("GOPATH")
@@ -181,24 +183,15 @@ func (o *Optimizer) getPackageDir(pkgPath string) string {
 	return ""
 }
 
-// getModulePath returns the module path (from go.mod)
-func (o *Optimizer) getModulePath() string {
-	if o.config.TargetDir == "" {
-		return ""
+// matchMethod matches a method name (supports wildcards, consolidated package-level function)
+func matchMethod(methodName, pattern string) bool {
+	if methodName == pattern {
+		return true
 	}
-
-	goModPath := filepath.Join(o.config.TargetDir, "go.mod")
-	data, err := os.ReadFile(goModPath)
-	if err != nil {
-		return ""
-	}
-
-	for _, line := range strings.Split(string(data), "\n") {
-		line = strings.TrimSpace(line)
-		if strings.HasPrefix(line, "module ") {
-			return strings.TrimSpace(strings.TrimPrefix(line, "module "))
+	if strings.Contains(pattern, "*") || strings.Contains(pattern, "?") {
+		if matched, _ := filepath.Match(pattern, methodName); matched {
+			return true
 		}
 	}
-
-	return ""
+	return false
 }

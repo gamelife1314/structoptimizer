@@ -32,7 +32,7 @@ func TestNamedTypeSizeCalculation(t *testing.T) {
 			// 创建重定义类型
 			named := types.NewNamed(types.NewTypeName(0, nil, "NewType", tt.typ), tt.typ, nil)
 
-			size, align := CalcFieldSize(named, nil)
+			size, align := CalcFieldSize(named)
 
 			if size != tt.wantSize {
 				t.Errorf("CalcFieldSize(%s) size = %d, want %d", tt.name, size, tt.wantSize)

@@ -33,21 +33,27 @@ if ! echo "$VERSION" | grep -qE '^[0-9]+\.[0-9]+\.[0-9]+$'; then
     exit 1
 fi
 
+# Determine sed in-place flag (macOS vs Linux)
+SED_INPLACE="-i"
+if [[ "$(uname)" == "Darwin" ]]; then
+    SED_INPLACE="-i ''"
+fi
+
 echo "Syncing version $VERSION across all files..."
 echo ""
 
 # 1. Core version constant
-sed -i "s/const Version = \"[0-9.]*\"/const Version = \"${VERSION}\"/" reporter/reporter_i18n.go
+sed $SED_INPLACE "s/const Version = \"[0-9.]*\"/const Version = \"${VERSION}\"/" reporter/reporter_i18n.go
 echo "  ✓ reporter/reporter_i18n.go"
 
 # 2. Design document
-sed -i "s/\*\*Version:\*\* [0-9.]*/\*\*Version:\*\* ${VERSION}/" design.md
+sed $SED_INPLACE "s/\*\*Version:\*\* [0-9.]*/\*\*Version:\*\* ${VERSION}/" design.md
 echo "  ✓ design.md"
 
 # 3. README - specific version example (match any previous version)
-sed -i "s|VERSION=v[0-9]\+\.[0-9]\+\.[0-9]\+|VERSION=v${VERSION}|g" README.md
-sed -i "s|VERSION=v[0-9]\+\.[0-9]\+\.[0-9]\+|VERSION=v${VERSION}|g" README.zh-CN.md
-sed -i "s|download/v[0-9]\+\.[0-9]\+\.[0-9]\+/|download/v${VERSION}/|g" docs/CONFIG.md
+sed $SED_INPLACE "s|VERSION=v[0-9][0-9]*\.[0-9][0-9]*\.[0-9][0-9]*|VERSION=v${VERSION}|g" README.md
+sed $SED_INPLACE "s|VERSION=v[0-9][0-9]*\.[0-9][0-9]*\.[0-9][0-9]*|VERSION=v${VERSION}|g" README.zh-CN.md
+sed $SED_INPLACE "s|download/v[0-9][0-9]*\.[0-9][0-9]*\.[0-9][0-9]*/|download/v${VERSION}/|g" docs/CONFIG.md
 echo "  ✓ README.md"
 echo "  ✓ README.zh-CN.md"
 echo "  ✓ docs/CONFIG.md"

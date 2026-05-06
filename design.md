@@ -1,6 +1,6 @@
 # StructOptimizer Design Document
 
-**Version:** 1.8.9  
+**Version:** 1.9.0  
 **Language:** Go  
 **Purpose:** A static analysis tool that reorders struct fields to minimize memory padding, improving cache efficiency and reducing memory footprint for Go programs.
 

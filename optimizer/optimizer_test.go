@@ -66,7 +66,7 @@ func TestCalcFieldSize(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			size, align := CalcFieldSize(tt.typ, nil)
+			size, align := CalcFieldSize(tt.typ)
 			if size != tt.wantSize {
 				t.Errorf("CalcFieldSize() size = %v, want %v", size, tt.wantSize)
 			}
@@ -96,7 +96,7 @@ func TestCalcStructSize(t *testing.T) {
 	}
 	badStruct := types.NewStruct(fields, nil)
 
-	size := CalcStructSize(badStruct, nil)
+	size := CalcStructSize(badStruct)
 	// 计算：1+(7 填充) + 8 + 4 + 1+(3 填充) + 4 + (4 末尾填充) = 32 字节
 	if size != 32 {
 		t.Errorf("CalcStructSize(BadStruct) = %v, want 32", size)
@@ -119,7 +119,7 @@ func TestCalcStructSize(t *testing.T) {
 	}
 	goodStruct := types.NewStruct(optFields, nil)
 
-	size = CalcStructSize(goodStruct, nil)
+	size = CalcStructSize(goodStruct)
 	// 计算：8 + 4 + 4 + 1 + 1 + (6 末尾填充) = 24 字节
 	if size != 24 {
 		t.Errorf("CalcStructSize(GoodStruct) = %v, want 24", size)
@@ -206,7 +206,7 @@ func TestCalcOptimizedSize(t *testing.T) {
 		{Name: "D", Size: 1, Align: 1},
 	}
 
-	size := CalcOptimizedSize(fields, nil)
+	size := CalcOptimizedSize(fields)
 	// 8 + 4 + 4 + 1 + 1 + (6 填充) = 24 字节
 	if size != 24 {
 		t.Errorf("CalcOptimizedSize() = %v, want 24", size)

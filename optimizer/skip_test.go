@@ -7,8 +7,6 @@ import (
 
 // TestMatchMethod 测试方法名通配符匹配
 func TestMatchMethod(t *testing.T) {
-	o := &Optimizer{}
-
 	tests := []struct {
 		name      string
 		method    string
@@ -32,7 +30,7 @@ func TestMatchMethod(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if got := o.matchMethod(tt.method, tt.pattern); got != tt.wantMatch {
+			if got := matchMethod(tt.method, tt.pattern); got != tt.wantMatch {
 				t.Errorf("matchMethod(%q, %q) = %v, want %v", tt.method, tt.pattern, got, tt.wantMatch)
 			}
 		})

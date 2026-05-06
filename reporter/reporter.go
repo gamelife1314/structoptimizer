@@ -159,17 +159,14 @@ func (r *Reporter) GenerateTXT(report *optimizer.Report) (string, error) {
 	return sb.String(), nil
 }
 
-// classifyStructReports classifies struct reports into categories
+// classifyStructReports classifies struct reports into categories using the SkipCategory enum
 func classifyStructReports(report *optimizer.Report, s i18n) (optimized, skippedNormal, skippedError, unchanged []*optimizer.StructReport) {
 	for _, sr := range report.StructReports {
 		if sr.Skipped {
-			// Distinguish between normal skips and error skips
-			if strings.HasPrefix(sr.SkipReason, s.SkipReasonByMethod) ||
-				strings.HasPrefix(sr.SkipReason, s.SkipReasonByName) ||
-				sr.SkipReason == s.SkipReasonEmpty ||
-				sr.SkipReason == s.SkipReasonSingleField {
+			switch sr.SkipCategory {
+			case optimizer.SkipEmpty, optimizer.SkipSingleField, optimizer.SkipByName, optimizer.SkipByMethod:
 				skippedNormal = append(skippedNormal, sr)
-			} else {
+			default:
 				skippedError = append(skippedError, sr)
 			}
 		} else if sr.OrigSize > sr.OptSize {

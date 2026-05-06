@@ -74,8 +74,6 @@ func TestIsStandardLibrary(t *testing.T) {
 
 // TestFieldOrderSame 测试字段顺序比较
 func TestFieldOrderSame(t *testing.T) {
-	o := &Optimizer{}
-
 	tests := []struct {
 		name string
 		orig []string
@@ -90,7 +88,7 @@ func TestFieldOrderSame(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if got := o.fieldOrderSame(tt.orig, tt.opt); got != tt.want {
+			if got := fieldOrderSame(tt.orig, tt.opt); got != tt.want {
 				t.Errorf("fieldOrderSame(%v, %v) = %v, want %v", tt.orig, tt.opt, got, tt.want)
 			}
 		})

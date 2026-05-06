@@ -154,31 +154,32 @@ func getFieldName(f *ast.Field) string {
 	return ""
 }
 
-// estimateFieldSize estimates field size
+// estimateFieldSize estimates field size (platform-aware for pointer and interface)
 func estimateFieldSize(expr ast.Expr) (size, align int64) {
+	ptrSize := sizeofPtr()
+	ptrAlign := alignofPtr()
 	switch t := expr.(type) {
 	case *ast.Ident:
 		return sizeOfIdent(t.Name)
 	case *ast.StarExpr:
-		return 8, 8 // pointer
+		return ptrSize, ptrAlign
 	case *ast.ArrayType:
 		if t.Len == nil {
-			return 24, 8 // slice
+			return 24, ptrAlign // slice header
 		}
-		// Parse fixed-length array
 		elemSize, elemAlign := estimateFieldSize(t.Elt)
 		if length := parseArrayLength(t.Len); length > 0 {
 			return elemSize * length, elemAlign
 		}
-		return elemSize, elemAlign // fallback when unable to parse
+		return elemSize, elemAlign
 	case *ast.MapType:
-		return 8, 8 // map
+		return ptrSize, ptrAlign
 	case *ast.ChanType:
-		return 8, 8 // chan
+		return ptrSize, ptrAlign
 	case *ast.InterfaceType:
-		return 16, 8 // interface
+		return 16, ptrAlign
 	default:
-		return 8, 8
+		return ptrSize, ptrAlign
 	}
 }
 
@@ -189,6 +190,8 @@ func EstimateFieldSizeWithLookup(expr ast.Expr, pkgDir string) (size, align int6
 
 // estimateFieldSizeWithLookup estimates field size (with type lookup)
 func estimateFieldSizeWithLookup(expr ast.Expr, pkgDir string) (size, align int64) {
+	ptrSize := sizeofPtr()
+	ptrAlign := alignofPtr()
 	switch t := expr.(type) {
 	case *ast.Ident:
 		// For identifiers, try to find the type definition within the same package
@@ -215,10 +218,10 @@ func estimateFieldSizeWithLookup(expr ast.Expr, pkgDir string) (size, align int6
 		}
 		return 8, 8 // unknown external type
 	case *ast.StarExpr:
-		return 8, 8 // pointer
+		return ptrSize, ptrAlign
 	case *ast.ArrayType:
 		if t.Len == nil {
-			return 24, 8 // slice
+			return 24, ptrAlign // slice
 		}
 		// Parse fixed-length array
 		elemSize, elemAlign := estimateFieldSizeWithLookup(t.Elt, pkgDir)
@@ -227,17 +230,17 @@ func estimateFieldSizeWithLookup(expr ast.Expr, pkgDir string) (size, align int6
 		}
 		return elemSize, elemAlign // fallback when unable to parse
 	case *ast.MapType:
-		return 8, 8 // map
+		return ptrSize, ptrAlign
 	case *ast.ChanType:
-		return 8, 8 // chan
+		return ptrSize, ptrAlign
 	case *ast.InterfaceType:
-		return 16, 8 // interface
+		return 16, ptrAlign
 	case *ast.StructType:
 		// Handle inline struct directly (anonymous nested struct)
 		size := calcInlineStructSize(t, pkgDir)
-		return size, 8
+		return size, ptrAlign
 	default:
-		return 8, 8
+		return ptrSize, ptrAlign
 	}
 }
 

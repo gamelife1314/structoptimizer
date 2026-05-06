@@ -86,7 +86,7 @@ type User struct {
 curl -fsSL https://raw.githubusercontent.com/gamelife1314/structoptimizer/main/install.sh | bash
 
 # Install a specific version
-curl -fsSL https://raw.githubusercontent.com/gamelife1314/structoptimizer/main/install.sh | VERSION=v1.8.9 bash
+curl -fsSL https://raw.githubusercontent.com/gamelife1314/structoptimizer/main/install.sh | VERSION=v1.9.0 bash
 
 # Custom install directory
 curl -fsSL https://raw.githubusercontent.com/gamelife1314/structoptimizer/main/install.sh | INSTALL_DIR=/usr/bin bash

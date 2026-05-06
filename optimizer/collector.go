@@ -452,19 +452,6 @@ func getArrayLengthString(expr ast.Expr) string {
 	}
 }
 
-// collectNestedFromFields collects nested structs from field info
-func (o *Optimizer) collectNestedFromFields(fields []nestedField, pkgPath, filePath string, depth, level int) {
-	for _, field := range fields {
-		if !field.IsStruct || isStandardLibraryPkg(field.PkgPath) || isVendorPackage(field.PkgPath) {
-			continue
-		}
-
-		if o.isProjectPackage(field.PkgPath) {
-			o.collectStructs(field.PkgPath, field.Name, filePath, depth+1, level+1, pkgPath+"."+"unknown")
-		}
-	}
-}
-
 // findFilesWithStruct searches for files that may contain the specified struct (checks skip dirs and files)
 func (o *Optimizer) findFilesWithStruct(dir, structName string) ([]string, error) {
 	var result []string
@@ -547,8 +534,10 @@ func (o *Optimizer) shouldSkipFile(fileName string) bool {
 	return false
 }
 
-// fileContainsStruct quickly checks if a file contains a struct definition
-// (supports both "type xxx struct" and "type ( ... )" forms)
+// fileContainsStruct quickly checks if a file contains a struct definition.
+// Uses a fast byte-scan approach as the first pass; false positives are possible
+// (e.g. struct name in comments) but this is acceptable because the actual parsing
+// in parseStructFields serves as the authoritative check.
 func (o *Optimizer) fileContainsStruct(filePath, structName string) bool {
 	data, err := os.ReadFile(filePath)
 	if err != nil {

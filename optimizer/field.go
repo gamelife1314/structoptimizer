@@ -52,9 +52,8 @@ func (fa *FieldAnalyzer) AnalyzeStruct(st *types.Struct, structName, pkgPath, fi
 	info.Fields = fields
 	info.OrigOrder = origOrder
 
-	// Calculate original size using types.Sizes (consistent with unsafe.Sizeof).
-	// Note: types.Info does not have a Sizes field; it must be passed in by the caller.
-	info.OrigSize = CalcStructSize(st, nil)
+	// Calculate original size using types.Sizes (consistent with unsafe.Sizeof)
+	info.OrigSize = CalcStructSize(st)
 
 	return info
 }
@@ -66,7 +65,7 @@ func (fa *FieldAnalyzer) analyzeFields(structType *types.Struct, structName, pkg
 
 	for i := 0; i < structType.NumFields(); i++ {
 		field := structType.Field(i)
-		size, align := CalcFieldSize(field.Type(), fa.info)
+		size, align := CalcFieldSize(field.Type())
 
 		typeName := fa.getTypeName(field.Type())
 		pkg := fa.getTypePkg(field.Type())

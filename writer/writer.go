@@ -105,14 +105,20 @@ func (w *SourceWriter) WriteStruct(filePath string, info *optimizer.StructInfo) 
 		return fmt.Errorf("struct not found: %s", info.Name)
 	}
 
-	// Write back to file
+	// Write back to file (formatted with go/format)
 	var buf bytes.Buffer
 	err = printer.Fprint(&buf, w.fset, f)
 	if err != nil {
 		return fmt.Errorf("failed to format code: %v", err)
 	}
 
-	err = os.WriteFile(filePath, buf.Bytes(), 0644)
+	// Apply go/format standard formatting (removes blank lines, preserves comments)
+	formatted, err := format.Source(buf.Bytes())
+	if err != nil {
+		return fmt.Errorf("go fmt format failed: %v", err)
+	}
+
+	err = os.WriteFile(filePath, formatted, 0644)
 	if err != nil {
 		return fmt.Errorf("failed to write file: %v", err)
 	}
