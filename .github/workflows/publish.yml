@@ -239,31 +239,6 @@ jobs:
           cd ${REPO}
           createrepo_c --no-database .
 
-      - name: Generate install page
-        run: |
-          cat > gh-pages/index.html <<HTML
-          <!DOCTYPE html>
-          <html>
-          <head><title>StructOptimizer Packages</title></head>
-          <body>
-          <h2>StructOptimizer Package Repository</h2>
-          <p><a href="https://github.com/gamelife1314/structoptimizer">Source Code &amp; Documentation</a></p>
-          <h3>APT (Debian/Ubuntu)</h3>
-          <pre>echo "deb [trusted=yes] https://gamelife1314.github.io/structoptimizer/apt stable main" | sudo tee /etc/apt/sources.list.d/structoptimizer.list
-          sudo apt update && sudo apt install structoptimizer</pre>
-          <h3>YUM/DNF (RHEL/Fedora)</h3>
-          <pre>sudo tee /etc/yum.repos.d/structoptimizer.repo &lt;&lt;EOF
-          [structoptimizer]
-          name=StructOptimizer
-          baseurl=https://gamelife1314.github.io/structoptimizer/yum
-          enabled=1
-          gpgcheck=0
-          EOF
-          sudo yum install structoptimizer</pre>
-          </body>
-          </html>
-          HTML
-
       - name: Commit and push to gh-pages
         run: |
           cd gh-pages
