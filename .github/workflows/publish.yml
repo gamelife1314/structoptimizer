@@ -1,0 +1,71 @@
+name: Publish to Package Managers
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  update-homebrew:
+    name: Update Homebrew Formula
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set version
+        id: version
+        run: echo "version=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
+
+      - name: Download release assets
+        id: download
+        run: |
+          mkdir -p dist
+          VERSION="${{ steps.version.outputs.version }}"
+          BASE="https://github.com/gamelife1314/structoptimizer/releases/download/${VERSION}"
+
+          declare -A assets=(
+            ["structoptimizer-linux-amd64.tar.gz"]="LINUX_AMD64"
+            ["structoptimizer-linux-arm64.tar.gz"]="LINUX_ARM64"
+            ["structoptimizer-darwin-amd64.tar.gz"]="DARWIN_AMD64"
+            ["structoptimizer-darwin-arm64.tar.gz"]="DARWIN_ARM64"
+          )
+
+          for asset in "${!assets[@]}"; do
+            echo "Downloading $asset..."
+            curl -sL "${BASE}/${asset}" -o "dist/${asset}"
+            sha=$(sha256sum "dist/${asset}" | awk '{print $1}')
+            echo "${assets[$asset]}_SHA=${sha}" >> $GITHUB_OUTPUT
+          done
+
+      - name: Update Homebrew formula
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          FORMULA="Formula/structoptimizer.rb"
+
+          sed -i "s|url \"https://github.com/gamelife1314/structoptimizer/releases/download/v[0-9.]*/|url \"https://github.com/gamelife1314/structoptimizer/releases/download/${VERSION}/|g" "$FORMULA"
+          sed -i "s|version \"[0-9.]*\"|version \"${VERSION#v}\"|" "$FORMULA"
+
+          sed -i "s|sha256 \"PLACEHOLDER_LINUX_AMD64_SHA256\"|sha256 \"${{ steps.download.outputs.LINUX_AMD64_SHA }}\"|" "$FORMULA"
+          sed -i "s|sha256 \"PLACEHOLDER_LINUX_ARM64_SHA256\"|sha256 \"${{ steps.download.outputs.LINUX_ARM64_SHA }}\"|" "$FORMULA"
+          sed -i "s|sha256 \"PLACEHOLDER_DARWIN_AMD64_SHA256\"|sha256 \"${{ steps.download.outputs.DARWIN_AMD64_SHA }}\"|" "$FORMULA"
+          sed -i "s|sha256 \"PLACEHOLDER_DARWIN_ARM64_SHA256\"|sha256 \"${{ steps.download.outputs.DARWIN_ARM64_SHA }}\"|" "$FORMULA"
+
+          cat "$FORMULA"
+
+      - name: Commit and push formula
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add Formula/structoptimizer.rb
+          if git diff --staged --quiet; then
+            echo "No changes to formula"
+          else
+            git commit -m "chore: update Homebrew formula to ${{ steps.version.outputs.version }}"
+            git push origin HEAD:main
+          fi

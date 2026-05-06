@@ -79,41 +79,72 @@ type User struct {
 
 ### 安装
 
-#### 方式 1：下载预编译二进制（推荐）
+#### 方式 1：通用安装脚本（推荐）
+
+```bash
+# macOS / Linux - 自动检测包管理器，否则直接下载二进制
+curl -fsSL https://raw.githubusercontent.com/gamelife1314/structoptimizer/main/install.sh | bash
+
+# 安装指定版本
+curl -fsSL https://raw.githubusercontent.com/gamelife1314/structoptimizer/main/install.sh | VERSION=v1.8.0 bash
+
+# 自定义安装目录
+curl -fsSL https://raw.githubusercontent.com/gamelife1314/structoptimizer/main/install.sh | INSTALL_DIR=/usr/bin bash
+```
+
+#### 方式 2：Homebrew（macOS / Linux）
+
+```bash
+brew tap gamelife1314/structoptimizer
+brew install structoptimizer
+```
+
+#### 方式 3：Go Install
+
+```bash
+go install github.com/gamelife1314/structoptimizer/cmd/structoptimizer@latest
+```
+
+#### 方式 4：APT / YUM（Linux）
+
+```bash
+# Debian / Ubuntu（APT）- 直接下载二进制
+curl -fsSL https://raw.githubusercontent.com/gamelife1314/structoptimizer/main/install.sh | bash
+
+# RHEL / Fedora（YUM/DNF）- 直接下载二进制
+curl -fsSL https://raw.githubusercontent.com/gamelife1314/structoptimizer/main/install.sh | bash
+```
+
+#### 方式 5：手动下载
 
 ```bash
 # macOS (Apple Silicon)
 curl -LO https://github.com/gamelife1314/structoptimizer/releases/latest/download/structoptimizer-darwin-arm64.tar.gz
-tar -xzf structoptimizer-darwin-arm64.tar.gz
-sudo mv structoptimizer /usr/local/bin/
+tar -xzf structoptimizer-darwin-arm64.tar.gz && sudo mv structoptimizer /usr/local/bin/
 
 # macOS (Intel)
 curl -LO https://github.com/gamelife1314/structoptimizer/releases/latest/download/structoptimizer-darwin-amd64.tar.gz
-tar -xzf structoptimizer-darwin-amd64.tar.gz
-sudo mv structoptimizer /usr/local/bin/
+tar -xzf structoptimizer-darwin-amd64.tar.gz && sudo mv structoptimizer /usr/local/bin/
 
 # Linux (amd64)
 curl -LO https://github.com/gamelife1314/structoptimizer/releases/latest/download/structoptimizer-linux-amd64.tar.gz
-tar -xzf structoptimizer-linux-amd64.tar.gz
-sudo mv structoptimizer /usr/local/bin/
+tar -xzf structoptimizer-linux-amd64.tar.gz && sudo mv structoptimizer /usr/local/bin/
 
-# Windows (amd64)
+# Linux (arm64)
+curl -LO https://github.com/gamelife1314/structoptimizer/releases/latest/download/structoptimizer-linux-arm64.tar.gz
+tar -xzf structoptimizer-linux-arm64.tar.gz && sudo mv structoptimizer /usr/local/bin/
+
+# Windows
 curl -LO https://github.com/gamelife1314/structoptimizer/releases/latest/download/structoptimizer-windows-amd64.zip
 # 解压并添加到 PATH
 ```
 
-#### 方式 2：从源码构建
+#### 方式 6：从源码构建
 
 ```bash
 git clone https://github.com/gamelife1314/structoptimizer.git
 cd structoptimizer
 go build -o structoptimizer ./cmd/structoptimizer
-```
-
-#### 方式 3：使用 go install
-
-```bash
-go install github.com/gamelife1314/structoptimizer/cmd/structoptimizer@latest
 ```
 
 ### 基本使用
