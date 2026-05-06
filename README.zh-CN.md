@@ -108,11 +108,20 @@ go install github.com/gamelife1314/structoptimizer/cmd/structoptimizer@latest
 #### 方式 4：APT / YUM（Linux）
 
 ```bash
-# Debian / Ubuntu（APT）- 直接下载二进制
-curl -fsSL https://raw.githubusercontent.com/gamelife1314/structoptimizer/main/install.sh | bash
+# Debian / Ubuntu（APT）- 完整包管理器集成
+echo "deb [trusted=yes] https://gamelife1314.github.io/structoptimizer/apt stable main" \
+  | sudo tee /etc/apt/sources.list.d/structoptimizer.list
+sudo apt update && sudo apt install structoptimizer
 
-# RHEL / Fedora（YUM/DNF）- 直接下载二进制
-curl -fsSL https://raw.githubusercontent.com/gamelife1314/structoptimizer/main/install.sh | bash
+# RHEL / Fedora（YUM/DNF）- 完整包管理器集成
+sudo tee /etc/yum.repos.d/structoptimizer.repo <<EOF
+[structoptimizer]
+name=StructOptimizer
+baseurl=https://gamelife1314.github.io/structoptimizer/yum
+enabled=1
+gpgcheck=0
+EOF
+sudo yum install structoptimizer     # 或: sudo dnf install structoptimizer
 ```
 
 #### 方式 5：手动下载

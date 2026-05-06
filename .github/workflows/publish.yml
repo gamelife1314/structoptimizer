@@ -69,3 +69,228 @@ jobs:
             git commit -m "chore: update Homebrew formula to ${{ steps.version.outputs.version }}"
             git push origin HEAD:main
           fi
+
+  build-deb-rpm:
+    name: Build DEB/RPM packages
+    needs: [update-homebrew]
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        include:
+          - arch: amd64
+            deb_arch: amd64
+            rpm_arch: x86_64
+          - arch: arm64
+            deb_arch: arm64
+            rpm_arch: aarch64
+
+    steps:
+      - name: Set version
+        id: version
+        run: echo "version=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
+
+      - name: Download binary
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          curl -sLO "https://github.com/gamelife1314/structoptimizer/releases/download/${VERSION}/structoptimizer-linux-${{ matrix.arch }}.tar.gz"
+          tar xzf structoptimizer-linux-${{ matrix.arch }}.tar.gz
+          chmod +x structoptimizer
+
+      - name: Build DEB package
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          V="${VERSION#v}"
+          mkdir -p pkg-deb/DEBIAN
+          mkdir -p pkg-deb/usr/bin
+          cp structoptimizer pkg-deb/usr/bin/
+
+          cat > pkg-deb/DEBIAN/control <<CTRL
+          Package: structoptimizer
+          Version: ${V}
+          Architecture: ${{ matrix.deb_arch }}
+          Maintainer: gamelife1314
+          Section: devel
+          Priority: optional
+          Homepage: https://github.com/gamelife1314/structoptimizer
+          Description: Go struct alignment optimization tool
+           StructOptimizer analyzes Go source code to detect structs with
+           suboptimal field ordering. It reduces memory padding by rearranging
+           struct fields from largest to smallest alignment.
+          CTRL
+
+          dpkg-deb --build pkg-deb "structoptimizer_${V}_${{ matrix.deb_arch }}.deb"
+
+      - name: Build RPM package
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          V="${VERSION#v}"
+          NAME=structoptimizer
+
+          mkdir -p pkg-rpm/{BUILD,RPMS,SOURCES,SPECS,SRPMS}
+          mkdir -p pkg-rpm/BUILDROOT/${NAME}-${V}-1.${{ matrix.rpm_arch }}/usr/bin
+          cp structoptimizer pkg-rpm/BUILDROOT/${NAME}-${V}-1.${{ matrix.rpm_arch }}/usr/bin/
+
+          cat > pkg-rpm/SPECS/${NAME}.spec <<SPEC
+          Name: ${NAME}
+          Version: ${V}
+          Release: 1
+          Summary: Go struct alignment optimization tool
+          License: MIT
+          URL: https://github.com/gamelife1314/structoptimizer
+          BuildArch: ${{ matrix.rpm_arch }}
+
+          %description
+          StructOptimizer analyzes Go source code to detect structs with
+          suboptimal field ordering. It reduces memory padding by rearranging
+          struct fields from largest to smallest alignment.
+
+          %install
+          mkdir -p %{buildroot}/usr/bin
+          cp structoptimizer %{buildroot}/usr/bin/
+
+          %files
+          /usr/bin/structoptimizer
+
+          %changelog
+          * $(date '+%a %b %d %Y') gamelife1314 - ${V}-1
+          - Release ${V}
+          SPEC
+
+          rpmbuild --define "_topdir $(pwd)/pkg-rpm" \
+            --define "_buildrootdir $(pwd)/pkg-rpm/BUILDROOT" \
+            -bb pkg-rpm/SPECS/${NAME}.spec
+
+          cp pkg-rpm/RPMS/${{ matrix.rpm_arch }}/${NAME}-${V}-1.${{ matrix.rpm_arch }}.rpm .
+
+      - name: Upload DEB artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: deb-${{ matrix.arch }}
+          path: "*.deb"
+
+      - name: Upload RPM artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: rpm-${{ matrix.arch }}
+          path: "*.rpm"
+
+  publish-repos:
+    name: Publish APT/YUM repos
+    needs: [build-deb-rpm]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Install tools
+        run: sudo apt-get update && sudo apt-get install -y dpkg-dev createrepo-c
+
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Checkout gh-pages branch
+        uses: actions/checkout@v4
+        with:
+          ref: gh-pages
+          path: gh-pages
+
+      - name: Set version
+        id: version
+        run: echo "version=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
+
+      - name: Download all DEB artifacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: deb-*
+          path: deb-packages
+
+      - name: Download all RPM artifacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: rpm-*
+          path: rpm-packages
+
+      - name: Build APT repository
+        run: |
+          REPO="gh-pages/apt"
+
+          mkdir -p ${REPO}/pool/main
+          find deb-packages -name "*.deb" -exec cp {} ${REPO}/pool/main/ \;
+
+          cd ${REPO}
+          mkdir -p dists/stable/main/binary-amd64 dists/stable/main/binary-arm64
+
+          dpkg-scanpackages --arch amd64 pool/ > dists/stable/main/binary-amd64/Packages
+          dpkg-scanpackages --arch arm64 pool/ > dists/stable/main/binary-arm64/Packages
+
+          for f in dists/stable/main/binary-{amd64,arm64}/Packages; do
+            gzip -9c "$f" > "${f}.gz"
+          done
+
+          cat > dists/stable/Release <<RELEASE
+          Origin: StructOptimizer
+          Label: StructOptimizer
+          Suite: stable
+          Codename: stable
+          Architectures: amd64 arm64
+          Components: main
+          Description: Go struct alignment optimization tool
+          RELEASE
+
+          cat > dists/stable/main/binary-amd64/Release <<RL
+          Archive: stable
+          Component: main
+          Architecture: amd64
+          RL
+          cat > dists/stable/main/binary-arm64/Release <<RL
+          Archive: stable
+          Component: main
+          Architecture: arm64
+          RL
+
+      - name: Build YUM repository
+        run: |
+          REPO="gh-pages/yum"
+
+          mkdir -p ${REPO}
+          find rpm-packages -name "*.rpm" -exec cp {} ${REPO}/ \;
+
+          cd ${REPO}
+          createrepo_c --no-database .
+
+      - name: Generate install page
+        run: |
+          cat > gh-pages/index.html <<HTML
+          <!DOCTYPE html>
+          <html>
+          <head><title>StructOptimizer Packages</title></head>
+          <body>
+          <h2>StructOptimizer Package Repository</h2>
+          <p><a href="https://github.com/gamelife1314/structoptimizer">Source Code &amp; Documentation</a></p>
+          <h3>APT (Debian/Ubuntu)</h3>
+          <pre>echo "deb [trusted=yes] https://gamelife1314.github.io/structoptimizer/apt stable main" | sudo tee /etc/apt/sources.list.d/structoptimizer.list
+          sudo apt update && sudo apt install structoptimizer</pre>
+          <h3>YUM/DNF (RHEL/Fedora)</h3>
+          <pre>sudo tee /etc/yum.repos.d/structoptimizer.repo &lt;&lt;EOF
+          [structoptimizer]
+          name=StructOptimizer
+          baseurl=https://gamelife1314.github.io/structoptimizer/yum
+          enabled=1
+          gpgcheck=0
+          EOF
+          sudo yum install structoptimizer</pre>
+          </body>
+          </html>
+          HTML
+
+      - name: Commit and push to gh-pages
+        run: |
+          cd gh-pages
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add .
+          if git diff --staged --quiet; then
+            echo "No changes to gh-pages"
+          else
+            git commit -m "chore: add packages for ${{ steps.version.outputs.version }}"
+            git push origin gh-pages
+          fi
