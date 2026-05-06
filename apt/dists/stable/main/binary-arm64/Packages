@@ -4,10 +4,10 @@ Architecture: arm64
 Maintainer: gamelife1314
 Installed-Size: 5248
 Filename: pool/main/structoptimizer_1.8.9_arm64.deb
-Size: 2135852
-MD5sum: c3623b84c071f01e1142bd396dd9360b
-SHA1: 9f834e08bd29d5b55e4315ab489f4fee3f8dc1fa
-SHA256: 38682be36bc4efa572886f6412ad363dcc9570f393ab7e5b2acd97fe47efb795
+Size: 2135856
+MD5sum: 162b95b980edbb9fdacb80ab093cd56d
+SHA1: 65743843fdc35bfb5b4526b27f5dade1e2e3641d
+SHA256: f658f7a56fd1294f944f6642baa4100fa5f095076daef68d74bb607091efef36
 Section: default
 Priority: optional
 Homepage: https://github.com/gamelife1314/structoptimizer
