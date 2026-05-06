@@ -46,7 +46,7 @@ The scoop manifest template is:
   "license": "MIT",
   "architecture": {
     "64bit": {
-      "url": "https://github.com/gamelife1314/structoptimizer/releases/download/v1.8.0/structoptimizer-windows-amd64.zip"
+      "url": "https://github.com/gamelife1314/structoptimizer/releases/download/v1.8.2/structoptimizer-windows-amd64.zip"
     }
   },
   "bin": "structoptimizer.exe",
