@@ -1,7 +1,7 @@
 package reporter
 
 // Version information
-const Version = "1.8.8"
+const Version = "1.8.9"
 
 // Lang represents a supported language
 type Lang string
