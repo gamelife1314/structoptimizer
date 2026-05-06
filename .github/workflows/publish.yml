@@ -99,10 +99,17 @@ jobs:
       - name: Download binary
         run: |
           VERSION="${{ steps.version.outputs.version }}"
-          curl -sLO "https://github.com/gamelife1314/structoptimizer/releases/download/${VERSION}/structoptimizer-linux-${{ matrix.arch }}.tar.gz"
+          curl -fsSLO "https://github.com/gamelife1314/structoptimizer/releases/download/${VERSION}/structoptimizer-linux-${{ matrix.arch }}.tar.gz"
           tar xzf structoptimizer-linux-${{ matrix.arch }}.tar.gz
-          mv structoptimizer-linux-${{ matrix.arch }} structoptimizer 2>/dev/null || true
+          ls -la
+          mv structoptimizer-linux-${{ matrix.arch }} structoptimizer 2>/dev/null || {
+            echo "WARNING: binary not found as structoptimizer-linux-${{ matrix.arch }}, checking..."
+            ls -la
+            # Try without suffix
+            test -f structoptimizer || { echo "ERROR: structoptimizer binary not found"; exit 1; }
+          }
           chmod +x structoptimizer
+          file structoptimizer
 
       - name: Build DEB package
         env:
