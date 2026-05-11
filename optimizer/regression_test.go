@@ -584,4 +584,3 @@ func TestCalcOptimizedSizeFieldInfo(t *testing.T) {
 
 	t.Logf("✅ CalcOptimizedSize and CalcStructSizeFromFields produce identical results: %d bytes", size)
 }
-

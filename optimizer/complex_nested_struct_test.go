@@ -78,14 +78,14 @@ type Level1 struct {
 		B bool
 		C int32
 	}
-	
+
 	type Level2 struct {
 		X    float64
 		Y    Level3
 		Z    bool
 		Name string
 	}
-	
+
 	type Level1 struct {
 		ID       int64
 		Data     Level2
@@ -156,7 +156,7 @@ type Level1 struct {
 		} else {
 			t.Logf("✅ Level2 大小正确：%d 字节 (与 unsafe.Sizeof 一致)", level2Report.OrigSize)
 		}
-		
+
 		// 验证嵌套的 Level3 字段大小
 		if ySize, ok := level2Report.FieldSizes["Y"]; ok {
 			if ySize != expectedLevel3Size {
@@ -198,13 +198,13 @@ type Level1 struct {
 
 		// 验证所有字段大小
 		expectedFieldSizes := map[string]int64{
-			"ID":       8,                       // int64
-			"Data":     expectedLevel2Size,      // Level2
-			"Flag":     1,                       // bool
-			"Tags":     24,                      // []string (slice header)
-			"Metadata": 16,                      // string
-			"Count":    4,                       // int32
-			"Active":   1,                       // bool
+			"ID":       8,                  // int64
+			"Data":     expectedLevel2Size, // Level2
+			"Flag":     1,                  // bool
+			"Tags":     24,                 // []string (slice header)
+			"Metadata": 16,                 // string
+			"Count":    4,                  // int32
+			"Active":   1,                  // bool
 		}
 
 		for fieldName, expectedSize := range expectedFieldSizes {

@@ -175,7 +175,7 @@ type App struct {
 		t.Logf("结构体 %s: 优化前=%d, 优化后=%d, 节省=%d, 跳过=%v, 原因=%s",
 			sr.Name, sr.OrigSize, sr.OptSize, sr.Saved, sr.Skipped, sr.SkipReason)
 	}
-	
+
 	t.Logf("共收集到 %d 个结构体报告", len(report.StructReports))
 	t.Logf("总结构体数：%d, 优化数：%d, 跳过数：%d",
 		report.TotalStructs, report.OptimizedCount, report.SkippedCount)

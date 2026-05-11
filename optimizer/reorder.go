@@ -65,4 +65,3 @@ func reorderFieldsInternal(fields []FieldInfo, sortSameSize bool) []FieldInfo {
 	// Always return the sorted result; the caller decides whether to adopt it
 	return result
 }
-

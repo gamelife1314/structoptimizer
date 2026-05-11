@@ -16,31 +16,31 @@ import (
 
 // Config holds all CLI configuration
 type Config struct {
-	Struct         string
-	Package        string
-	SourceFile     string
-	Write          bool
-	Backup         bool
-	SkipDirs       string
-	SkipFiles      string
-	SkipByMethods  string
-	SkipByNames    string
-	Output         string
-	Verbose        int
-	SortSameSize   bool
-	ReportFormat   string
-	ProjectType    string // gomod or gopath
-	GOPATH         string // GOPATH path (optional)
-	TargetDir      string // project directory (positional arg)
-	MaxDepth       int    // maximum recursion depth
-	Timeout        int    // timeout in seconds
-	PkgScope       string // package scope limit
-	PkgWorkerLimit int    // package concurrency limit
-	ShowVersion    bool   // show version info
-	ReservedFields     string        // fields to keep at the end (comma-separated)
-	Recursive          bool          // recursively scan sub-packages (-package mode only)
-	Lang               reporter.Lang // report language
-	AllowExternalPkgs  bool          // allow scanning cross-package structs (including vendor)
+	Struct            string
+	Package           string
+	SourceFile        string
+	Write             bool
+	Backup            bool
+	SkipDirs          string
+	SkipFiles         string
+	SkipByMethods     string
+	SkipByNames       string
+	Output            string
+	Verbose           int
+	SortSameSize      bool
+	ReportFormat      string
+	ProjectType       string        // gomod or gopath
+	GOPATH            string        // GOPATH path (optional)
+	TargetDir         string        // project directory (positional arg)
+	MaxDepth          int           // maximum recursion depth
+	Timeout           int           // timeout in seconds
+	PkgScope          string        // package scope limit
+	PkgWorkerLimit    int           // package concurrency limit
+	ShowVersion       bool          // show version info
+	ReservedFields    string        // fields to keep at the end (comma-separated)
+	Recursive         bool          // recursively scan sub-packages (-package mode only)
+	Lang              reporter.Lang // report language
+	AllowExternalPkgs bool          // allow scanning cross-package structs (including vendor)
 }
 
 func main() {
@@ -82,27 +82,27 @@ func main() {
 
 	// Create optimizer
 	optimizerCfg := &optimizer.Config{
-		TargetDir:      cfg.TargetDir,
-		StructName:     cfg.Struct,
-		Package:        cfg.Package,
-		SourceFile:     cfg.SourceFile,
-		Write:          cfg.Write,
-		Backup:         cfg.Backup,
-		SkipDirs:       skipDirs,
-		SkipFiles:      skipFiles,
-		SkipByMethods:  skipByMethods,
-		SkipByNames:    skipByNames,
-		Verbose:        cfg.Verbose,
-		SortSameSize:   cfg.SortSameSize,
-		Output:         cfg.Output,
-		ProjectType:    cfg.ProjectType,
-		GOPATH:         cfg.GOPATH,
-		MaxDepth:       cfg.MaxDepth,
-		Timeout:        cfg.Timeout,
-		PkgScope:       cfg.PkgScope,
-		PkgWorkerLimit: cfg.PkgWorkerLimit,
-		ReservedFields: reservedFields,
-		Recursive:      cfg.Recursive,
+		TargetDir:         cfg.TargetDir,
+		StructName:        cfg.Struct,
+		Package:           cfg.Package,
+		SourceFile:        cfg.SourceFile,
+		Write:             cfg.Write,
+		Backup:            cfg.Backup,
+		SkipDirs:          skipDirs,
+		SkipFiles:         skipFiles,
+		SkipByMethods:     skipByMethods,
+		SkipByNames:       skipByNames,
+		Verbose:           cfg.Verbose,
+		SortSameSize:      cfg.SortSameSize,
+		Output:            cfg.Output,
+		ProjectType:       cfg.ProjectType,
+		GOPATH:            cfg.GOPATH,
+		MaxDepth:          cfg.MaxDepth,
+		Timeout:           cfg.Timeout,
+		PkgScope:          cfg.PkgScope,
+		PkgWorkerLimit:    cfg.PkgWorkerLimit,
+		ReservedFields:    reservedFields,
+		Recursive:         cfg.Recursive,
 		AllowExternalPkgs: cfg.AllowExternalPkgs,
 	}
 	opt := optimizer.NewOptimizer(optimizerCfg, anlz)

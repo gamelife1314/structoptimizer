@@ -10,19 +10,19 @@ import (
 type SkipCategory int
 
 const (
-	SkipNone        SkipCategory = iota
-	SkipEmpty                    // empty struct
-	SkipSingleField              // single-field struct
-	SkipByMethod                 // skipped by method pattern
-	SkipByName                   // skipped by name pattern
-	SkipVendor                   // vendor/third-party package
-	SkipStdLib                   // standard library
-	SkipNonProject               // non-project internal package
-	SkipCircular                 // circular reference
-	SkipMaxDepth                 // exceeded max recursion depth
-	SkipLoadFailed               // failed to load package
-	SkipLookupFailed             // failed to find struct in package
-	SkipPanic                    // panic during processing
+	SkipNone         SkipCategory = iota
+	SkipEmpty                     // empty struct
+	SkipSingleField               // single-field struct
+	SkipByMethod                  // skipped by method pattern
+	SkipByName                    // skipped by name pattern
+	SkipVendor                    // vendor/third-party package
+	SkipStdLib                    // standard library
+	SkipNonProject                // non-project internal package
+	SkipCircular                  // circular reference
+	SkipMaxDepth                  // exceeded max recursion depth
+	SkipLoadFailed                // failed to load package
+	SkipLookupFailed              // failed to find struct in package
+	SkipPanic                     // panic during processing
 )
 
 // Optimizer is the struct optimizer
@@ -61,28 +61,28 @@ type StructTask struct {
 
 // Config holds the optimizer configuration
 type Config struct {
-	TargetDir      string
-	StructName     string
-	Package        string
-	SourceFile     string
-	Write          bool
-	Backup         bool
-	SkipDirs       []string
-	SkipFiles      []string
-	SkipByMethods  []string
-	SkipByNames    []string
-	Verbose        int
-	SortSameSize   bool
-	Output         string
-	ProjectType    string
-	GOPATH         string
-	MaxDepth       int
-	Timeout        int
-	PkgScope       string
-	PkgWorkerLimit int      // package-level concurrency limit (default 4, prevents OOM)
-	ReservedFields   []string // reserved field names (always placed last)
-	Recursive        bool     // recursively scan sub-packages (-package mode)
-	AllowExternalPkgs bool    // allow scanning cross-package structs (including vendor directory)
+	TargetDir         string
+	StructName        string
+	Package           string
+	SourceFile        string
+	Write             bool
+	Backup            bool
+	SkipDirs          []string
+	SkipFiles         []string
+	SkipByMethods     []string
+	SkipByNames       []string
+	Verbose           int
+	SortSameSize      bool
+	Output            string
+	ProjectType       string
+	GOPATH            string
+	MaxDepth          int
+	Timeout           int
+	PkgScope          string
+	PkgWorkerLimit    int      // package-level concurrency limit (default 4, prevents OOM)
+	ReservedFields    []string // reserved field names (always placed last)
+	Recursive         bool     // recursively scan sub-packages (-package mode)
+	AllowExternalPkgs bool     // allow scanning cross-package structs (including vendor directory)
 }
 
 // StructInfo holds struct information

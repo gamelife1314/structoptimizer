@@ -142,10 +142,10 @@ func (o *Optimizer) optimizeInternal(ctx context.Context) (*Report, error) {
 	} else if o.config.Package != "" {
 		// Optimize all structs in a package
 		o.Log(1, "Collecting package: %s", o.config.Package)
-		
+
 		var structs []analyzer.StructDef
 		var err error
-		
+
 		if o.config.Recursive {
 			// Recursively scan all sub-packages
 			o.Log(1, "Recursive mode: scanning %s and all sub-packages", o.config.Package)
@@ -154,7 +154,7 @@ func (o *Optimizer) optimizeInternal(ctx context.Context) (*Report, error) {
 			// Scan only the current package
 			structs, err = o.analyzer.FindAllStructs(o.config.Package)
 		}
-		
+
 		if err != nil {
 			return nil, err
 		}
@@ -323,7 +323,7 @@ func (o *Optimizer) optimizeStruct(pkgPath, structName, filePath string, depth i
 	// Try parsing only the file (fast path)
 	if filePath != "" {
 		var err error
-		info, st, err = analyzeStructFromFile(filePath, structName, pkgPath)
+		info, _, err = analyzeStructFromFile(filePath, structName, pkgPath)
 		if err != nil {
 			o.Log(3, "File parsing failed, loading package: %v", err)
 		}

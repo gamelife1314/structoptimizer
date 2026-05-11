@@ -245,91 +245,69 @@ func estimateFieldSizeWithLookup(expr ast.Expr, pkgDir string) (size, align int6
 }
 
 // getExternalStructSize returns the size of a struct in an external package (standard library / third party)
+// typeSize holds the size and alignment of a standard library type.
+type typeSize struct {
+	Size  int64
+	Align int64
+}
+
+// stdlibTypeSizes maps package+type names to their sizes on 64-bit platforms.
+// These values are verified by TestStdlibTypeSizes in stdlib_sizes_test.go.
+var stdlibTypeSizes = map[string]map[string]typeSize{
+	"time": {
+		"Time":     {Size: 24, Align: 8}, // actual size of time.Time
+		"Duration": {Size: 8, Align: 8},
+		"Location": {Size: 8, Align: 8}, // pointer
+	},
+	"sync": {
+		"Mutex":     {Size: 8, Align: 8},
+		"RWMutex":   {Size: 24, Align: 8},
+		"WaitGroup": {Size: 16, Align: 8},
+		"Cond":      {Size: 8, Align: 8},
+		"Once":      {Size: 12, Align: 4},
+	},
+	"context": {
+		"Context":    {Size: 16, Align: 8}, // interface
+		"CancelFunc": {Size: 8, Align: 8},  // function pointer
+	},
+	"bytes": {
+		"Buffer": {Size: 40, Align: 8},
+	},
+	"strings": {
+		"Builder": {Size: 32, Align: 8},
+	},
+	"net": {
+		"IP":     {Size: 24, Align: 8}, // slice
+		"IPMask": {Size: 24, Align: 8}, // slice
+	},
+	"url": {
+		"URL": {Size: 144, Align: 8},
+	},
+	"http": {
+		"Request":  {Size: 304, Align: 8},
+		"Response": {Size: 144, Align: 8},
+		"Header":   {Size: 8, Align: 8}, // map (pointer)
+	},
+	"json": {
+		"RawMessage": {Size: 24, Align: 8}, // slice
+	},
+}
+
+// getExternalStructSize returns the size of a struct in an external package (standard library / third party).
 func getExternalStructSize(pkgName, typeName, localPkgDir string) int64 {
-	// Sizes for common standard library types
-	if pkgName == "time" {
-		switch typeName {
-		case "Time":
-			return 24 // actual size of time.Time
-		case "Duration":
-			return 8
-		case "Location":
-			return 8 // pointer
+	if pkgTypes, ok := stdlibTypeSizes[pkgName]; ok {
+		if ts, ok := pkgTypes[typeName]; ok {
+			return ts.Size
 		}
 	}
-	if pkgName == "sync" {
-		switch typeName {
-		case "Mutex":
-			return 8
-		case "RWMutex":
-			return 16
-		case "WaitGroup":
-			return 16
-		case "Cond":
-			return 16
-		case "Once":
-			return 8
-		}
-	}
-	if pkgName == "context" {
-		switch typeName {
-		case "Context":
-			return 16 // interface
-		case "CancelFunc":
-			return 8 // function pointer
-		}
-	}
-	if pkgName == "bytes" {
-		switch typeName {
-		case "Buffer":
-			return 72
-		}
-	}
-	if pkgName == "strings" {
-		switch typeName {
-		case "Builder":
-			return 24
-		}
-	}
-	if pkgName == "net" {
-		switch typeName {
-		case "IP":
-			return 24 // slice
-		case "IPMask":
-			return 24 // slice
-		}
-	}
-	if pkgName == "url" {
-		switch typeName {
-		case "URL":
-			return 120
-		}
-	}
-	if pkgName == "http" {
-		switch typeName {
-		case "Request":
-			return 480
-		case "Response":
-			return 320
-		case "Header":
-			return 24 // map
-		}
-	}
-	if pkgName == "json" {
-		switch typeName {
-		case "RawMessage":
-			return 24 // slice
-		}
-	}
-	
+
 	// If not standard library, try to find in GOPATH or module cache
 	if localPkgDir != "" {
-		// Try to find in sibling directory or vendor
 		if size := findStructSizeInVendorOrDep(pkgName, typeName, localPkgDir); size > 0 {
 			return size
 		}
 	}
-	
+
 	return 0
 }
 
@@ -340,9 +318,66 @@ func findStructSizeInVendorOrDep(pkgName, typeName, localPkgDir string) int64 {
 	if size := findStructSizeInPackage(vendorDir, typeName); size > 0 {
 		return size
 	}
-	
-	// Try to find in GOPATH/pkg/mod (simplified, only checks common paths).
-	// Real projects may need more complex path resolution.
+
+	// Try to find in Go module cache ($GOPATH/pkg/mod or $GOMODCACHE)
+	if size := findStructSizeInModuleCache(pkgName, typeName); size > 0 {
+		return size
+	}
+
+	return 0
+}
+
+// findStructSizeInModuleCache searches for a struct in the Go module cache
+func findStructSizeInModuleCache(pkgName, typeName string) int64 {
+	// Check GOMODCACHE (default: $GOPATH/pkg/mod or $HOME/go/pkg/mod)
+	gomodCache := os.Getenv("GOMODCACHE")
+	if gomodCache == "" {
+		gopath := os.Getenv("GOPATH")
+		if gopath == "" {
+			home := os.Getenv("HOME")
+			if home == "" {
+				return 0
+			}
+			gopath = filepath.Join(home, "go")
+		}
+		gomodCache = filepath.Join(gopath, "pkg", "mod")
+	}
+
+	// The module cache uses paths like: gomodCache/github.com/!add!osmani/agent-skills@v1.0.0
+	// We need to scan the cache for matching packages
+	return findStructSizeInModuleCacheDir(gomodCache, pkgName, typeName)
+}
+
+// findStructSizeInModuleCacheDir scans the module cache for a matching package
+func findStructSizeInModuleCacheDir(cacheDir, pkgName, typeName string) int64 {
+	// Convert package path to potential module cache pattern
+	// e.g., "golang.org/x/tools" -> cacheDir/golang.org/x/tools@*
+	pkgParts := strings.Split(pkgName, "/")
+	if len(pkgParts) < 2 {
+		return 0
+	}
+
+	// Build the search path: cacheDir/org/repo/
+	searchBase := filepath.Join(cacheDir, pkgParts[0])
+	if len(pkgParts) >= 3 {
+		searchBase = filepath.Join(cacheDir, strings.Join(pkgParts[:len(pkgParts)-1], "/"))
+	}
+
+	// Find matching module directories (with @version suffix)
+	matches, err := filepath.Glob(searchBase + "/*@" + "*")
+	if err != nil {
+		return 0
+	}
+
+	for _, modDir := range matches {
+		// Check if this module contains our package
+		remainingPath := strings.Join(pkgParts[len(pkgParts)-1:], "/")
+		pkgDir := filepath.Join(modDir, remainingPath)
+		if size := findStructSizeInPackage(pkgDir, typeName); size > 0 {
+			return size
+		}
+	}
+
 	return 0
 }
 
